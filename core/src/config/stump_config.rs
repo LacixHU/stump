@@ -33,6 +33,9 @@ pub mod env_keys {
 	pub const ENABLE_KOREADER_SYNC_KEY: &str = "ENABLE_KOREADER_SYNC";
 	pub const ENABLE_KOBO_SYNC_KEY: &str = "ENABLE_KOBO_SYNC";
 	pub const ENABLE_OPDS_PROGRESSION_KEY: &str = "ENABLE_OPDS_PROGRESSION";
+	pub const TLS_ENABLED_KEY: &str = "STUMP_TLS_ENABLED";
+	pub const TLS_CERT_PATH_KEY: &str = "STUMP_TLS_CERT_PATH";
+	pub const TLS_KEY_PATH_KEY: &str = "STUMP_TLS_KEY_PATH";
 	pub const HASH_COST_KEY: &str = "HASH_COST";
 	pub const SESSION_TTL_KEY: &str = "SESSION_TTL";
 	pub const SESSION_EXPIRY_INTERVAL_KEY: &str = "SESSION_EXPIRY_CLEANUP_INTERVAL";
@@ -193,6 +196,21 @@ pub struct StumpConfig {
 	#[default_value(false)]
 	#[env_key(ENABLE_OPDS_PROGRESSION_KEY)]
 	pub enable_opds_progression: bool,
+
+	/// Whether HTTPS should be enabled for the server listener.
+	#[default_value(false)]
+	#[env_key(TLS_ENABLED_KEY)]
+	pub tls_enabled: bool,
+
+	/// Path to the TLS certificate PEM chain (e.g. fullchain.pem).
+	#[default_value(None)]
+	#[env_key(TLS_CERT_PATH_KEY)]
+	pub tls_cert_path: Option<String>,
+
+	/// Path to the TLS private key PEM file (e.g. domain.key).
+	#[default_value(None)]
+	#[env_key(TLS_KEY_PATH_KEY)]
+	pub tls_key_path: Option<String>,
 
 	/// Password hash cost
 	#[default_value(DEFAULT_PASSWORD_HASH_COST)]
@@ -473,6 +491,9 @@ mod tests {
 			enable_koreader_sync: Some(false),
 			enable_kobo_sync: Some(false),
 			password_hash_cost: None,
+			tls_enabled: None,
+			tls_cert_path: None,
+			tls_key_path: None,
 			session_ttl: None,
 			access_token_ttl: None,
 			refresh_token_ttl: None,
@@ -523,6 +544,9 @@ mod tests {
 				enable_koreader_sync: Some(false),
 				enable_kobo_sync: Some(false),
 				enable_opds_progression: Some(false),
+				tls_enabled: Some(false),
+				tls_cert_path: None,
+				tls_key_path: None,
 				password_hash_cost: Some(DEFAULT_PASSWORD_HASH_COST),
 				session_ttl: Some(DEFAULT_SESSION_TTL),
 				access_token_ttl: Some(DEFAULT_ACCESS_TOKEN_TTL),
@@ -593,6 +617,9 @@ mod tests {
 						enable_koreader_sync: false,
 						enable_kobo_sync: false,
 						enable_opds_progression: false,
+						tls_enabled: false,
+						tls_cert_path: None,
+						tls_key_path: None,
 						password_hash_cost: 1,
 						session_ttl: DEFAULT_SESSION_TTL,
 						access_token_ttl: DEFAULT_ACCESS_TOKEN_TTL,

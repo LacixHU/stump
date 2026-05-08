@@ -2,7 +2,7 @@ import { ButtonOrLink, Heading, Text } from '@stump/components'
 import { UserPermission } from '@stump/graphql'
 import { useLocaleContext } from '@stump/i18n'
 
-import { useAppContext } from '../../context'
+import { useAppContext } from '@/context/index.ts'
 import paths from '../../paths'
 
 export default function NoLibraries() {

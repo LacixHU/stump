@@ -9,7 +9,7 @@ export default function SignOut() {
 
 	async function handleLogout() {
 		off()
-		logout()
+		await logout()
 	}
 
 	return (

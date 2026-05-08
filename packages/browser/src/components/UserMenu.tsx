@@ -7,7 +7,7 @@ import AutoSizer from 'react-virtualized-auto-sizer'
 import { usePaths } from '@/paths'
 import { useAppStore } from '@/stores'
 
-import { useAppContext } from '../context'
+import { useAppContext } from '@/context/index.ts'
 import SignOut from './navigation/sidebar/SignOut'
 
 type Props = {

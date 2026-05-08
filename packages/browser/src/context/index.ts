@@ -18,7 +18,22 @@ export type IAppContext = {
 	logout: () => Promise<void>
 }
 
-export const AppContext = createContext<IAppContext>({} as IAppContext)
+const defaultAppContext: IAppContext = {
+	user: {
+		id: '',
+		isServerOwner: false,
+		permissions: [],
+		username: '',
+	} as AuthUser,
+	isServerOwner: false,
+	checkPermission: () => false,
+	enforcePermission: (_permission, options) => {
+		options?.onFailure()
+	},
+	logout: async () => {},
+}
+
+export const AppContext = createContext<IAppContext>(defaultAppContext)
 export const useAppContext = () => useContext(AppContext)
 
 export const useCheckPermission = (permission: UserPermission) => {

@@ -13,7 +13,7 @@ export default function Logout({ trigger }: Props) {
 
 	async function handleLogout() {
 		off()
-		logout()
+		await logout()
 	}
 
 	return (

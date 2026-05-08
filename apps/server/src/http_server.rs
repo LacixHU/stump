@@ -1,14 +1,12 @@
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::net::SocketAddr;
 
-use apalis::prelude::*;
-use axum::{extract::connect_info::Connected, serve::IncomingStream, Router};
+use axum::{extract::connect_info::Connected, Router};
+use axum_server::tls_rustls::RustlsConfig;
+use rustls::crypto::{ring::default_provider, CryptoProvider};
 use stump_core::{
 	config::{bootstrap_config_dir, logging::init_tracing},
-	job::dispatch_job,
 	StumpCore,
 };
-use tokio::net::TcpListener;
-use tokio::sync::Notify;
 use tower_http::trace::TraceLayer;
 
 use crate::{
@@ -70,52 +68,69 @@ pub async fn run_http_server(config: StumpConfig) -> ServerResult<()> {
 		.layer(cors_layer)
 		.layer(TraceLayer::new_for_http());
 
-	let shutdown_notify = Arc::new(Notify::new());
-
 	// TODO: Refactor to use https://docs.rs/async-shutdown/latest/async_shutdown/
 	let cleanup = {
-		let shutdown_notify = shutdown_notify.clone();
 		|| async move {
 			println!("Initializing graceful shutdown...");
 			let _ = core.get_context().library_watcher.stop().await;
-			shutdown_notify.notify_waiters();
 		}
 	};
 
 	let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
-	let listener = tokio::net::TcpListener::bind(&addr)
-		.await
-		.map_err(|e| ServerError::ServerStartError(e.to_string()))?;
+	if config.tls_enabled {
+		if CryptoProvider::get_default().is_none() {
+			default_provider().install_default().map_err(|_| {
+				ServerError::ServerStartError(
+					"Failed to install rustls ring crypto provider".to_string(),
+				)
+			})?;
+		}
 
-	tracing::info!("⚡️ Stump HTTP server starting on http://{}", addr);
+		let cert_path = config.tls_cert_path.as_ref().ok_or_else(|| {
+			ServerError::ServerStartError(
+				"TLS is enabled but tls_cert_path is not configured".to_string(),
+			)
+		})?;
+		let key_path = config.tls_key_path.as_ref().ok_or_else(|| {
+			ServerError::ServerStartError(
+				"TLS is enabled but tls_key_path is not configured".to_string(),
+			)
+		})?;
 
-	// TODO: Experiment with higher concurrency, YEARS ago at this point (before enforcing WAL even)
-	// I experienced multi-writer issues but perhaps with SeaORM + WAL we can have parallel scans.
-	let monitor = Monitor::new()
-		.register(
-			WorkerBuilder::new("stump-worker")
-				.enable_tracing()
-				.data(server_ctx.apalis_state.clone())
-				.concurrency(1)
-				.backend(server_ctx.job_storage.clone())
-				.build_fn(dispatch_job),
-		)
-		.with_terminator(tokio::time::sleep(Duration::from_secs(30)))
-		.run_with_signal({
-			let shutdown_notify = shutdown_notify.clone();
-			async move {
-				shutdown_notify.notified().await;
-				Ok(())
-			}
+		let tls_config = RustlsConfig::from_pem_file(cert_path, key_path)
+			.await
+			.map_err(|e| ServerError::ServerStartError(e.to_string()))?;
+
+		let handle = axum_server::Handle::new();
+		let shutdown_handle = handle.clone();
+		tokio::spawn(async move {
+			shutdown_signal_with_cleanup(Some(cleanup)).await;
+			shutdown_handle.graceful_shutdown(None);
 		});
 
-	let http = axum::serve(
-		listener,
-		app.into_make_service_with_connect_info::<StumpRequestInfo>(),
-	)
-	.with_graceful_shutdown(shutdown_signal_with_cleanup(Some(cleanup)));
+		tracing::info!("⚡️ Stump HTTPS server starting on https://{}", addr);
 
-	let _ = tokio::join!(monitor, http);
+		axum_server::bind_rustls(addr, tls_config)
+			.handle(handle)
+			.serve(app.into_make_service_with_connect_info::<StumpRequestInfo>())
+			.await
+			.map_err(|e| ServerError::ServerStartError(e.to_string()))?;
+	} else {
+		let handle = axum_server::Handle::new();
+		let shutdown_handle = handle.clone();
+		tokio::spawn(async move {
+			shutdown_signal_with_cleanup(Some(cleanup)).await;
+			shutdown_handle.graceful_shutdown(None);
+		});
+
+		tracing::info!("⚡️ Stump HTTP server starting on http://{}", addr);
+
+		axum_server::bind(addr)
+			.handle(handle)
+			.serve(app.into_make_service_with_connect_info::<StumpRequestInfo>())
+			.await
+			.map_err(|e| ServerError::ServerStartError(e.to_string()))?;
+	}
 
 	Ok(())
 }
@@ -144,10 +159,10 @@ pub struct StumpRequestInfo {
 	pub ip_addr: std::net::IpAddr,
 }
 
-impl Connected<IncomingStream<'_, TcpListener>> for StumpRequestInfo {
-	fn connect_info(target: IncomingStream<'_, TcpListener>) -> Self {
+impl Connected<SocketAddr> for StumpRequestInfo {
+	fn connect_info(target: SocketAddr) -> Self {
 		StumpRequestInfo {
-			ip_addr: target.remote_addr().ip(),
+			ip_addr: target.ip(),
 		}
 	}
 }

@@ -1,7 +1,7 @@
 import { UserPermission } from '@stump/graphql'
 import { Navigate, Outlet } from 'react-router'
 
-import { useAppContext } from '../context'
+import { useAppContext } from '@/context/index.ts'
 
 type Props = {
 	permissions: UserPermission[]

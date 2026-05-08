@@ -36,6 +36,8 @@ const PageSet = forwardRef<HTMLDivElement, Props>(
 			[currentPage, pageSets],
 		)
 		const currentSet = pageSets[currentSetIdx] || [currentPage - 1]
+		const isAutoDoubleSpread =
+			imageScaling.scaleToFit === ReadingImageScaleFit.Auto && currentSet.length > 1
 
 		const nextSetIdx = currentSetIdx + (readingDirection === ReadingDirection.Ltr ? 1 : -1)
 		const nextSet = pageSets[nextSetIdx] || []
@@ -62,7 +64,10 @@ const PageSet = forwardRef<HTMLDivElement, Props>(
 							onPageClick={onPageClick}
 							upsertDimensions={upsertDimensions}
 							imageScaling={imageScaling}
-							style={styles[imageScaling.scaleToFit].image}
+							style={{
+								...styles[imageScaling.scaleToFit].image,
+								...(isAutoDoubleSpread ? { maxWidth: '50%' } : {}),
+							}}
 						/>
 					))}
 					{nextSet.map((idx) => (
@@ -138,18 +143,17 @@ const styles = {
 		imagesHolder: {
 			// no min width
 			maxWidth: '100%',
-			// no width
+			width: '100%',
 			// no min height
-			height: '100vh',
+			height: '100%',
 		} as React.CSSProperties,
 
 		image: {
 			minWidth: '0%',
 			maxWidth: '100%',
 			minHeight: '0%',
-			// no width
-			maxHeight: '100%',
-			height: '100%',
+			// no width, no height — browser picks whichever dimension is the constraint
+			maxHeight: '100vh',
 		} as React.CSSProperties,
 	},
 
@@ -176,7 +180,7 @@ const styles = {
 		imagesHolder: {
 			// no min width
 			// no max width
-			width: '100vw',
+			width: '100%',
 			minHeight: '100vh',
 			// no neight
 		} as React.CSSProperties,

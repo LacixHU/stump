@@ -5,6 +5,7 @@
 		"allowJs": true,
 		"allowSyntheticDefaultImports": true,
 		"moduleResolution": "nodenext",
+		"ignoreDeprecations": "6.0",
 		"verbatimModuleSyntax": false,
 		"target": "es2022",
 		"composite": true,

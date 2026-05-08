@@ -11,5 +11,5 @@ export const API_VERSION = import.meta.env.API_VERSION ?? 'v2'
 
 export { AppRouter as StumpRouter, StumpWebClient }
 
-export { Link, useNavigate } from './context'
+export { Link, useNavigate } from './context/index.ts'
 export { usePaths } from './paths'
