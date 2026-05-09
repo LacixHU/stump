@@ -1,5 +1,6 @@
 import { Button, ButtonOrLink, useBodyLock } from '@stump/components'
 import { ExternalLink } from 'lucide-react'
+import type { MouseEvent } from 'react'
 import { FallbackProps } from 'react-error-boundary'
 import { toast } from 'sonner'
 
@@ -15,6 +16,12 @@ export function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
 				toast.success('Copied error details to your clipboard')
 			})
 		}
+	}
+
+	function goHome(event: MouseEvent<HTMLAnchorElement>) {
+		event.preventDefault()
+		resetErrorBoundary()
+		window.location.assign('/')
 	}
 
 	return (
@@ -37,7 +44,7 @@ export function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
 				<div className="gap-3 pt-3 flex w-full items-center">
 					<ButtonOrLink
 						variant="primary"
-						onClick={resetErrorBoundary}
+						onClick={goHome}
 						title="Go back to the homepage"
 						forceAnchor
 						href="/"
