@@ -2,14 +2,15 @@ use std::collections::HashMap;
 
 use async_graphql::{Context, Object, Result, ID};
 use models::{
-	entity::series,
+	entity::{media, series},
 	shared::{
 		alphabet::{AvailableAlphabet, EntityLetter},
 		ordering::OrderBy,
 	},
 };
 use sea_orm::{
-	prelude::*, DatabaseBackend, FromQueryResult, QueryOrder, QuerySelect, Statement,
+	prelude::*, sea_query::Query, DatabaseBackend, FromQueryResult, QueryOrder,
+	QuerySelect, Statement,
 };
 
 use crate::{
@@ -26,6 +27,16 @@ use crate::{
 #[derive(Default)]
 pub struct SeriesQuery;
 
+fn series_with_media_subquery() -> sea_orm::sea_query::SelectStatement {
+	Query::select()
+		.distinct()
+		.column(media::Column::SeriesId)
+		.from(media::Entity)
+		.and_where(media::Column::SeriesId.is_not_null())
+		.and_where(media::Column::DeletedAt.is_null())
+		.to_owned()
+}
+
 #[Object]
 impl SeriesQuery {
 	async fn series(
@@ -41,7 +52,9 @@ impl SeriesQuery {
 		let AuthContext { user, .. } = ctx.data::<AuthContext>()?;
 		let conn = ctx.data::<CoreContext>()?.conn.as_ref();
 
-		let conditions = filter.into_filter_with_user(&user.id);
+		let conditions = filter
+			.into_filter_with_user(&user.id)
+			.add(series::Column::Id.in_subquery(series_with_media_subquery()));
 		let query = SeriesOrderBy::add_order_by(
 			&order_by,
 			series::ModelWithMetadata::find_for_user(user).filter(conditions),
