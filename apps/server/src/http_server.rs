@@ -1,10 +1,12 @@
 use std::net::SocketAddr;
 
+use apalis::prelude::{Monitor, WorkerBuilder, WorkerFactoryFn};
 use axum::{extract::connect_info::Connected, Router};
 use axum_server::tls_rustls::RustlsConfig;
 use rustls::crypto::{ring::default_provider, CryptoProvider};
 use stump_core::{
 	config::{bootstrap_config_dir, logging::init_tracing},
+	job::dispatch_job,
 	StumpCore,
 };
 use tower_http::trace::TraceLayer;
@@ -46,7 +48,8 @@ pub async fn run_http_server(config: StumpConfig) -> ServerResult<()> {
 		.map_err(|e| ServerError::ServerStartError(e.to_string()))?;
 
 	// Initialize the scheduler
-	core.init_scheduler()
+	let _scheduler = core
+		.init_scheduler()
 		.await
 		.map_err(|e| ServerError::ServerStartError(e.to_string()))?;
 
@@ -55,6 +58,25 @@ pub async fn run_http_server(config: StumpConfig) -> ServerResult<()> {
 		.map_err(|e| ServerError::ServerStartError(e.to_string()))?;
 
 	let server_ctx = core.get_context();
+	let job_worker_handle = {
+		let job_storage = server_ctx.job_storage.clone();
+		let apalis_state = server_ctx.apalis_state.clone();
+		tokio::spawn(async move {
+			let result = Monitor::new()
+				.register(
+					WorkerBuilder::new("stump-job-worker")
+						.data(apalis_state)
+						.backend(job_storage)
+						.build_fn(dispatch_job),
+				)
+				.run()
+				.await;
+
+			if let Err(error) = result {
+				tracing::error!(?error, "Job worker exited unexpectedly");
+			}
+		})
+	};
 	let app_state = server_ctx.arced();
 	let cors_layer = cors::get_cors_layer(config.clone());
 
@@ -73,6 +95,7 @@ pub async fn run_http_server(config: StumpConfig) -> ServerResult<()> {
 		|| async move {
 			println!("Initializing graceful shutdown...");
 			let _ = core.get_context().library_watcher.stop().await;
+			job_worker_handle.abort();
 		}
 	};
 
