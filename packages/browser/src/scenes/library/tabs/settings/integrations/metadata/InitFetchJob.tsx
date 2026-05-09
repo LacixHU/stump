@@ -5,7 +5,7 @@ import { useLocaleContext } from '@stump/i18n'
 import { Info } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { useLibraryContext } from '@/scenes/library/context'
+import { useLibraryManagement } from '../../context'
 
 const query = graphql(`
 	query InitFetchJobCheckProviders {
@@ -22,7 +22,7 @@ const mutation = graphql(`
 `)
 
 export default function InitFetchJob() {
-	const { library } = useLibraryContext()
+	const { library } = useLibraryManagement()
 	const { t } = useLocaleContext()
 
 	const {

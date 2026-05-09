@@ -5,7 +5,7 @@ import { useLocaleContext } from '@stump/i18n'
 import { Info } from 'lucide-react'
 import { useCallback } from 'react'
 
-import { useLibraryContext } from '@/scenes/library/context'
+import { useLibraryManagement } from '../../context'
 
 const mutation = graphql(`
 	mutation AnalyzeLibraryMedia($id: ID!) {
@@ -14,7 +14,7 @@ const mutation = graphql(`
 `)
 
 export default function AnalyzeMedia() {
-	const { library } = useLibraryContext()
+	const { library } = useLibraryManagement()
 	const { t } = useLocaleContext()
 
 	const { mutate } = useGraphQLMutation(mutation)

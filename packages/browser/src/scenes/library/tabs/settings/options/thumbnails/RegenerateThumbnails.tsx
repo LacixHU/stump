@@ -4,7 +4,7 @@ import { graphql } from '@stump/graphql'
 import { AlertTriangle, ChevronDown, ImagePlus } from 'lucide-react'
 import { useCallback } from 'react'
 
-import { useLibraryContext } from '@/scenes/library/context'
+import { useLibraryManagement } from '../../context'
 
 const mutation = graphql(`
 	mutation RegenerateThumbnails($id: ID!, $forceRegenerate: Boolean!) {
@@ -13,7 +13,7 @@ const mutation = graphql(`
 `)
 
 export default function RegenerateThumbnails() {
-	const { library } = useLibraryContext()
+	const { library } = useLibraryManagement()
 
 	const { mutate } = useGraphQLMutation(mutation)
 
