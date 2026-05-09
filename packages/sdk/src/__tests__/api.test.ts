@@ -8,12 +8,14 @@ jest.mock('axios', () => ({
 }))
 
 const use = jest.fn()
+const post = jest.fn()
 const axiosInstance = {
 	interceptors: {
 		request: {
 			use,
 		},
 	},
+	post,
 } as any
 
 const getJwtPair = (fakeToken: string) => ({
@@ -112,5 +114,26 @@ describe('Api', () => {
 		})
 
 		// TODO: basic auth tests
+	})
+
+	describe('GraphQL uploads', () => {
+		it('should let the runtime set the multipart content type boundary', async () => {
+			post.mockResolvedValueOnce({ data: { data: { uploadMediaThumbnail: { id: 'book-1' } } } })
+
+			const api = new Api({ baseURL: 'http://localhost:10801', authMethod: 'session' })
+			const file = new File(['fake image'], 'cover.png', { type: 'image/png' })
+			const query = { toString: () => 'mutation Upload($file: Upload!) { ok }' } as any
+
+			await api.executeUpload(query, { file })
+
+			expect(post).toHaveBeenCalledWith(
+				'/api/graphql',
+				expect.any(FormData),
+				expect.objectContaining({
+					headers: {},
+				}),
+			)
+			expect(post.mock.calls[0][2].headers).not.toHaveProperty('Content-Type')
+		})
 	})
 })

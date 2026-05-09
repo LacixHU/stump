@@ -1,4 +1,4 @@
-import { useGraphQLMutation, useSDK } from '@stump/client'
+import { useGraphQLMutation, useGraphQLUploadMutation, useSDK } from '@stump/client'
 import { Button, Dialog, Label, PickSelect, Text } from '@stump/components'
 import { graphql, LibraryThumbnailSelectorUpdateMutation } from '@stump/graphql'
 import { Suspense, useCallback, useEffect, useState } from 'react'
@@ -6,9 +6,9 @@ import { toast } from 'sonner'
 
 import EditThumbnailDropdown from '@/components/thumbnail/EditThumbnailDropdown'
 import BookPageGrid from '@/scenes/book/settings/BookPageGrid'
-import { useLibraryContext } from '@/scenes/library/context'
 import SeriesBookGrid, { SelectedBook } from '@/scenes/series/tabs/settings/SeriesBookGrid'
 
+import { useLibraryManagement } from '../../context'
 import LibrarySeriesGrid, { SelectedSeries } from '../../LibrarySeriesGrid'
 
 // TODO: Redesign this ugly shit
@@ -45,7 +45,7 @@ export default function LibraryThumbnailSelector() {
 
 	const [isOpen, setIsOpen] = useState(false)
 
-	const { library } = useLibraryContext()
+	const { library } = useLibraryManagement()
 
 	const onSuccess = useCallback(
 		({ thumbnail }: OnSuccessData) =>
@@ -66,12 +66,10 @@ export default function LibraryThumbnailSelector() {
 		},
 	)
 
-	const { mutateAsync: uploadThumbnail, isPending: isUploadingThumbnail } = useGraphQLMutation(
-		uploadMutation,
-		{
+	const { mutateAsync: uploadThumbnail, isPending: isUploadingThumbnail } =
+		useGraphQLUploadMutation(uploadMutation, {
 			onSuccess: (data) => onSuccess(data.uploadLibraryThumbnail),
-		},
-	)
+		})
 
 	const handleOpenChange = (nowOpen: boolean) => {
 		if (!nowOpen) {

@@ -366,7 +366,6 @@ export class Api {
 			{
 				headers: {
 					...this.headers,
-					'Content-Type': 'multipart/form-data',
 				},
 				baseURL: this.rootURL,
 				...config,

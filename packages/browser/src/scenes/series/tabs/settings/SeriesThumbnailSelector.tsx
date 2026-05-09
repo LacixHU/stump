@@ -1,4 +1,4 @@
-import { useGraphQLMutation, useSDK } from '@stump/client'
+import { useGraphQLMutation, useGraphQLUploadMutation, useSDK } from '@stump/client'
 import { Button, Dialog, PickSelect } from '@stump/components'
 import {
 	FragmentType,
@@ -87,12 +87,10 @@ export default function SeriesThumbnailSelector({ fragment }: Props) {
 		},
 	)
 
-	const { mutateAsync: uploadThumbnail, isPending: isUploadingThumbnail } = useGraphQLMutation(
-		uploadMutation,
-		{
+	const { mutateAsync: uploadThumbnail, isPending: isUploadingThumbnail } =
+		useGraphQLUploadMutation(uploadMutation, {
 			onSuccess: (data) => onSuccess(data.uploadSeriesThumbnail),
-		},
-	)
+		})
 
 	const handleOpenChange = (nowOpen: boolean) => {
 		if (!nowOpen) {

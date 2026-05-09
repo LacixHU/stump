@@ -359,6 +359,7 @@ impl From<&str> for ContentType {
 			"image/webp" => ContentType::WEBP,
 			"image/avif" => ContentType::AVIF,
 			"image/gif" => ContentType::GIF,
+			"text/plain" => ContentType::TXT,
 			_ => ContentType::UNKNOWN,
 		}
 	}

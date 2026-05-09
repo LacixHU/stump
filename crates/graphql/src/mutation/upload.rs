@@ -189,7 +189,7 @@ impl UploadMutation {
 
 		let value = file.value(ctx)?;
 
-		enforce_max_size(&value, core.config.max_file_upload_size)?;
+		enforce_max_size(&value, core.config.max_image_upload_size)?;
 		enforce_valid_content_type(&value)?;
 
 		let mut image_buf = Vec::new();
@@ -288,7 +288,7 @@ impl UploadMutation {
 
 		let value = file.value(ctx)?;
 
-		enforce_max_size(&value, core.config.max_file_upload_size)?;
+		enforce_max_size(&value, core.config.max_image_upload_size)?;
 		enforce_valid_content_type(&value)?;
 
 		let mut image_buf = Vec::new();
@@ -394,7 +394,7 @@ impl UploadMutation {
 
 		let value = file.value(ctx)?;
 
-		enforce_max_size(&value, core.config.max_file_upload_size)?;
+		enforce_max_size(&value, core.config.max_image_upload_size)?;
 		enforce_valid_content_type(&value)?;
 
 		let mut image_buf = Vec::new();
@@ -879,13 +879,10 @@ fn validate_zip_file(zip_file: &mut ZipFile) -> Result<()> {
 		.read_exact(&mut magic_bytes)
 		.map_err(|_| "Failed to read first five bytes of zip file.".to_string())?;
 
-	let inferred_type = infer::get(&magic_bytes)
-		.ok_or(format!(
-			"Unable to infer type for zip contents {enclosed_path:?}"
-		))?
-		.mime_type();
+	let content_type = ContentType::from_bytes_with_fallback(&magic_bytes, &extension);
+	let inferred_type = content_type.mime_type();
 
-	if !ALLOWED_TYPES.contains(&inferred_type) {
+	if !ALLOWED_TYPES.contains(&inferred_type.as_str()) {
 		return Err(format!(
 			"Zip contents {enclosed_path:?} has a disallowed mime type: {inferred_type}, permitted types are: {ALLOWED_TYPES:?}"
 		).into());
@@ -929,11 +926,10 @@ fn validate_book_file(value: &mut UploadValue) -> Result<()> {
 		.collect::<Result<Vec<_>, _>>()?;
 	file.rewind()?;
 
-	let inferred_type = infer::get(&magic_bytes)
-		.ok_or_else(|| format!("Unable to infer type for file {file_name}"))?
-		.mime_type();
+	let content_type = ContentType::from_bytes_with_fallback(&magic_bytes, &extension);
+	let inferred_type = content_type.mime_type();
 
-	if !ALLOWED_TYPES.contains(&inferred_type) {
+	if !ALLOWED_TYPES.contains(&inferred_type.as_str()) {
 		return Err(format!(
 			"File {file_name} has a disallowed mime type: {inferred_type}, permitted types are: {ALLOWED_TYPES:?}"
 		).into());
