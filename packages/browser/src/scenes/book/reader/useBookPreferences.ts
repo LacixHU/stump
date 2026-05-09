@@ -98,12 +98,12 @@ const settingsAsBookPreferences = (settings: ReaderSettings): BookPreferences =>
 	panzoomWithoutCtrl: settings.panzoomWithoutCtrl,
 })
 
-const buildPreferences = (
+export const buildPreferences = (
 	preferences: Partial<BookPreferences>,
 	settings: ReaderSettings,
 	libraryDefaults: Partial<BookPreferences>,
 ): BookPreferences => ({
-	...settingsAsBookPreferences(settings),
 	...libraryDefaults,
+	...settingsAsBookPreferences(settings),
 	...preferences,
 })
