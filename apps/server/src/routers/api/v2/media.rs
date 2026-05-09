@@ -146,7 +146,6 @@ async fn get_media_page(
 ) -> APIResult<ImageResponse> {
 	let book = media::Entity::find_for_user(&req.user())
 		.filter(media::Column::Id.eq(id.clone()))
-		.into_model::<media::MediaIdentSelect>()
 		.one(ctx.conn.as_ref())
 		.await?
 		.ok_or(APIError::NotFound("Book not found".to_string()))?;
