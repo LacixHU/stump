@@ -12,6 +12,7 @@ import { name, version } from './package.json'
 export default defineConfig({
 	build: {
 		assetsDir: './assets',
+		emptyOutDir: true,
 		manifest: true,
 		outDir: '../dist',
 	},
