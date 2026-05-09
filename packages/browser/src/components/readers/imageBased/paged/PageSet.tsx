@@ -8,6 +8,8 @@ import { useBookPreferences } from '@/scenes/book/reader/useBookPreferences'
 
 import { ImagePageDimensionRef, useImageBaseReaderContext } from '../context'
 
+const TRANSPARENT_IMAGE = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
+
 type Props = {
 	currentPage: number
 	getPageUrl: (page: number) => string
@@ -127,7 +129,7 @@ const _Page = ({
 			}}
 			onError={(err) => {
 				// @ts-expect-error: is oke
-				err.target.src = '/favicon.png'
+				err.target.src = TRANSPARENT_IMAGE
 			}}
 			onClick={onPageClick}
 		/>

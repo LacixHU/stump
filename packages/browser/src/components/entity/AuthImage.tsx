@@ -32,10 +32,10 @@ export const AuthImage = forwardRef<HTMLImageElement, Props>(({ token, src, ...p
 	)
 
 	useEffect(() => {
-		if (token && src && !imageURL) {
+		if (token && src) {
 			fetchImage(src)
 		}
-	}, [token, src, fetchImage, imageURL])
+	}, [token, src, fetchImage])
 
 	useEffect(() => {
 		return () => {

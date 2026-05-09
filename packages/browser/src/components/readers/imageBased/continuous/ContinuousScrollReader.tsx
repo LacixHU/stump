@@ -11,6 +11,8 @@ import { useBookPreferences } from '@/scenes/book/reader/useBookPreferences'
 
 import { ImageReaderBookRef } from '../context'
 
+const TRANSPARENT_IMAGE = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
+
 export type ContinuousReaderOrientation = 'horizontal' | 'vertical'
 type Props = {
 	/**
@@ -185,7 +187,7 @@ const Page = ({ page, src, imageScaling: { scaleToFit }, onPageClick }: PageProp
 		src={src}
 		onError={(err) => {
 			// @ts-expect-error: is oke
-			err.target.src = '/favicon.png'
+			err.target.src = TRANSPARENT_IMAGE
 		}}
 		onClick={onPageClick}
 	/>
