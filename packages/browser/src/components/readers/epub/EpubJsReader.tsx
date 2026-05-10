@@ -478,7 +478,15 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 					'line-height': `${lineHeight} !important`,
 					'font-family': `${toFamilyName(fontFamily as SupportedFont)} !important`,
 				},
-				img: { 'max-width': '100% !important' },
+				img: { 'max-width': '100% !important', height: 'auto !important' },
+				'p[align="center"], div[align="center"]': {
+					'text-align': 'center !important',
+				},
+				'p[align="center"] > img, div[align="center"] > img': {
+					display: 'block',
+					'margin-left': 'auto !important',
+					'margin-right': 'auto !important',
+				},
 			}
 
 			const contents = rendition.getContents()
@@ -781,6 +789,12 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 					toast.error(failureMessage)
 					return
 				}
+			}
+
+			if (!spineItem) {
+				console.error('Could not find spine item for href', href)
+				toast.error(failureMessage)
+				return
 			}
 
 			try {
