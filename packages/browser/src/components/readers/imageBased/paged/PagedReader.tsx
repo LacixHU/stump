@@ -289,7 +289,7 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 	useHotkeys('right, left, space, escape', (_, handler) => hotKeyHandler(handler))
 
 	return (
-		<div className="relative m-auto flex w-full justify-center">
+		<div className="relative flex h-screen w-full justify-center overflow-hidden">
 			{!showToolBar && tapSidesToNavigate && (
 				<SideBarControl
 					fixed={fixSideNavigation}
