@@ -56,6 +56,45 @@ const saveCachedLocations = (id: string, locations: string[]) => {
 	localStorage.setItem(formatCacheKey(id), JSON.stringify(locations))
 }
 
+const splitHrefFragment = (href: string) => {
+	const hashIndex = href.indexOf('#')
+	if (hashIndex === -1) {
+		return { path: href, fragment: '' }
+	}
+
+	return {
+		path: href.slice(0, hashIndex),
+		fragment: href.slice(hashIndex),
+	}
+}
+
+const formatHrefTarget = (path: string, fragment: string) => `${path}${fragment}`
+
+const getHrefDisplayTargets = (href: string, rootBase?: string) => {
+	const trimmedHref = href.trim()
+	if (!trimmedHref) {
+		return []
+	}
+
+	const { path, fragment } = splitHrefFragment(trimmedHref)
+	const trimmedRoot = rootBase?.replace(/^\/+|\/+$/g, '')
+	const pathWithoutLeadingSlash = path.replace(/^\/+/, '')
+
+	const candidates = [trimmedHref, formatHrefTarget(pathWithoutLeadingSlash, fragment)]
+
+	if (trimmedRoot) {
+		if (pathWithoutLeadingSlash.startsWith(`${trimmedRoot}/`)) {
+			candidates.push(
+				formatHrefTarget(pathWithoutLeadingSlash.slice(trimmedRoot.length + 1), fragment),
+			)
+		} else {
+			candidates.push(formatHrefTarget(`${trimmedRoot}/${pathWithoutLeadingSlash}`, fragment))
+		}
+	}
+
+	return Array.from(new Set(candidates))
+}
+
 /** The props for the EpubJsReader component */
 type EpubJsReaderProps = {
 	/** The ID of the associated media entity for this epub */
@@ -698,24 +737,38 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 	 */
 	const onLinkClick = useCallback(
 		async (href: string) => {
-			if (!book || !rendition || !ref.current) {
+			if (!book || !rendition) {
 				return
 			}
 
 			const failureMessage = 'Failed to navigate, please check the integrity of the epub file'
-			const adjusted = href.split('#')[0]
+			const targets = getHrefDisplayTargets(href, ebook.rootBase)
+			let displayError: unknown
 
-			let spineItem = book.spine.get(adjusted)
+			for (const target of targets) {
+				try {
+					await rendition.display(target)
+					return
+				} catch (err) {
+					displayError = err
+				}
+			}
+
+			const adjustedTargets = targets.map((target) => splitHrefFragment(target).path)
+			const adjustedTargetSet = new Set(adjustedTargets)
+
+			let spineItem = adjustedTargets.map((target) => book.spine.get(target)).find(Boolean)
 			if (!spineItem) {
 				// @ts-expect-error: epubjs has incorrect types
 				const matches = book.spine.items
 					.filter((item: Record<string, unknown>) => {
-						const withPrefix = `/${adjusted}`
+						const itemTargets = [item.url, item.canonical]
+							.filter((value): value is string => typeof value === 'string')
+							.flatMap((value) => [value, value.replace(/^\/+/, '')])
+
 						return (
-							item.url === adjusted ||
-							item.canonical == adjusted ||
-							item.url === withPrefix ||
-							item.canonical === withPrefix
+							itemTargets.some((target) => adjustedTargetSet.has(target)) ||
+							itemTargets.some((target) => adjustedTargetSet.has(`/${target}`))
 						)
 					})
 					.map((item: Record<string, unknown>) => book.spine.get(item.index as number))
@@ -730,19 +783,14 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				}
 			}
 
-			const epubcfi = spineItem.cfiFromElement(ref.current)
-			if (epubcfi) {
-				try {
-					await rendition.display(epubcfi)
-				} catch (err) {
-					console.error(err)
-				}
-			} else {
-				console.error('Could not get cfi for href', href)
+			try {
+				await rendition.display(spineItem.href)
+			} catch (err) {
+				console.error('Could not display href', href, { err, displayError })
 				toast.error(failureMessage)
 			}
 		},
-		[book, rendition],
+		[book, rendition, ebook.rootBase],
 	)
 
 	/**
