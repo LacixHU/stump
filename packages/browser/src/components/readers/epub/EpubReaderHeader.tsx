@@ -11,6 +11,7 @@ import {
 	ControlButton,
 	ControlsContainer,
 	FullScreenToggle,
+	ReadAloudToggle,
 	SearchCommand,
 	ThemeControls,
 } from './controls'
@@ -51,6 +52,7 @@ export default function EpubReaderHeader() {
 
 			<div className="gap-x-2 flex items-center">
 				<SearchCommand />
+				<ReadAloudToggle />
 				<ThemeControls />
 				<FullScreenToggle />
 				<BookmarkToggle />

@@ -31,6 +31,76 @@ import { darkVariantText, toFamilyName } from './themes'
 // NOTE: http://epubjs.org/documentation/0.3/ for epubjs documentation overview
 
 const LOCATIONS_CACHE_KEY = 'stump:epubjs-locations-cache'
+const READ_ALOUD_PREFS_KEY = 'stump:epubjs-read-aloud-preferences'
+const READ_ALOUD_RESUME_KEY = 'stump:epubjs-read-aloud-resume'
+
+type ReadAloudPreferences = {
+	rate: number
+	pitch: number
+	voiceUri: string | null
+}
+
+type ReadAloudResume = {
+	cfi: string | null
+	sentenceIndex: number
+}
+
+const defaultReadAloudPreferences: ReadAloudPreferences = {
+	rate: 1,
+	pitch: 1,
+	voiceUri: null,
+}
+
+const loadReadAloudPreferences = (): ReadAloudPreferences => {
+	if (typeof window === 'undefined') {
+		return defaultReadAloudPreferences
+	}
+
+	const raw = window.localStorage.getItem(READ_ALOUD_PREFS_KEY)
+	if (!raw) {
+		return defaultReadAloudPreferences
+	}
+
+	try {
+		const parsed = JSON.parse(raw) as Partial<ReadAloudPreferences>
+		return {
+			rate: typeof parsed.rate === 'number' ? parsed.rate : defaultReadAloudPreferences.rate,
+			pitch: typeof parsed.pitch === 'number' ? parsed.pitch : defaultReadAloudPreferences.pitch,
+			voiceUri:
+				typeof parsed.voiceUri === 'string'
+					? parsed.voiceUri
+					: defaultReadAloudPreferences.voiceUri,
+		}
+	} catch {
+		return defaultReadAloudPreferences
+	}
+}
+
+const formatResumeKey = (id: string) => `${READ_ALOUD_RESUME_KEY}:book-${id}`
+
+const loadReadAloudResume = (id: string): ReadAloudResume => {
+	if (typeof window === 'undefined') {
+		return { cfi: null, sentenceIndex: 0 }
+	}
+
+	const raw = window.localStorage.getItem(formatResumeKey(id))
+	if (!raw) {
+		return { cfi: null, sentenceIndex: 0 }
+	}
+
+	try {
+		const parsed = JSON.parse(raw) as Partial<ReadAloudResume>
+		return {
+			cfi: typeof parsed.cfi === 'string' ? parsed.cfi : null,
+			sentenceIndex:
+				typeof parsed.sentenceIndex === 'number' && parsed.sentenceIndex >= 0
+					? Math.floor(parsed.sentenceIndex)
+					: 0,
+		}
+	} catch {
+		return { cfi: null, sentenceIndex: 0 }
+	}
+}
 
 const formatCacheKey = (id: string) => `${LOCATIONS_CACHE_KEY}:book-${id}`
 
@@ -239,15 +309,615 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 	const [book, setBook] = useState<Book | null>(null)
 	const [rendition, setRendition] = useState<Rendition | null>(null)
 	const [sectionsLengths, setSectionLengths] = useState<SectionLengths | null>(null)
+	const [isReadAloudActive, setIsReadAloudActive] = useState(false)
+	const [isReadAloudPaused, setIsReadAloudPaused] = useState(false)
+	const [readAloudCurrentSentence, setReadAloudCurrentSentence] = useState<string | null>(null)
+	const [readAloudVoices, setReadAloudVoices] = useState<Array<{ label: string; value: string }>>(
+		[],
+	)
+	const [
+		{ pitch: readAloudPitch, rate: readAloudRate, voiceUri: readAloudVoiceUri },
+		setReadAloudPreferences,
+	] = useState<ReadAloudPreferences>(() => loadReadAloudPreferences())
 
 	const [currentLocation, setCurrentLocation] = useState<EpubLocationState>()
 	const [isInitialLoading, setIsInitialLoading] = useState(true)
+	const readAloudRequestRef = useRef(0)
+	const readAloudSentenceQueueRef = useRef<string[]>([])
+	const readAloudSentenceIndexRef = useRef(0)
+	const currentLocationRef = useRef<EpubLocationState>()
+	const readAloudCurrentCfiRef = useRef<string | null>(null)
+	const readAloudResumeRef = useRef<ReadAloudResume>(loadReadAloudResume(id))
+	const speakCurrentLocationRef = useRef<
+		((opts?: { suppressToast?: boolean; preferSelection?: boolean }) => Promise<boolean>) | null
+	>(null)
 
 	const {
 		bookPreferences: { fontSize, lineHeight, fontFamily, readingMode, readingDirection },
 	} = useBookPreferences({ book: ebook.media })
 
 	const client = useQueryClient()
+	const readAloudSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
+
+	const persistReadAloudResume = useCallback(
+		(resume: ReadAloudResume) => {
+			readAloudResumeRef.current = resume
+
+			if (typeof window === 'undefined') {
+				return
+			}
+
+			window.localStorage.setItem(formatResumeKey(id), JSON.stringify(resume))
+		},
+		[id],
+	)
+
+	useEffect(() => {
+		if (!readAloudSupported) {
+			return
+		}
+
+		window.localStorage.setItem(
+			READ_ALOUD_PREFS_KEY,
+			JSON.stringify({
+				rate: readAloudRate,
+				pitch: readAloudPitch,
+				voiceUri: readAloudVoiceUri,
+			}),
+		)
+	}, [readAloudPitch, readAloudRate, readAloudSupported, readAloudVoiceUri])
+
+	useEffect(() => {
+		if (!readAloudSupported) {
+			return
+		}
+
+		const updateVoices = () => {
+			const voices = window.speechSynthesis
+				.getVoices()
+				.map((voice) => ({
+					label: `${voice.name} (${voice.lang})`,
+					value: voice.voiceURI,
+				}))
+				.sort((a, b) => a.label.localeCompare(b.label))
+
+			setReadAloudVoices(voices)
+
+			// Log voice availability for debugging, especially on Android
+			if (voices.length === 0) {
+				console.warn(
+					'No TTS voices available on this device. TTS may not work. Try reloading the page or check device TTS settings.',
+				)
+			}
+		}
+
+		updateVoices()
+
+		// Some browsers don't fire voiceschanged, so retry a few times
+		const timeout = setTimeout(() => {
+			const voices = window.speechSynthesis.getVoices()
+			if (voices.length === 0) {
+				console.warn('Still no TTS voices after initial load. This may cause read-aloud to fail.')
+			}
+		}, 1000)
+
+		window.speechSynthesis.addEventListener('voiceschanged', updateVoices)
+
+		return () => {
+			clearTimeout(timeout)
+			window.speechSynthesis.removeEventListener('voiceschanged', updateVoices)
+		}
+	}, [readAloudSupported])
+
+	const extractVisibleText = useCallback(() => {
+		if (!rendition) {
+			return ''
+		}
+
+		const text = rendition
+			.getContents()
+			.map(
+				(content) => content.document?.body?.innerText || content.document?.body?.textContent || '',
+			)
+			.join(' ')
+			.replace(/\s+/g, ' ')
+			.trim()
+
+		return text
+	}, [rendition])
+
+	const splitIntoSentences = useCallback((text: string) => {
+		const matches = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || []
+		const cleaned = matches.map((sentence) => sentence.trim()).filter(Boolean)
+		if (cleaned.length > 0) {
+			return cleaned
+		}
+
+		const fallback = text.trim()
+		return fallback ? [fallback] : []
+	}, [])
+
+	const getSelectedVisibleText = useCallback(() => {
+		if (!rendition) {
+			return ''
+		}
+
+		const selection = rendition
+			.getContents()
+			.map((content) => content.window?.getSelection?.()?.toString() || '')
+			.join(' ')
+			.replace(/\s+/g, ' ')
+			.trim()
+
+		return selection
+	}, [rendition])
+
+	const extractTextFromCurrentLocation = useCallback(async () => {
+		const location = currentLocationRef.current
+
+		if (!book || !location?.start.cfi) {
+			return ''
+		}
+
+		try {
+			const range = await book.getRange(location.start.cfi)
+			if (!range) {
+				return ''
+			}
+
+			const startContainer = range.startContainer
+			const fragments: string[] = []
+
+			if (startContainer?.nodeType === Node.TEXT_NODE) {
+				// Get text from the start offset onwards in this text node
+				const nodeText = startContainer.textContent?.slice(range.startOffset) ?? ''
+				fragments.push(nodeText)
+
+				// Walk through following siblings to get remaining text
+				let nextNode: Node | null = startContainer.nextSibling
+				const parentElement = startContainer.parentElement
+				while (nextNode && parentElement?.contains(nextNode)) {
+					if (nextNode.nodeType === Node.TEXT_NODE) {
+						fragments.push(nextNode.textContent ?? '')
+					} else if (nextNode.nodeType === Node.ELEMENT_NODE) {
+						fragments.push((nextNode as Element).textContent ?? '')
+					}
+					nextNode = nextNode.nextSibling
+				}
+			} else if (startContainer?.nodeType === Node.ELEMENT_NODE) {
+				// If CFI points to element, get all text from that element onwards
+				fragments.push((startContainer as Element).textContent ?? '')
+			} else {
+				// Fallback to common ancestor
+				fragments.push(range.commonAncestorContainer?.textContent ?? '')
+			}
+
+			return fragments.join(' ').replace(/\s+/g, ' ').trim()
+		} catch (error) {
+			console.error('Error extracting text from current location:', error)
+			return ''
+		}
+	}, [book])
+
+	const stopReadAloud = useCallback(() => {
+		if (!readAloudSupported) {
+			return
+		}
+
+		window.speechSynthesis.cancel()
+		readAloudRequestRef.current += 1
+		readAloudSentenceQueueRef.current = []
+		persistReadAloudResume({
+			cfi: readAloudCurrentCfiRef.current,
+			sentenceIndex: readAloudSentenceIndexRef.current,
+		})
+		setIsReadAloudActive(false)
+		setIsReadAloudPaused(false)
+		setReadAloudCurrentSentence(null)
+	}, [persistReadAloudResume, readAloudSupported])
+
+	const playSentenceQueue = useCallback(
+		(requestId: number, sentenceIndex: number) => {
+			if (!readAloudSupported || readAloudRequestRef.current !== requestId) {
+				return
+			}
+
+			const location = currentLocationRef.current
+
+			const sentence = readAloudSentenceQueueRef.current[sentenceIndex]
+			if (!sentence) {
+				if (rendition && !location?.atEnd) {
+					setIsReadAloudPaused(false)
+					setReadAloudCurrentSentence(null)
+					readAloudSentenceQueueRef.current = []
+					readAloudSentenceIndexRef.current = 0
+					persistReadAloudResume({ cfi: null, sentenceIndex: 0 })
+					rendition
+						.next()
+						.then(async () => {
+							if (readAloudRequestRef.current !== requestId) {
+								return
+							}
+
+							if (readAloudSentenceQueueRef.current.length > 0) {
+								return
+							}
+
+							const continued = await speakCurrentLocationRef.current?.({
+								suppressToast: true,
+								preferSelection: false,
+							})
+
+							if (!continued && readAloudRequestRef.current === requestId) {
+								setIsReadAloudActive(false)
+								setIsReadAloudPaused(false)
+								setReadAloudCurrentSentence(null)
+								persistReadAloudResume({ cfi: null, sentenceIndex: 0 })
+							}
+						})
+						.catch(() => {
+							if (readAloudRequestRef.current === requestId) {
+								setIsReadAloudActive(false)
+								setIsReadAloudPaused(false)
+								setReadAloudCurrentSentence(null)
+								toast.error('Failed to continue read aloud on the next section')
+							}
+						})
+					return
+				}
+
+				setIsReadAloudActive(false)
+				setIsReadAloudPaused(false)
+				setReadAloudCurrentSentence(null)
+				readAloudSentenceIndexRef.current = 0
+				persistReadAloudResume({ cfi: null, sentenceIndex: 0 })
+				return
+			}
+
+			readAloudSentenceIndexRef.current = sentenceIndex
+			persistReadAloudResume({
+				cfi: location?.start.cfi ?? null,
+				sentenceIndex,
+			})
+			setReadAloudCurrentSentence(sentence)
+
+			const utterance = new SpeechSynthesisUtterance(sentence)
+
+			// Set rate and pitch with bounds for Android compatibility
+			// Android's Web Speech API can be finicky with certain values
+			try {
+				utterance.rate = Math.max(0.1, Math.min(10, readAloudRate))
+				utterance.pitch = Math.max(0, Math.min(2, readAloudPitch))
+			} catch (e) {
+				// Fallback to defaults if setting fails
+				utterance.rate = 1
+				utterance.pitch = 1
+				console.warn('Failed to set utterance rate/pitch, using defaults', e)
+			}
+
+			// Try to find the selected voice, fallback to first available voice
+			let voiceWasSet = false
+			if (readAloudVoiceUri) {
+				const voice = window.speechSynthesis
+					.getVoices()
+					.find((candidate) => candidate.voiceURI === readAloudVoiceUri)
+				if (voice) {
+					try {
+						utterance.voice = voice
+						voiceWasSet = true
+					} catch (e) {
+						console.warn(
+							`Failed to set selected voice "${readAloudVoiceUri}": ${e instanceof Error ? e.message : String(e)}`,
+						)
+					}
+				} else {
+					console.warn(
+						`Selected voice URI "${readAloudVoiceUri}" not found. Available voices: ${window.speechSynthesis
+							.getVoices()
+							.map((v) => v.voiceURI)
+							.join(', ')}`,
+					)
+				}
+			}
+
+			// If no voice was explicitly set, try to use the first available voice
+			if (!voiceWasSet) {
+				const fallbackVoice = window.speechSynthesis.getVoices()[0]
+				if (fallbackVoice) {
+					try {
+						utterance.voice = fallbackVoice
+						voiceWasSet = true
+						if (readAloudVoiceUri) {
+							console.warn(
+								`Using fallback voice "${fallbackVoice.name}" (${fallbackVoice.lang}) because selected voice is unavailable`,
+							)
+						}
+					} catch (e) {
+						console.warn(
+							`Failed to set fallback voice "${fallbackVoice.name}": ${e instanceof Error ? e.message : String(e)}`,
+						)
+					}
+				}
+			}
+
+			utterance.onend = () => {
+				if (readAloudRequestRef.current === requestId) {
+					playSentenceQueue(requestId, sentenceIndex + 1)
+				}
+			}
+			utterance.onerror = (event: SpeechSynthesisErrorEvent) => {
+				if (readAloudRequestRef.current === requestId) {
+					const errorDetails = event.error || 'unknown error'
+					const voiceInfo = utterance.voice
+						? `(voice: ${utterance.voice.name}, lang: ${utterance.voice.lang})`
+						: '(no voice set)'
+					console.error(
+						`Speech synthesis error: ${errorDetails} ${voiceInfo}. Available voices: ${window.speechSynthesis.getVoices().length}. Text length: ${sentence.length}`,
+					)
+
+					// Try recovery: create a new utterance without voice selection
+					if (voiceWasSet && window.speechSynthesis.getVoices().length > 0) {
+						console.warn('Attempting recovery: retrying without explicitly set voice...')
+						try {
+							const recoveryUtterance = new SpeechSynthesisUtterance(sentence)
+							recoveryUtterance.rate = utterance.rate
+							recoveryUtterance.pitch = utterance.pitch
+							recoveryUtterance.onend = utterance.onend
+							recoveryUtterance.onerror = () => {
+								// Second failure: give up
+								if (readAloudRequestRef.current === requestId) {
+									setIsReadAloudActive(false)
+									setIsReadAloudPaused(false)
+									setReadAloudCurrentSentence(null)
+									toast.error('Failed to read aloud this page')
+								}
+							}
+							window.speechSynthesis.speak(recoveryUtterance)
+						} catch (recoveryError) {
+							console.error(
+								`Recovery attempt failed: ${recoveryError instanceof Error ? recoveryError.message : String(recoveryError)}`,
+							)
+							setIsReadAloudActive(false)
+							setIsReadAloudPaused(false)
+							setReadAloudCurrentSentence(null)
+							toast.error('Failed to read aloud this page')
+						}
+					} else {
+						setIsReadAloudActive(false)
+						setIsReadAloudPaused(false)
+						setReadAloudCurrentSentence(null)
+						toast.error('Failed to read aloud this page')
+					}
+				}
+			}
+
+			// Attempt to speak with error handling
+			try {
+				window.speechSynthesis.speak(utterance)
+			} catch (e) {
+				if (readAloudRequestRef.current === requestId) {
+					setIsReadAloudActive(false)
+					setIsReadAloudPaused(false)
+					setReadAloudCurrentSentence(null)
+					console.error(`Failed to call speak(): ${e instanceof Error ? e.message : String(e)}`)
+					toast.error('Failed to read aloud this page')
+				}
+			}
+		},
+		[
+			persistReadAloudResume,
+			readAloudPitch,
+			readAloudRate,
+			readAloudSupported,
+			readAloudVoiceUri,
+			rendition,
+		],
+	)
+
+	const speakCurrentLocation = useCallback(
+		async (opts: { suppressToast?: boolean; preferSelection?: boolean } = {}) => {
+			if (!readAloudSupported) {
+				if (!opts.suppressToast) {
+					toast.error('Read aloud is not supported in this browser')
+				}
+				return false
+			}
+
+			// Check if TTS voices are available
+			const availableVoices = window.speechSynthesis.getVoices()
+			if (availableVoices.length === 0) {
+				// On Android, getVoices() can be empty even when default TTS still works.
+				console.warn(
+					'No TTS voices returned by getVoices(); continuing with system default voice fallback.',
+				)
+			}
+
+			// Log diagnostic info if trying to use a saved voice that's no longer available
+			if (readAloudVoiceUri) {
+				const savedVoiceExists = availableVoices.some((v) => v.voiceURI === readAloudVoiceUri)
+				if (!savedVoiceExists) {
+					console.warn(
+						`Saved voice URI "${readAloudVoiceUri}" is no longer available. Will use fallback voice. Available: ${availableVoices.map((v) => v.voiceURI).join(', ')}`,
+					)
+				}
+			}
+
+			const preferSelection = opts.preferSelection ?? true
+			const selectedText = preferSelection ? getSelectedVisibleText() : ''
+
+			let sentences: string[] = []
+			let startAtSentence = 0
+
+			if (selectedText) {
+				// If there's selected text, use that and find it in the full page
+				const pageText = extractVisibleText()
+				const pageSentences = splitIntoSentences(pageText)
+				const selectedSentences = splitIntoSentences(selectedText)
+				const normalize = (text: string) => text.replace(/\s+/g, ' ').trim().toLowerCase()
+				const normalizedPageSentences = pageSentences.map(normalize)
+				const normalizedSelectedSentences = selectedSentences.map(normalize)
+
+				let matchIdx = -1
+
+				// Prefer matching the full selected sentence sequence against page sentences.
+				if (normalizedSelectedSentences.length > 0) {
+					matchIdx = normalizedPageSentences.findIndex((candidate, index) => {
+						if (!candidate.includes(normalizedSelectedSentences[0])) {
+							return false
+						}
+
+						for (let offset = 1; offset < normalizedSelectedSentences.length; offset += 1) {
+							const pageSentence = normalizedPageSentences[index + offset]
+							if (!pageSentence || !pageSentence.includes(normalizedSelectedSentences[offset])) {
+								return false
+							}
+						}
+
+						return true
+					})
+				}
+
+				// Fallback: map selection text offset to sentence index in normalized page text.
+				if (matchIdx < 0 && normalizedPageSentences.length > 0) {
+					const normalizedPageText = normalize(pageText)
+					const normalizedSelectedText = normalize(selectedText)
+					const selectionStart = normalizedPageText.indexOf(normalizedSelectedText)
+
+					if (selectionStart >= 0) {
+						let cursor = 0
+						for (let index = 0; index < normalizedPageSentences.length; index += 1) {
+							const sentenceLength = normalizedPageSentences[index].length
+							if (selectionStart >= cursor && selectionStart <= cursor + sentenceLength) {
+								matchIdx = index
+								break
+							}
+							cursor += sentenceLength + 1
+						}
+					}
+				}
+
+				if (matchIdx >= 0) {
+					sentences = pageSentences
+					startAtSentence = matchIdx
+				} else if (selectedSentences.length > 0) {
+					// Last-resort fallback when selected text cannot be mapped to visible page sentences.
+					// Keep reading the visible page so continuation does not jump backwards.
+					sentences = pageSentences.length > 0 ? pageSentences : selectedSentences
+					startAtSentence = 0
+				}
+			} else {
+				// No selection: extract text starting from current visible location (CFI)
+				// This naturally begins at the first character on screen, not the page beginning
+				const locationText = await extractTextFromCurrentLocation()
+				sentences = splitIntoSentences(locationText)
+
+				// Some engines return a very short CFI range (often a single sentence).
+				// Fallback to visible-page text to avoid page-hopping after one sentence.
+				if (sentences.length <= 1) {
+					const visibleSentences = splitIntoSentences(extractVisibleText())
+					if (visibleSentences.length > sentences.length) {
+						sentences = visibleSentences
+					}
+				}
+				startAtSentence = 0
+			}
+
+			if (sentences.length === 0) {
+				setIsReadAloudActive(false)
+				setIsReadAloudPaused(false)
+				setReadAloudCurrentSentence(null)
+				if (!opts.suppressToast) {
+					toast.error('No readable text is available on this page')
+				}
+				return false
+			}
+
+			window.speechSynthesis.cancel()
+			setIsReadAloudActive(true)
+			setIsReadAloudPaused(false)
+
+			const requestId = readAloudRequestRef.current + 1
+			readAloudRequestRef.current = requestId
+			readAloudSentenceQueueRef.current = sentences
+			readAloudSentenceIndexRef.current = startAtSentence
+
+			playSentenceQueue(requestId, startAtSentence)
+			return true
+		},
+		[
+			extractTextFromCurrentLocation,
+			extractVisibleText,
+			getSelectedVisibleText,
+			playSentenceQueue,
+			readAloudSupported,
+			readAloudVoiceUri,
+			splitIntoSentences,
+		],
+	)
+
+	useEffect(() => {
+		speakCurrentLocationRef.current = speakCurrentLocation
+	}, [speakCurrentLocation])
+
+	const onToggleReadAloud = useCallback(() => {
+		if (isReadAloudActive) {
+			stopReadAloud()
+			return
+		}
+
+		speakCurrentLocation({ preferSelection: true })
+	}, [isReadAloudActive, speakCurrentLocation, stopReadAloud])
+
+	const onPauseReadAloud = useCallback(() => {
+		if (!readAloudSupported || !isReadAloudActive || isReadAloudPaused) {
+			return
+		}
+
+		window.speechSynthesis.pause()
+		setIsReadAloudPaused(true)
+	}, [isReadAloudActive, isReadAloudPaused, readAloudSupported])
+
+	const onResumeReadAloud = useCallback(() => {
+		if (!readAloudSupported || !isReadAloudActive || !isReadAloudPaused) {
+			return
+		}
+
+		window.speechSynthesis.resume()
+		setIsReadAloudPaused(false)
+	}, [isReadAloudActive, isReadAloudPaused, readAloudSupported])
+
+	const onSetReadAloudRate = useCallback((rate: number) => {
+		const clamped = Math.min(2, Math.max(0.5, Math.round(rate * 10) / 10))
+		setReadAloudPreferences((prev) => ({
+			...prev,
+			rate: clamped,
+		}))
+	}, [])
+
+	const onSetReadAloudPitch = useCallback((pitch: number) => {
+		const clamped = Math.min(2, Math.max(0, Math.round(pitch * 10) / 10))
+		setReadAloudPreferences((prev) => ({
+			...prev,
+			pitch: clamped,
+		}))
+	}, [])
+
+	const onSetReadAloudVoiceUri = useCallback((voiceUri: string | null) => {
+		setReadAloudPreferences((prev) => ({
+			...prev,
+			voiceUri,
+		}))
+	}, [])
+
+	useEffect(() => {
+		if (!isReadAloudActive) {
+			return
+		}
+
+		readAloudSentenceIndexRef.current = 0
+		persistReadAloudResume({ cfi: currentLocation?.start.cfi ?? null, sentenceIndex: 0 })
+	}, [currentLocation?.start.cfi, isReadAloudActive, persistReadAloudResume])
+
 	const { mutate } = useGraphQLMutation(mutation, {
 		onSuccess: ({ updateMediaProgress: data }) => {
 			client.setQueryData(['epubJsReader', id], (prevData: EpubJsReaderQuery) => {
@@ -404,10 +1074,19 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			if (!start) {
 				return
 			}
+			currentLocationRef.current = changeState
+			readAloudCurrentCfiRef.current = start.cfi
 			setCurrentLocation(changeState)
 			computeProgress(changeState)
+
+			if (isReadAloudActive) {
+				speakCurrentLocation({
+					suppressToast: true,
+					preferSelection: false,
+				})
+			}
 		},
-		[computeProgress],
+		[computeProgress, isReadAloudActive, speakCurrentLocation],
 	)
 
 	/**
@@ -620,9 +1299,10 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 	// I have the time to migrate off of it
 	useEffect(() => {
 		return () => {
+			stopReadAloud()
 			rendition?.destroy()
 		}
-	}, [rendition])
+	}, [rendition, stopReadAloud])
 
 	// TODO: this needs to have fullscreen as an effect dependency
 	/**
@@ -936,15 +1616,38 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			}}
 			controls={{
 				getCfiPreviewText,
+				isReadAloudActive,
+				isReadAloudPaused,
 				onGoToCfi,
 				onLinkClick,
+				onPauseReadAloud,
+				onResumeReadAloud,
+				onSetReadAloudPitch,
+				onSetReadAloudRate,
+				onSetReadAloudVoiceUri,
+				onToggleReadAloud,
 				onPaginateBackward,
 				onPaginateForward,
 				jumpToSection,
+				readAloudCurrentSentence,
+				readAloudPitch,
+				readAloudSupported,
+				readAloudRate,
+				readAloudVoiceUri,
+				readAloudVoices,
 				searchEntireBook,
 			}}
 		>
-			<div className="h-full w-full">
+			<div className="relative h-full w-full">
+				{isReadAloudActive && readAloudCurrentSentence && (
+					<div className="top-4 rounded-2xl px-4 py-2 shadow-lg backdrop-blur-md pointer-events-none absolute left-1/2 z-50 w-[min(48rem,calc(100%-2rem))] -translate-x-1/2 border border-edge-subtle/80 bg-background/95">
+						<div className="text-sm leading-relaxed font-medium text-center text-foreground">
+							{isReadAloudPaused ? 'Paused: ' : ''}
+							{readAloudCurrentSentence}
+						</div>
+					</div>
+				)}
+
 				<AutoSizer>
 					{({ height, width }) => {
 						return <div ref={ref} key={ebook.media.id} style={{ height, width }} />

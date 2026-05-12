@@ -48,10 +48,24 @@ export type EpubReaderMeta = {
 export type EpubReaderControls = {
 	visible: boolean
 	fullscreen: boolean
+	readAloudSupported: boolean
+	isReadAloudActive: boolean
+	isReadAloudPaused: boolean
+	readAloudRate: number
+	readAloudPitch: number
+	readAloudVoiceUri: string | null
+	readAloudVoices: Array<{ label: string; value: string }>
+	readAloudCurrentSentence: string | null
 	setFullscreen: (fullscreen: boolean) => void
 	setVisible: (visible: boolean) => void
 	onMouseEnterControls: () => void
 	onMouseLeaveControls: () => void
+	onToggleReadAloud: () => void
+	onPauseReadAloud: () => void
+	onResumeReadAloud: () => void
+	onSetReadAloudRate: (rate: number) => void
+	onSetReadAloudPitch: (pitch: number) => void
+	onSetReadAloudVoiceUri: (voiceUri: string | null) => void
 	onLinkClick: (href: string) => void
 	onPaginateForward: () => void
 	onPaginateBackward: () => void
@@ -80,13 +94,27 @@ export const EpubReaderContext = createContext<EpubReaderContextProps>({
 	controls: {
 		fullscreen: false,
 		getCfiPreviewText: async () => null,
+		isReadAloudActive: false,
+		isReadAloudPaused: false,
 		onGoToCfi: noop,
 		onLinkClick: noop,
 		onMouseEnterControls: noop,
 		onMouseLeaveControls: noop,
 		onPaginateBackward: noop,
 		onPaginateForward: noop,
+		onPauseReadAloud: noop,
+		onResumeReadAloud: noop,
+		onSetReadAloudPitch: noop,
+		onSetReadAloudRate: noop,
+		onSetReadAloudVoiceUri: noop,
+		onToggleReadAloud: noop,
 		jumpToSection: noop,
+		readAloudCurrentSentence: null,
+		readAloudPitch: 1,
+		readAloudSupported: false,
+		readAloudRate: 1,
+		readAloudVoiceUri: null,
+		readAloudVoices: [],
 		searchEntireBook: async () => [],
 		setFullscreen: noop,
 		setVisible: noop,

@@ -1,10 +1,11 @@
-import { Dialog, Heading, Popover } from '@stump/components'
+import { Dialog, Heading } from '@stump/components'
 import { Paintbrush } from 'lucide-react'
 
 import ControlButton from './ControlButton'
 import FontFamily from './FontFamily'
 import FontSizeControl from './FontSizeControl'
 import LineHeightControl from './LineHeightControl'
+import ReadAloudSettings from './ReadAloudSettings'
 import ReadingDirection from './ReadingDirection'
 import ReadingMode from './ReadingMode'
 
@@ -25,28 +26,10 @@ export default function ThemeControls() {
 				<LineHeightControl />
 				<ReadingDirection />
 				<ReadingMode />
+
+				<Heading size="md">Read aloud</Heading>
+				<ReadAloudSettings />
 			</Dialog.Content>
 		</Dialog>
-	)
-
-	return (
-		<Popover>
-			<Popover.Trigger asChild>
-				<ControlButton title="Theme and options">
-					<Paintbrush className="h-4 w-4" />
-				</ControlButton>
-			</Popover.Trigger>
-
-			<Popover.Content
-				size="sm"
-				align="end"
-				className="gap-4 z-101 flex flex-col bg-background-surface"
-			>
-				<FontSizeControl />
-				<LineHeightControl />
-				<ReadingDirection />
-				<ReadingMode />
-			</Popover.Content>
-		</Popover>
 	)
 }
