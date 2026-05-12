@@ -19,7 +19,10 @@ export default function ThemeControls() {
 			</Dialog.Trigger>
 
 			<Dialog.Content size="md" className="gap-4 z-101 flex flex-col bg-background-surface">
-				<Heading size="md">Appearance</Heading>
+				<Dialog.Header className="flex items-center justify-between">
+					<Heading size="md">Appearance</Heading>
+					<Dialog.Close />
+				</Dialog.Header>
 
 				<FontFamily />
 				<FontSizeControl />
