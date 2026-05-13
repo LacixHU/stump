@@ -217,7 +217,7 @@ export const formDefaults = (
 	convertRarToZip: library?.config.convertRarToZip ?? false,
 	defaultReadingDir: library?.config.defaultReadingDir || ReadingDirection.Ltr,
 	defaultReadingImageScaleFit:
-		library?.config.defaultReadingImageScaleFit || ReadingImageScaleFit.Height,
+		library?.config.defaultReadingImageScaleFit || ReadingImageScaleFit.Auto,
 	defaultReadingMode: library?.config.defaultReadingMode || ReadingMode.Paged,
 	defaultLibraryViewMode: library?.config.defaultLibraryViewMode || LibraryViewMode.Series,
 	hideSeriesView: library?.config.hideSeriesView ?? false,
