@@ -325,11 +325,17 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 	const readAloudRequestRef = useRef(0)
 	const readAloudSentenceQueueRef = useRef<string[]>([])
 	const readAloudSentenceIndexRef = useRef(0)
+	const readAloudAutoTurnInProgressRef = useRef(false)
 	const currentLocationRef = useRef<EpubLocationState>()
 	const readAloudCurrentCfiRef = useRef<string | null>(null)
 	const readAloudResumeRef = useRef<ReadAloudResume>(loadReadAloudResume(id))
 	const speakCurrentLocationRef = useRef<
-		((opts?: { suppressToast?: boolean; preferSelection?: boolean }) => Promise<boolean>) | null
+		| ((opts?: {
+				suppressToast?: boolean
+				preferSelection?: boolean
+				preferVisibleText?: boolean
+		  }) => Promise<boolean>)
+		| null
 	>(null)
 
 	const {
@@ -466,17 +472,24 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			}
 
 			const startContainer = range.startContainer
-			const fragments: string[] = []
+			const doc = startContainer?.ownerDocument
+			if (!doc || !startContainer) {
+				return (range.toString() || '').replace(/\s+/g, ' ').trim()
+			}
 
-			if (startContainer?.nodeType === Node.TEXT_NODE) {
+			// Collect text from the CFI point forward, staying within the current document/spine item
+			const fragments: string[] = []
+			const body = doc.body
+
+			if (startContainer.nodeType === Node.TEXT_NODE) {
 				// Get text from the start offset onwards in this text node
 				const nodeText = startContainer.textContent?.slice(range.startOffset) ?? ''
 				fragments.push(nodeText)
 
-				// Walk through following siblings to get remaining text
+				// Walk through following siblings to collect remaining text in current section
 				let nextNode: Node | null = startContainer.nextSibling
 				const parentElement = startContainer.parentElement
-				while (nextNode && parentElement?.contains(nextNode)) {
+				while (nextNode && body?.contains(nextNode)) {
 					if (nextNode.nodeType === Node.TEXT_NODE) {
 						fragments.push(nextNode.textContent ?? '')
 					} else if (nextNode.nodeType === Node.ELEMENT_NODE) {
@@ -484,15 +497,13 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 					}
 					nextNode = nextNode.nextSibling
 				}
-			} else if (startContainer?.nodeType === Node.ELEMENT_NODE) {
-				// If CFI points to element, get all text from that element onwards
+			} else if (startContainer.nodeType === Node.ELEMENT_NODE) {
+				// If CFI points to element, get text from that element onwards within the spine
 				fragments.push((startContainer as Element).textContent ?? '')
-			} else {
-				// Fallback to common ancestor
-				fragments.push(range.commonAncestorContainer?.textContent ?? '')
 			}
 
-			return fragments.join(' ').replace(/\s+/g, ' ').trim()
+			const text = fragments.join(' ').replace(/\s+/g, ' ').trim()
+			return text || (range.toString() || '').replace(/\s+/g, ' ').trim()
 		} catch (error) {
 			console.error('Error extracting text from current location:', error)
 			return ''
@@ -514,6 +525,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 		setIsReadAloudActive(false)
 		setIsReadAloudPaused(false)
 		setReadAloudCurrentSentence(null)
+		readAloudAutoTurnInProgressRef.current = false
 	}, [persistReadAloudResume, readAloudSupported])
 
 	const playSentenceQueue = useCallback(
@@ -526,7 +538,18 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 
 			const sentence = readAloudSentenceQueueRef.current[sentenceIndex]
 			if (!sentence) {
+				console.log(
+					'[TTS] No sentence at index',
+					sentenceIndex,
+					'total queue length:',
+					readAloudSentenceQueueRef.current.length,
+					'atEnd:',
+					location?.atEnd,
+				)
 				if (rendition && !location?.atEnd) {
+					console.log('[TTS] Triggering page turn. Current CFI:', location?.start.cfi)
+					const priorCfi = location?.start.cfi ?? null
+					readAloudAutoTurnInProgressRef.current = true
 					setIsReadAloudPaused(false)
 					setReadAloudCurrentSentence(null)
 					readAloudSentenceQueueRef.current = []
@@ -535,19 +558,41 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 					rendition
 						.next()
 						.then(async () => {
+							console.log(
+								'[TTS] Page turn complete. New CFI:',
+								currentLocationRef.current?.start.cfi,
+							)
+							readAloudAutoTurnInProgressRef.current = false
 							if (readAloudRequestRef.current !== requestId) {
+								console.log('[TTS] Request ID changed, aborting continuation')
 								return
 							}
 
 							if (readAloudSentenceQueueRef.current.length > 0) {
+								console.log(
+									'[TTS] Sentence queue already has content, not calling speakCurrentLocation',
+								)
 								return
 							}
+
+							const didRelocate =
+								(priorCfi && currentLocationRef.current?.start.cfi !== priorCfi) ||
+								(!priorCfi && !!currentLocationRef.current?.start.cfi)
+
+							console.log(
+								'[TTS] Calling speakCurrentLocation. didRelocate:',
+								didRelocate,
+								'preferVisibleText:',
+								!didRelocate,
+							)
 
 							const continued = await speakCurrentLocationRef.current?.({
 								suppressToast: true,
 								preferSelection: false,
+								preferVisibleText: !didRelocate,
 							})
 
+							console.log('[TTS] Continuation result:', continued)
 							if (!continued && readAloudRequestRef.current === requestId) {
 								setIsReadAloudActive(false)
 								setIsReadAloudPaused(false)
@@ -556,6 +601,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 							}
 						})
 						.catch(() => {
+							readAloudAutoTurnInProgressRef.current = false
 							if (readAloudRequestRef.current === requestId) {
 								setIsReadAloudActive(false)
 								setIsReadAloudPaused(false)
@@ -570,6 +616,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				setIsReadAloudPaused(false)
 				setReadAloudCurrentSentence(null)
 				readAloudSentenceIndexRef.current = 0
+				readAloudAutoTurnInProgressRef.current = false
 				persistReadAloudResume({ cfi: null, sentenceIndex: 0 })
 				return
 			}
@@ -588,6 +635,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			try {
 				utterance.rate = Math.max(0.1, Math.min(10, readAloudRate))
 				utterance.pitch = Math.max(0, Math.min(2, readAloudPitch))
+				console.log('[TTS] Utterance rate:', utterance.rate, 'pitch:', utterance.pitch)
 			} catch (e) {
 				// Fallback to defaults if setting fails
 				utterance.rate = 1
@@ -662,6 +710,12 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 							const recoveryUtterance = new SpeechSynthesisUtterance(sentence)
 							recoveryUtterance.rate = utterance.rate
 							recoveryUtterance.pitch = utterance.pitch
+							console.log(
+								'[TTS] Recovery utterance rate:',
+								recoveryUtterance.rate,
+								'pitch:',
+								recoveryUtterance.pitch,
+							)
 							recoveryUtterance.onend = utterance.onend
 							recoveryUtterance.onerror = () => {
 								// Second failure: give up
@@ -693,6 +747,16 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 
 			// Attempt to speak with error handling
 			try {
+				console.log(
+					'[TTS] Speaking sentence (rate:',
+					utterance.rate,
+					'pitch:',
+					utterance.pitch,
+					'voice:',
+					utterance.voice?.name,
+					'):',
+					sentence.substring(0, 50) + '...',
+				)
 				window.speechSynthesis.speak(utterance)
 			} catch (e) {
 				if (readAloudRequestRef.current === requestId) {
@@ -715,7 +779,13 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 	)
 
 	const speakCurrentLocation = useCallback(
-		async (opts: { suppressToast?: boolean; preferSelection?: boolean } = {}) => {
+		async (
+			opts: {
+				suppressToast?: boolean
+				preferSelection?: boolean
+				preferVisibleText?: boolean
+			} = {},
+		) => {
 			if (!readAloudSupported) {
 				if (!opts.suppressToast) {
 					toast.error('Read aloud is not supported in this browser')
@@ -743,6 +813,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			}
 
 			const preferSelection = opts.preferSelection ?? true
+			const preferVisibleText = opts.preferVisibleText ?? false
 			const selectedText = preferSelection ? getSelectedVisibleText() : ''
 
 			let sentences: string[] = []
@@ -805,16 +876,27 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 					sentences = pageSentences.length > 0 ? pageSentences : selectedSentences
 					startAtSentence = 0
 				}
+			} else if (preferVisibleText) {
+				const visibleText = extractVisibleText()
+				console.log('[TTS] Using visible text mode. Length:', visibleText.length)
+				sentences = splitIntoSentences(visibleText)
+				startAtSentence = 0
 			} else {
 				// No selection: extract text starting from current visible location (CFI)
 				// This naturally begins at the first character on screen, not the page beginning
 				const locationText = await extractTextFromCurrentLocation()
+				console.log('[TTS] Extracted from CFI. Length:', locationText.length)
 				sentences = splitIntoSentences(locationText)
+				console.log('[TTS] Split into', sentences.length, 'sentences from CFI extraction')
 
 				// Some engines return a very short CFI range (often a single sentence).
 				// Fallback to visible-page text to avoid page-hopping after one sentence.
 				if (sentences.length <= 1) {
 					const visibleSentences = splitIntoSentences(extractVisibleText())
+					console.log(
+						'[TTS] CFI extraction too short, using visible text instead. Sentences:',
+						visibleSentences.length,
+					)
 					if (visibleSentences.length > sentences.length) {
 						sentences = visibleSentences
 					}
@@ -823,6 +905,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			}
 
 			if (sentences.length === 0) {
+				console.log('[TTS] No sentences extracted, stopping read aloud')
 				setIsReadAloudActive(false)
 				setIsReadAloudPaused(false)
 				setReadAloudCurrentSentence(null)
@@ -832,6 +915,12 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				return false
 			}
 
+			console.log(
+				'[TTS] Starting to play',
+				sentences.length,
+				'sentences from index',
+				startAtSentence,
+			)
 			window.speechSynthesis.cancel()
 			setIsReadAloudActive(true)
 			setIsReadAloudPaused(false)
@@ -887,7 +976,8 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 	}, [isReadAloudActive, isReadAloudPaused, readAloudSupported])
 
 	const onSetReadAloudRate = useCallback((rate: number) => {
-		const clamped = Math.min(2, Math.max(0.5, Math.round(rate * 10) / 10))
+		const clamped = Math.min(10, Math.max(0.1, Math.round(rate * 10) / 10))
+		console.log('[TTS] Setting rate to:', clamped)
 		setReadAloudPreferences((prev) => ({
 			...prev,
 			rate: clamped,
@@ -896,6 +986,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 
 	const onSetReadAloudPitch = useCallback((pitch: number) => {
 		const clamped = Math.min(2, Math.max(0, Math.round(pitch * 10) / 10))
+		console.log('[TTS] Setting pitch to:', clamped)
 		setReadAloudPreferences((prev) => ({
 			...prev,
 			pitch: clamped,
@@ -1074,12 +1165,21 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			if (!start) {
 				return
 			}
+			console.log(
+				'[TTS] Location changed. CFI:',
+				start.cfi,
+				'autoTurnInProgress:',
+				readAloudAutoTurnInProgressRef.current,
+				'isReadAloudActive:',
+				isReadAloudActive,
+			)
 			currentLocationRef.current = changeState
 			readAloudCurrentCfiRef.current = start.cfi
 			setCurrentLocation(changeState)
 			computeProgress(changeState)
 
-			if (isReadAloudActive) {
+			if (isReadAloudActive && !readAloudAutoTurnInProgressRef.current) {
+				console.log('[TTS] Triggering read aloud from relocated event')
 				speakCurrentLocation({
 					suppressToast: true,
 					preferSelection: false,
