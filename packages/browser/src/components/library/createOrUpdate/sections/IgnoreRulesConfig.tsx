@@ -17,6 +17,7 @@ import { useCallback, useState } from 'react'
 import { useFieldArray, useFormContext, useWatch } from 'react-hook-form'
 
 import { useLibraryManagementSafe } from '@/scenes/library/tabs/settings/context'
+
 import { CreateOrUpdateLibrarySchema } from '../schema'
 
 const LOCALE_KEY = 'createOrUpdateLibraryForm'

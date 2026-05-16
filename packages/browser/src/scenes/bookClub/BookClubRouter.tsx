@@ -3,8 +3,8 @@ import { lazy, useEffect } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router'
 
 import { UnderConstruction } from '@/components/unimplemented'
-
 import { useAppContext } from '@/context/index.ts'
+
 import BookClubHomeLayout from './BookClubLayout.tsx'
 import BookClubSettingsRouter from './tabs/settings'
 

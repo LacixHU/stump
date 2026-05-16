@@ -4,10 +4,10 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import AutoSizer from 'react-virtualized-auto-sizer'
 
+import { useAppContext } from '@/context/index.ts'
 import { usePaths } from '@/paths'
 import { useAppStore } from '@/stores'
 
-import { useAppContext } from '@/context/index.ts'
 import SignOut from './navigation/sidebar/SignOut'
 
 type Props = {

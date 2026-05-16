@@ -55,7 +55,7 @@ export default function TagSelect({ label, description, selected = [], onChange 
 		if (filtered.length !== selected.length) {
 			onChange(filtered.length > 0 ? filtered : undefined)
 		}
-	}, [tags])
+	}, [tags, selected, onChange])
 
 	const handleChange = useCallback(
 		(newSelection?: string[]) => {
