@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="Stump's logo. Description: A young individual sitting on a tree stump reading a book. Inspired by Stump's creator's childhood, where a large amount of his time was spent sitting on a tree stump reading his comic books." src="./.github/images/logo.png" style="width: 50%" />
+  <img alt="Stump's logo. It depicts a young individual sitting on a tree stump reading a book. Inspired by the developer's childhood, where they spent a significant amount of time reading on a tree stump in their backyard" src="./.github/images/logo.png" style="width: 50%" />
   <br />
   <a href="https://github.com/awesome-selfhosted/awesome-selfhosted#document-management---e-books">
     <img src="https://cdn.rawgit.com/sindresorhus/awesome/d7305f38d29fed78fa85652e3a63e154dd8e8829/media/badge.svg" alt="Awesome Self-Hosted">
@@ -193,11 +193,9 @@ Various TypeScript packages, at `/packages` in the root of the project:
 There are a number of other projects that are similar to Stump, it certainly isn't the first or only digital book media server out there. If Stump isn't for you, or you want to check out similar projects in the rust and/or self hosting spaces, consider checking out these other open source projects:
 
 - [audiobookshelf](https://github.com/advplyr/audiobookshelf) (_Audio books, Podcasts_)
-- [Dim](https://github.com/Dusk-Labs/dim) (_Video, Audio_) (✨*Rust*✨)
+- [Codex](https://github.com/ajslater/codex)
 - [Kavita](https://github.com/Kareadita/Kavita)
 - [Komga](https://github.com/gotson/komga)
-- [Librum](https://github.com/Librum-Reader/Librum)
-- [oqurum](https://github.com/oqurum) (✨*Rust*✨)
 
 ## License 📝
 

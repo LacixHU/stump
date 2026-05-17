@@ -32,10 +32,6 @@ type Props = {
 	 */
 	getPageUrl(page: number): string
 	/**
-	 * A callback to report the progress of the current page. If undefined, no progress will be reported.
-	 */
-	onProgressUpdate?(page: number): void
-	/**
 	 * A callback to report when the page has changed. If undefined, no callback will be called.
 	 */
 	onPageChanged?(page: number): void
@@ -53,7 +49,6 @@ export default function ContinuousScrollReader({
 	initialPage,
 	getPageUrl,
 	orientation,
-	onProgressUpdate,
 	onPageChanged,
 }: Props) {
 	const [search, setSearch] = useSearchParams()
@@ -82,10 +77,9 @@ export default function ContinuousScrollReader({
 	useEffect(() => {
 		const page = currentIndex + 1
 		if (pageDidChange) {
-			onProgressUpdate?.(page)
 			onPageChanged?.(page)
 		}
-	}, [currentIndex, onProgressUpdate, onPageChanged, pageDidChange])
+	}, [currentIndex, onPageChanged, pageDidChange])
 
 	const containerStyle = useCallback(
 		({ height, width }: { height: number; width: number }) =>
