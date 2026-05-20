@@ -46,6 +46,8 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 	const panzoomRef = useRef<ReturnType<typeof Panzoom> | null>(null)
 
 	const panningDetected = useRef(false)
+	const panGestureActive = useRef(false)
+	const PAN_GESTURE_THRESHOLD_PX = 2
 
 	const [pageSetWidth, setPageSetWidth] = useState(0)
 	useEffect(() => {
@@ -66,6 +68,8 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 	useEffect(() => {
 		const pageSetElement = pageSetRef.current
 		if (!pageSetElement) return
+		const previousTouchAction = pageSetElement.style.touchAction
+		pageSetElement.style.touchAction = 'none'
 
 		const parentElement = pageSetElement.parentElement
 		if (!parentElement) return
@@ -79,6 +83,7 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 		// Check panning vs clicking
 		let startX = 0
 		let startY = 0
+		const activePanPointerIds = new Set<number>()
 		const handlePointerDown = (event: PointerEvent) => {
 			if (event.button === 2) return
 
@@ -88,6 +93,8 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 			const isSidebarClicked = !!(event.target as HTMLElement).closest('.z-50')
 
 			if (!isSidebarClicked) {
+				activePanPointerIds.add(event.pointerId)
+				panGestureActive.current = true
 				panzoomRef.current?.handleDown(event)
 				parentElement.style.cursor = 'move'
 				pageSetElement.style.cursor = 'move'
@@ -95,17 +102,39 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 			}
 		}
 		const handlePointerUp = (event: PointerEvent) => {
+			if (!activePanPointerIds.has(event.pointerId)) {
+				panningDetected.current = false
+				return
+			}
+
 			const deltaX = event.clientX - startX
 			const deltaY = event.clientY - startY
 			panzoomRef.current?.handleUp(event)
-			parentElement.style.cursor = 'default'
-			pageSetElement.style.cursor = 'default'
-			panningDetected.current = Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2
+			activePanPointerIds.delete(event.pointerId)
+			panGestureActive.current = activePanPointerIds.size > 0
+			if (!panGestureActive.current) {
+				parentElement.style.cursor = 'default'
+				pageSetElement.style.cursor = 'default'
+			}
+			panningDetected.current =
+				Math.abs(deltaX) > PAN_GESTURE_THRESHOLD_PX || Math.abs(deltaY) > PAN_GESTURE_THRESHOLD_PX
 			setTimeout(() => {
 				panningDetected.current = false
 			}, 100)
 		}
+		const handlePointerCancel = (event: PointerEvent) => {
+			if (!activePanPointerIds.has(event.pointerId)) return
+
+			panzoomRef.current?.handleUp(event)
+			activePanPointerIds.delete(event.pointerId)
+			panGestureActive.current = activePanPointerIds.size > 0
+			if (!panGestureActive.current) {
+				parentElement.style.cursor = 'default'
+				pageSetElement.style.cursor = 'default'
+			}
+		}
 		const handleMove = (event: PointerEvent) => {
+			if (!activePanPointerIds.has(event.pointerId)) return
 			panzoomRef.current?.handleMove(event)
 		}
 
@@ -152,13 +181,16 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 		parentElement.addEventListener('pointerdown', handlePointerDown)
 		document.addEventListener('pointermove', handleMove)
 		document.addEventListener('pointerup', handlePointerUp)
+		document.addEventListener('pointercancel', handlePointerCancel)
 		window.addEventListener('resize', createPanzoom)
 
 		return () => {
+			pageSetElement.style.touchAction = previousTouchAction
 			parentElement.removeEventListener('wheel', handleWheel)
 			parentElement.removeEventListener('pointerdown', handlePointerDown)
 			document.removeEventListener('pointermove', handleMove)
 			document.removeEventListener('pointerup', handlePointerUp)
+			document.removeEventListener('pointercancel', handlePointerCancel)
 			window.removeEventListener('resize', createPanzoom)
 			panzoomRef.current?.destroy()
 		}
@@ -335,6 +367,32 @@ type SideBarControlProps = {
  * navigating to the next/previous page.
  */
 function SideBarControl({ onClick, position, fixed }: SideBarControlProps) {
+	const pointerDownPosition = useRef<{ x: number; y: number } | null>(null)
+	const TAP_MOVE_TOLERANCE_PX = 10
+
+	const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+		pointerDownPosition.current = { x: event.clientX, y: event.clientY }
+	}, [])
+
+	const handlePointerUp = useCallback(
+		(event: React.PointerEvent<HTMLDivElement>) => {
+			const start = pointerDownPosition.current
+			pointerDownPosition.current = null
+			if (!start) return
+
+			const deltaX = Math.abs(event.clientX - start.x)
+			const deltaY = Math.abs(event.clientY - start.y)
+			if (deltaX <= TAP_MOVE_TOLERANCE_PX && deltaY <= TAP_MOVE_TOLERANCE_PX) {
+				onClick()
+			}
+		},
+		[onClick],
+	)
+
+	const clearPointerTracking = useCallback(() => {
+		pointerDownPosition.current = null
+	}, [])
+
 	return (
 		<div
 			className={clsx(
@@ -344,7 +402,9 @@ function SideBarControl({ onClick, position, fixed }: SideBarControlProps) {
 				{ 'right-0': position === 'right' },
 				{ 'left-0': position === 'left' },
 			)}
-			onClick={onClick}
+			onPointerDown={handlePointerDown}
+			onPointerUp={handlePointerUp}
+			onPointerCancel={clearPointerTracking}
 		/>
 	)
 }
