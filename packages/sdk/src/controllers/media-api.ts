@@ -36,4 +36,13 @@ export class MediaAPI extends APIBase {
 	bookPageURL(mediaID: string, page: number, params?: ScaledDimensionResizeInput): string {
 		return this.withServiceURL(mediaURL(`${mediaID}/page/${page}`, params))
 	}
+
+	/**
+	 * The URL for fetching a single media page as a one-page PDF document.
+	 *
+	 * Note: this endpoint is only valid for media with a `.pdf` extension.
+	 */
+	bookPagePdfURL(mediaID: string, page: number): string {
+		return this.withServiceURL(mediaURL(`${mediaID}/page/${page}/pdf`))
+	}
 }

@@ -9,6 +9,7 @@ import { usePreferences } from '@/hooks/usePreferences'
 import { useTheme } from '@/hooks/useTheme'
 import { usePaths } from '@/paths'
 import { usePrefetchBooksAfterCursor } from '@/scenes/book/BooksAfterCursor'
+import { PDF_EXTENSION } from '@/utils/patterns'
 import { formatBytes } from '@/utils/format'
 
 import { ThumbnailImage } from '../thumbnail/ThumbnailImage'
@@ -116,12 +117,23 @@ const BookCard = memo(function BookCard({
 
 		const shouldSkipOverview = data.libraryConfig?.skipBookOverview === true
 
-		return readingLink || shouldSkipOverview
-			? paths.bookReader(data.id, {
-					epubcfi: data.readProgress?.epubcfi,
-					page: data.readProgress?.page ?? undefined,
-				})
-			: paths.bookOverview(data.id)
+		if (!(readingLink || shouldSkipOverview)) {
+			return paths.bookOverview(data.id)
+		}
+
+		if (data.extension.match(PDF_EXTENSION)) {
+			return paths.bookReader(data.id, {
+				isPdf: true,
+				isPagedPdf: true,
+				isStreaming: false,
+				page: data.readProgress?.page ?? 1,
+			})
+		}
+
+		return paths.bookReader(data.id, {
+			epubcfi: data.readProgress?.epubcfi,
+			page: data.readProgress?.page ?? undefined,
+		})
 	}, [readingLink, data.id, onSelect, data.readProgress, data.libraryConfig, paths])
 
 	const isMissing = data.status === 'MISSING'

@@ -1,8 +1,8 @@
 use axum::{
 	extract::{Path, State},
-	http::HeaderMap,
+	http::{header, HeaderMap},
 	middleware,
-	response::IntoResponse,
+	response::{IntoResponse, Response},
 	routing::get,
 	Extension, Router,
 };
@@ -12,19 +12,31 @@ use models::{
 	shared::image_processor_options::SupportedImageFormat,
 };
 use sea_orm::{prelude::*, sea_query::Query, QuerySelect};
+use serde::Deserialize;
 use stump_core::{
 	config::StumpConfig,
 	filesystem::{
-		get_saved_thumbnail, get_thumbnail, media::get_page_async, ContentType, FileError,
+		get_saved_thumbnail, get_thumbnail,
+		media::{get_page_async, get_page_pdf_async},
+		ContentType, FileError,
 	},
 	Ctx,
 };
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct PageQuery {
+	pub size: Option<u32>,
+}
 
 use crate::{
 	config::state::AppState,
 	errors::{APIError, APIResult},
 	middleware::auth::auth_middleware,
-	utils::{http::ImageResponse, serve_media},
+	utils::{
+		http::{BufferResponse, ImageResponse},
+		serve_media,
+	},
 };
 
 pub(crate) fn mount(app_state: AppState) -> Router<AppState> {
@@ -34,6 +46,7 @@ pub(crate) fn mount(app_state: AppState) -> Router<AppState> {
 			Router::new()
 				.route("/thumbnail", get(get_media_thumbnail_handler))
 				.route("/page/{page}", get(get_media_page))
+				.route("/page/{page}/pdf", get(get_media_page_pdf))
 				.route("/file", get(get_media_file)),
 		)
 		.layer(middleware::from_fn_with_state(app_state, auth_middleware))
@@ -141,6 +154,7 @@ pub(crate) async fn get_media_thumbnail_handler(
 
 async fn get_media_page(
 	Path((id, page)): Path<(String, u32)>,
+	axum::extract::Query(page_query): axum::extract::Query<PageQuery>,
 	State(ctx): State<AppState>,
 	Extension(req): Extension<AuthContext>,
 ) -> APIResult<ImageResponse> {
@@ -150,8 +164,19 @@ async fn get_media_page(
 		.await?
 		.ok_or(APIError::NotFound("Book not found".to_string()))?;
 
+	let mut request_config = ctx.config.as_ref().clone();
+	let is_pdf = book.extension.eq_ignore_ascii_case("pdf");
+
+	// Dynamically adjust configuration for PDFs when zoomed
+	if is_pdf {
+		if let Some(size) = page_query.size {
+			request_config.pdf_max_dimension = size.max(request_config.pdf_max_dimension);
+			request_config.pdf_high_quality = true;
+		}
+	}
+
 	let content =
-		match get_page_async(&book.path, page.try_into()?, ctx.config.as_ref()).await {
+		match get_page_async(&book.path, page.try_into()?, &request_config).await {
 			Ok(result) => result,
 			Err(e) => {
 				if matches!(e, FileError::NoImageError) {
@@ -160,6 +185,41 @@ async fn get_media_page(
 				return Err(APIError::InternalServerError(e.to_string()));
 			},
 		};
-
 	Ok(ImageResponse::from(content))
+}
+
+async fn get_media_page_pdf(
+	Path((id, page)): Path<(String, u32)>,
+	State(ctx): State<AppState>,
+	Extension(req): Extension<AuthContext>,
+) -> APIResult<Response> {
+	if page == 0 {
+		return Err(APIError::BadRequest(
+			"Page must be >= 1 for PDF extraction".to_string(),
+		));
+	}
+
+	let book = media::Entity::find_for_user(&req.user())
+		.filter(media::Column::Id.eq(id.clone()))
+		.one(ctx.conn.as_ref())
+		.await?
+		.ok_or(APIError::NotFound("Book not found".to_string()))?;
+
+	if !book.extension.eq_ignore_ascii_case("pdf") {
+		return Err(APIError::BadRequest(
+			"Page-as-PDF is only supported for PDF media".to_string(),
+		));
+	}
+
+	let content =
+		get_page_pdf_async(&book.path, page as i32, ctx.config.as_ref()).await?;
+	let mut response = BufferResponse::from(content).into_response();
+	response.headers_mut().insert(
+		header::CONTENT_DISPOSITION,
+		format!("inline; filename=\"{}-page-{}.pdf\"", book.id, page)
+			.parse()
+			.unwrap_or_else(|_| "inline".parse().unwrap()),
+	);
+
+	Ok(response)
 }

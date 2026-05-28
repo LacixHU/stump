@@ -5,6 +5,7 @@ import { ColumnDef, createColumnHelper } from '@tanstack/react-table'
 import { format, intlFormat } from 'date-fns'
 
 import paths from '@/paths'
+import { PDF_EXTENSION } from '@/utils/patterns'
 import { formatBytes } from '@/utils/format'
 
 import { BookCardFragment } from '../BookCard'
@@ -50,16 +51,23 @@ const nameColumn = columnHelper.accessor(({ resolvedName }) => resolvedName, {
 	cell: ({
 		getValue,
 		row: {
-			original: { id, libraryConfig, readProgress },
+			original: { id, extension, libraryConfig, readProgress },
 		},
 	}) => (
 		<Link
 			to={
 				libraryConfig?.skipBookOverview
-					? paths.bookReader(id, {
-							epubcfi: readProgress?.epubcfi,
-							page: readProgress?.page ?? undefined,
-						})
+					? extension.match(PDF_EXTENSION)
+						? paths.bookReader(id, {
+								isPdf: true,
+								isPagedPdf: true,
+								isStreaming: false,
+								page: readProgress?.page ?? 1,
+							})
+						: paths.bookReader(id, {
+								epubcfi: readProgress?.epubcfi,
+								page: readProgress?.page ?? undefined,
+							})
 					: paths.bookOverview(id)
 			}
 			className="text-sm line-clamp-2 no-underline hover:text-foreground/90"

@@ -3,7 +3,7 @@ import { BookCardFragment } from '@stump/graphql'
 import { useMemo } from 'react'
 
 import { usePaths } from '@/paths'
-import { EBOOK_EXTENSION } from '@/utils/patterns'
+import { EBOOK_EXTENSION, PDF_EXTENSION } from '@/utils/patterns'
 
 type Props = {
 	book: BookCardFragment
@@ -34,6 +34,13 @@ export default function BookReaderLink({ book }: Props) {
 			return paths.bookReader(id, {
 				epubcfi: isReadAgain ? undefined : epubcfi,
 				isEpub: true,
+			})
+		} else if (extension.match(PDF_EXTENSION)) {
+			return paths.bookReader(id, {
+				isPdf: true,
+				isPagedPdf: true,
+				isStreaming: false,
+				page: isReadAgain ? 1 : page || 1,
 			})
 		} else {
 			return paths.bookReader(id, { page: isReadAgain ? 1 : page || 1 })

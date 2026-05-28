@@ -119,6 +119,13 @@ export default function BookActionMenu({ book }: Props) {
 		const { page, epubcfi } = book.readProgress
 		if (epubcfi) {
 			return paths.bookReader(book.id, { epubcfi, isEpub: true })
+		} else if (book.extension?.match(PDF_EXTENSION)) {
+			return paths.bookReader(book.id, {
+				isPdf: true,
+				isPagedPdf: true,
+				isStreaming: false,
+				page: !!page && page > 0 ? page : 1,
+			})
 		} else if (!!page && page > 0) {
 			return paths.bookReader(book.id, { page })
 		}
@@ -130,10 +137,23 @@ export default function BookActionMenu({ book }: Props) {
 			const { id, extension } = book
 			if (extension.match(EBOOK_EXTENSION)) {
 				return paths.bookReader(id, { isEpub: true, isIncognito: incognito || undefined })
+			} else if (extension.match(PDF_EXTENSION)) {
+				return paths.bookReader(id, {
+					isPdf: true,
+					isPagedPdf: true,
+					isStreaming: false,
+					isIncognito: incognito || undefined,
+					page: 1,
+				})
 			}
 			return paths.bookReader(id, { isIncognito: incognito || undefined, page: 1 })
 		},
 		[book, paths],
+	)
+
+	const preferredPdfStartPage = useMemo(
+		() => (book.readProgress?.page && book.readProgress.page > 0 ? book.readProgress.page : 1),
+		[book.readProgress?.page],
 	)
 
 	const groups = useMemo<DropdownItemGroup[]>(
@@ -166,7 +186,26 @@ export default function BookActionMenu({ book }: Props) {
 										label: 'Native PDF viewer',
 										leftIcon: <FileText className="mr-2 h-4 w-4" />,
 										onClick: () =>
-											navigate(paths.bookReader(book.id, { isPdf: true, isStreaming: false })),
+											navigate(
+												paths.bookReader(book.id, {
+													isPdf: true,
+													isStreaming: false,
+													page: preferredPdfStartPage,
+												}),
+											),
+									},
+									{
+										label: 'Paged PDF viewer',
+										leftIcon: <FileText className="mr-2 h-4 w-4" />,
+										onClick: () =>
+											navigate(
+												paths.bookReader(book.id, {
+													isPdf: true,
+													isPagedPdf: true,
+													isStreaming: false,
+													page: preferredPdfStartPage,
+												}),
+											),
 									},
 								]
 							: []),
@@ -245,6 +284,7 @@ export default function BookActionMenu({ book }: Props) {
 			actions,
 			continueReadingLink,
 			getReadFromBeginningLink,
+			preferredPdfStartPage,
 		],
 	)
 

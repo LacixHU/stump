@@ -45,6 +45,7 @@ toml.workspace = true
 trash = "3.1.2"
 pdf = "0.9.1"
 pdfium-render = "0.8.24"
+lopdf = "0.35.0"
 prefixed-api-key = { workspace = true}
 rayon = "1.10.0"
 regex.workspace = true

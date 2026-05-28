@@ -136,6 +136,10 @@ function BookReaderScene({ book }: Props) {
 	}, [sdk, client])
 
 	const initialPage = useMemo(() => (page ? parseInt(page, 10) : undefined), [page])
+	const preferredPdfPage = useMemo(
+		() => initialPage ?? book.readProgress?.page ?? 1,
+		[initialPage, book.readProgress?.page],
+	)
 
 	useEffect(() => {
 		if (book.extension.match(EBOOK_EXTENSION)) {
@@ -145,18 +149,25 @@ function BookReaderScene({ book }: Props) {
 					isEpub: true,
 				}),
 			)
-		} else if (book.extension.match(PDF_EXTENSION) && !isStreaming) {
-			navigate(paths.bookReader(book.id, { isPdf: true, isStreaming: false }))
-		} else if (book.extension.match(ARCHIVE_EXTENSION) || book.extension.match(PDF_EXTENSION)) {
+		} else if (book.extension.match(PDF_EXTENSION)) {
+			navigate(
+				paths.bookReader(book.id, {
+					isPdf: true,
+					isPagedPdf: true,
+					isStreaming: false,
+					page: preferredPdfPage,
+				}),
+			)
+		} else if (book.extension.match(ARCHIVE_EXTENSION)) {
 			if (!initialPage && readingMode === ReadingMode.Paged && !animatedReader) {
 				navigate(paths.bookReader(book.id, { page: 1 }))
 			} else if (!!initialPage && initialPage > book.pages) {
 				navigate(paths.bookReader(book.id, { page: book.pages }))
 			}
 		}
-	}, [book, initialPage, readingMode, navigate, isStreaming, animatedReader])
+	}, [book, initialPage, preferredPdfPage, readingMode, navigate, animatedReader])
 
-	if (book.extension.match(ARCHIVE_EXTENSION) || book.extension.match(PDF_EXTENSION)) {
+	if (book.extension.match(ARCHIVE_EXTENSION)) {
 		return (
 			<ImageBasedReader
 				media={book}

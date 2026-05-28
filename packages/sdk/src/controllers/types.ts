@@ -16,6 +16,7 @@ export type ClassQueryKeys<T> = Omit<
 	| 'thumbnailURL'
 	| 'downloadURL'
 	| 'bookPageURL'
+	| 'bookPagePdfURL'
 	| 'axios'
 	| 'withServiceURL'
 	| 'serviceURL'

@@ -390,6 +390,25 @@ pub async fn get_page_async(
 	Ok(page_result)
 }
 
+/// Extract a single page as a one-page PDF document.
+///
+/// This helper is only valid for PDF files and returns [`ContentType::PDF`].
+#[tracing::instrument(err, fields(path = %path.as_ref().display()))]
+pub async fn get_page_pdf_async(
+	path: impl AsRef<Path>,
+	page: i32,
+	config: &StumpConfig,
+) -> Result<(ContentType, Vec<u8>), FileError> {
+	let path_str = path.as_ref().to_str().unwrap_or_default();
+	let mime = ContentType::from_file(path_str).mime_type();
+
+	if mime != "application/pdf" {
+		return Err(FileError::UnsupportedFileType(path_str.to_string()));
+	}
+
+	PdfProcessor::get_page_pdf_async(path_str, page, config).await
+}
+
 /// Get the number of pages in a file. This will call the appropriate [`FileProcessor::get_page_count`]
 /// implementation based on the file's mime type, or return an error if the file type is not supported.
 pub fn get_page_count(path: &str, config: &StumpConfig) -> Result<i32, FileError> {

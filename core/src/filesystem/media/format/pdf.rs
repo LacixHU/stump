@@ -4,6 +4,7 @@ use std::{
 	path::{Path, PathBuf},
 };
 
+use lopdf::Document as LoPdfDocument;
 use models::shared::image_processor_options::SupportedImageFormat;
 use pdf::{file::FileOptions, object::ParseOptions};
 use pdfium_render::prelude::{PdfRenderConfig, Pdfium};
@@ -172,6 +173,55 @@ impl FileProcessor for PdfProcessor {
 }
 
 impl PdfProcessor {
+	/// Extracts a single page from a PDF into a new one-page PDF document.
+	pub fn extract_page_pdf_sync(
+		path: &str,
+		page: i32,
+		_: &StumpConfig,
+	) -> Result<(ContentType, Vec<u8>), FileError> {
+		let mut source_document = LoPdfDocument::load(path).map_err(|e| {
+			FileError::PdfProcessingError(format!(
+				"Failed to load PDF for extraction: {e}"
+			))
+		})?;
+		let pages = source_document.get_pages();
+		let total_pages = pages.len();
+
+		if page < 1 {
+			return Err(FileError::PdfProcessingError(format!(
+				"Invalid page number {}, must be >= 1",
+				page
+			)));
+		}
+
+		let page_number = page as u32;
+		if !pages.contains_key(&page_number) {
+			return Err(FileError::PdfProcessingError(format!(
+				"Page {} out of bounds, document has {} pages",
+				page, total_pages
+			)));
+		}
+
+		let pages_to_delete = pages
+			.keys()
+			.copied()
+			.filter(|number| *number != page_number)
+			.collect::<Vec<_>>();
+
+		source_document.delete_pages(&pages_to_delete);
+		source_document.prune_objects();
+		source_document.renumber_objects();
+
+		let mut bytes = Vec::new();
+		source_document.save_to(&mut bytes).map_err(|e| {
+			FileError::PdfProcessingError(format!(
+				"Failed to save extracted page PDF: {e}"
+			))
+		})?;
+
+		Ok((ContentType::PDF, bytes))
+	}
+
 	/// Initializes a PDFium renderer. If a path to the PDFium library is not provided
 	pub fn renderer(pdfium_path: &Option<String>) -> Result<Pdfium, FileError> {
 		if let Some(path) = pdfium_path {
@@ -394,6 +444,28 @@ impl PdfProcessor {
 		}
 
 		Ok(result)
+	}
+
+	/// Async version of extracting a single page into a one-page PDF document.
+	pub async fn get_page_pdf_async(
+		path: &str,
+		page: i32,
+		config: &StumpConfig,
+	) -> Result<(ContentType, Vec<u8>), FileError> {
+		let path_owned = path.to_string();
+		let config_owned = config.clone();
+
+		let extract_task = tokio::task::spawn_blocking(move || {
+			Self::extract_page_pdf_sync(&path_owned, page, &config_owned)
+		});
+
+		match extract_task.await {
+			Ok(result) => result,
+			Err(e) => Err(FileError::PdfProcessingError(format!(
+				"PDF extraction task panicked: {}",
+				e
+			))),
+		}
 	}
 
 	/// Generate a cache key for a PDF page based on file path, page number, and render settings
