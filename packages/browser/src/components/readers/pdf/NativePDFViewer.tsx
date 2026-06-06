@@ -4,7 +4,7 @@ import { Dimension } from '@stump/graphql'
 import { ImageReaderBookRef } from '../imageBased/context'
 import { useReaderStore } from '@/stores'
 import { ReadingImageScaleFit } from '@stump/graphql'
-import { ArrowLeft, ChevronLeft, ChevronRight, Minus, Plus, RotateCcw } from 'lucide-react'
+import { ArrowLeft, Minus, Plus, RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 type Props = {
@@ -405,35 +405,6 @@ export default function NativePDFViewer({
 
 	return (
 		<div className="inset-0 absolute flex flex-col overflow-hidden bg-background">
-			{isPaged && !isMobile && (
-				<>
-					<button
-						type="button"
-						aria-label="Previous page"
-						className="left-3 border-white/35 bg-black/65 p-2 text-white absolute top-1/2 z-50 -translate-y-1/2 rounded-full border"
-						disabled={!canGoBack}
-						onClick={(event) => {
-							event.stopPropagation()
-							if (canGoBack) onPageChange?.(Math.max(1, page - 1))
-						}}
-					>
-						<ChevronLeft className="h-5 w-5" />
-					</button>
-					<button
-						type="button"
-						aria-label="Next page"
-						className="right-3 border-white/35 bg-black/65 p-2 text-white absolute top-1/2 z-50 -translate-y-1/2 rounded-full border"
-						disabled={!canGoForward}
-						onClick={(event) => {
-							event.stopPropagation()
-							if (canGoForward) onPageChange?.(Math.min(totalPages, page + 1))
-						}}
-					>
-						<ChevronRight className="h-5 w-5" />
-					</button>
-				</>
-			)}
-
 			{!showOverlay && !isMobile && isPaged && (
 				<>
 					<div
@@ -474,15 +445,6 @@ export default function NativePDFViewer({
 
 						{isPaged && (
 							<div className="gap-1 flex shrink-0 items-center">
-								<Button
-									size="xs"
-									variant="ghost"
-									disabled={!canGoBack}
-									onClick={() => onPageChange?.(Math.max(1, page - 1))}
-								>
-									<ChevronLeft className="h-4 w-4" />
-								</Button>
-
 								<div className="gap-1 flex items-center">
 									<input
 										type="number"
@@ -500,15 +462,6 @@ export default function NativePDFViewer({
 										/ {totalPages}
 									</Text>
 								</div>
-
-								<Button
-									size="xs"
-									variant="ghost"
-									disabled={!canGoForward}
-									onClick={() => onPageChange?.(Math.min(totalPages, page + 1))}
-								>
-									<ChevronRight className="h-4 w-4" />
-								</Button>
 
 								<Button size="xs" variant="ghost" onClick={zoomOut} disabled={zoom <= 1}>
 									<Minus className="h-4 w-4" />
@@ -534,17 +487,33 @@ export default function NativePDFViewer({
 					overscrollBehavior: isPaged ? 'contain' : 'auto',
 				}}
 			>
+				{isPaged && (
+					<>
+						{/* Left 20%: navigate to previous page */}
+						<div
+							className="left-0 top-0 absolute z-10 h-full w-[20%]"
+							style={{ cursor: canGoBack ? 'pointer' : 'default' }}
+							onClick={() => {
+								if (canGoBack) onPageChange?.(Math.max(1, page - 1))
+							}}
+						/>
+						{/* Center 60%: toggle overlay (thumbnail + controls) */}
+						<div
+							className="top-0 absolute left-[20%] z-10 h-full w-[60%] cursor-pointer"
+							onClick={() => setShowOverlay((prev) => !prev)}
+						/>
+						{/* Right 20%: navigate to next page */}
+						<div
+							className="right-0 top-0 absolute z-10 h-full w-[20%]"
+							style={{ cursor: canGoForward ? 'pointer' : 'default' }}
+							onClick={() => {
+								if (canGoForward) onPageChange?.(Math.min(totalPages, page + 1))
+							}}
+						/>
+					</>
+				)}
 				{isPaged ? (
-					<div
-						className="bg-black/95 relative flex h-full w-full overflow-auto"
-						onClick={() => {
-							if (isMobile) {
-								setShowOverlay((prev) => !prev)
-							} else if (!showOverlay) {
-								setShowOverlay(true)
-							}
-						}}
-					>
+					<div className="bg-black/95 relative flex h-full w-full overflow-auto">
 						{isMobile ? (
 							<img
 								key="mobile-paged-img"
