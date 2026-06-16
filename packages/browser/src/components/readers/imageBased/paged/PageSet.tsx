@@ -47,14 +47,14 @@ const PageSet = forwardRef<HTMLDivElement, Props>(
 		return (
 			<div
 				ref={ref}
-				className="flex h-full shrink-0 justify-center"
+				className="flex h-full shrink-0 items-center justify-center"
 				style={{
 					...styles[imageScaling.scaleToFit].imagesHolder,
 					filter: `brightness(${brightness * 100}%)`,
 				}}
 			>
 				<div
-					className={cn('relative flex w-full justify-center', {
+					className={cn('relative flex w-full items-center justify-center', {
 						'gap-0 mx-auto flex-row': currentSet.length > 1,
 					})}
 				>
@@ -155,7 +155,7 @@ const styles = {
 			maxWidth: '100%',
 			minHeight: '0%',
 			// no width, no height — browser picks whichever dimension is the constraint
-			maxHeight: '100vh',
+			maxHeight: '100dvh',
 		} as React.CSSProperties,
 	},
 
@@ -165,7 +165,7 @@ const styles = {
 			// no max width
 			// no width
 			// no min height
-			height: '100vh',
+			height: '100dvh',
 		} as React.CSSProperties,
 
 		image: {
@@ -183,7 +183,7 @@ const styles = {
 			// no min width
 			// no max width
 			width: '100%',
-			minHeight: '100vh',
+			minHeight: '100dvh',
 			// no neight
 		} as React.CSSProperties,
 
@@ -202,7 +202,7 @@ const styles = {
 			minWidth: 'max-content',
 			// no max width
 			// no width
-			minHeight: '100vh',
+			minHeight: '100dvh',
 			// no height
 			alignItems: 'center', // add vertical alignment
 		} as React.CSSProperties,
