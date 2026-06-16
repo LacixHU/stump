@@ -84,6 +84,9 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 		let startX = 0
 		let startY = 0
 		const activePanPointerIds = new Set<number>()
+		const pointerDownCache = new Map<number, PointerEvent>()
+		let panInitialized = false
+
 		const handlePointerDown = (event: PointerEvent) => {
 			if (event.button === 2) return
 
@@ -92,10 +95,20 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 
 			const isSidebarClicked = !!(event.target as HTMLElement).closest('.z-50')
 
-			if (!isSidebarClicked) {
-				activePanPointerIds.add(event.pointerId)
+			// Cache down event for later initialization
+			pointerDownCache.set(event.pointerId, event)
+			activePanPointerIds.add(event.pointerId)
+
+			if (event.pointerType === 'touch') {
+				// For touch, defer initialization until movement
+				return
+			}
+
+			// Non-touch: initialize immediately if not on sidebar
+			if (!isSidebarClicked && !panInitialized) {
 				panGestureActive.current = true
 				panzoomRef.current?.handleDown(event)
+				panInitialized = true
 				parentElement.style.cursor = 'move'
 				pageSetElement.style.cursor = 'move'
 				event.preventDefault()
@@ -111,11 +124,16 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 			const deltaY = event.clientY - startY
 			panzoomRef.current?.handleUp(event)
 			activePanPointerIds.delete(event.pointerId)
-			panGestureActive.current = activePanPointerIds.size > 0
-			if (!panGestureActive.current) {
+			pointerDownCache.delete(event.pointerId)
+
+			// Always reset pan state when no more pointers are active
+			if (activePanPointerIds.size === 0) {
+				panGestureActive.current = false
+				panInitialized = false
 				parentElement.style.cursor = 'default'
 				pageSetElement.style.cursor = 'default'
 			}
+
 			panningDetected.current =
 				Math.abs(deltaX) > PAN_GESTURE_THRESHOLD_PX || Math.abs(deltaY) > PAN_GESTURE_THRESHOLD_PX
 			setTimeout(() => {
@@ -127,14 +145,73 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 
 			panzoomRef.current?.handleUp(event)
 			activePanPointerIds.delete(event.pointerId)
-			panGestureActive.current = activePanPointerIds.size > 0
-			if (!panGestureActive.current) {
+			pointerDownCache.delete(event.pointerId)
+
+			// Always reset pan state when no more pointers are active
+			if (activePanPointerIds.size === 0) {
+				panGestureActive.current = false
+				panInitialized = false
 				parentElement.style.cursor = 'default'
 				pageSetElement.style.cursor = 'default'
 			}
 		}
 		const handleMove = (event: PointerEvent) => {
 			if (!activePanPointerIds.has(event.pointerId)) return
+
+			// For touch input, only initialize pan when movement threshold exceeded
+			// Only check this once per gesture (panInitialized gates it)
+			if (event.pointerType === 'touch' && !panInitialized && activePanPointerIds.size > 0) {
+				// Compute max movement across all active pointers comparing latest -> down
+				let moved = false
+				for (const id of activePanPointerIds) {
+					const down = pointerDownCache.get(id)
+					if (!down) continue
+					const dx = event.clientX - down.clientX
+					const dy = event.clientY - down.clientY
+					if (Math.hypot(dx, dy) >= PAN_GESTURE_THRESHOLD_PX) {
+						moved = true
+						break
+					}
+				}
+
+				// Require a meaningful movement before initializing pan/zoom
+				if (!moved) return
+
+				// If single-touch started in page-change side area (10% both sides),
+				// only initialize pan if the image is zoomed (scale > 1).
+				if (activePanPointerIds.size === 1) {
+					const onlyId = Array.from(activePanPointerIds)[0]
+					if (onlyId == null) return
+					const down = pointerDownCache.get(onlyId)
+					if (!down) return
+					// Use the actual element width, not window width, so it adapts to rotation
+					const elementRect = pageSetElement.getBoundingClientRect()
+					const elementLeft = elementRect.left
+					const elementWidth = elementRect.width
+					const startedOnSideArea =
+						down &&
+						(down.clientX <= elementLeft + elementWidth * 0.1 ||
+							down.clientX >= elementLeft + elementWidth * 0.9)
+					if (startedOnSideArea) {
+						// For side-area taps, only allow pan if image is zoomed
+						const scale = pageSetElement.style.transform
+							? parseFloat(pageSetElement.style.transform.match(/scale\(([^)]+)\)/)?.[1] || '1')
+							: 1
+						if (scale <= 1) return
+					}
+				}
+
+				// Initialize Panzoom with all cached down events
+				for (const id of activePanPointerIds) {
+					const down = pointerDownCache.get(id)
+					if (down) panzoomRef.current?.handleDown(down)
+				}
+				panInitialized = true
+				panGestureActive.current = true
+				parentElement.style.cursor = 'move'
+				pageSetElement.style.cursor = 'move'
+			}
+
 			panzoomRef.current?.handleMove(event)
 		}
 
@@ -170,6 +247,7 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 				minScale: 0.8,
 				maxScale: 2.5,
 				origin: panzoomOriginCalculation(),
+				pinchAndPan: true,
 			})
 
 			panzoomRef.current = pz
