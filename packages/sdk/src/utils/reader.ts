@@ -1,3 +1,12 @@
+/** Maximum zoom for image-based readers on web and desktop (pinch/wheel). */
+export const IMAGE_BASED_READER_WEB_MAX_ZOOM = 5
+
+/** Maximum pinch zoom for image-based readers on mobile. */
+export const IMAGE_BASED_READER_MOBILE_MAX_ZOOM = 10
+
+/** Double-tap zoom target for image-based readers on mobile. */
+export const IMAGE_BASED_READER_DOUBLE_TAP_ZOOM = 5
+
 export type ImageBasedBookPageRef = {
 	height: number
 	width: number

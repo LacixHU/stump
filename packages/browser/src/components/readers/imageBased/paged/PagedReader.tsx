@@ -1,5 +1,6 @@
 import Panzoom from '@panzoom/panzoom'
 import clsx from 'clsx'
+import { IMAGE_BASED_READER_WEB_MAX_ZOOM } from '@stump/sdk'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { Hotkey } from 'react-hotkeys-hook/dist/types'
@@ -44,6 +45,9 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 
 	const pageSetRef = useRef<HTMLDivElement | null>(null)
 	const panzoomRef = useRef<ReturnType<typeof Panzoom> | null>(null)
+	const pageSetWidthRef = useRef(0)
+	const panzoomWithoutCtrlRef = useRef(panzoomWithoutCtrl)
+	panzoomWithoutCtrlRef.current = panzoomWithoutCtrl
 
 	const panningDetected = useRef(false)
 	const panGestureActive = useRef(false)
@@ -57,6 +61,7 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 		const resizeObserver = new ResizeObserver((entries) => {
 			if (!entries[0]) return
 			const newWidth = entries[0].contentRect.width
+			pageSetWidthRef.current = newWidth
 			setPageSetWidth(newWidth)
 		})
 		resizeObserver.observe(pageSetElement)
@@ -74,8 +79,36 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 		const parentElement = pageSetElement.parentElement
 		if (!parentElement) return
 
+		const panzoomOriginCalculation = () => {
+			const width = pageSetWidthRef.current
+			if (!width) return '50% 50%'
+
+			const viewportWidth = window.innerWidth
+			const xOrigin = (1 - viewportWidth / (2 * width)) * 100
+			return `${xOrigin}% 50%`
+		}
+
+		const createPanzoom = () => {
+			if (panzoomRef.current) {
+				panzoomRef.current.destroy()
+			}
+
+			const pz = Panzoom(pageSetElement, {
+				noBind: true,
+				cursor: 'default',
+				minScale: 0.8,
+				maxScale: IMAGE_BASED_READER_WEB_MAX_ZOOM,
+				origin: panzoomOriginCalculation(),
+				pinchAndPan: true,
+			})
+
+			panzoomRef.current = pz
+		}
+
+		createPanzoom()
+
 		const handleWheel = (event: WheelEvent) => {
-			if (event.ctrlKey || panzoomWithoutCtrl) {
+			if (event.ctrlKey || panzoomWithoutCtrlRef.current) {
 				panzoomRef.current?.zoomWithWheel(event)
 			}
 		}
@@ -86,6 +119,33 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 		const activePanPointerIds = new Set<number>()
 		const pointerDownCache = new Map<number, PointerEvent>()
 		let panInitialized = false
+
+		const resetPointerTracking = () => {
+			activePanPointerIds.clear()
+			pointerDownCache.clear()
+			panInitialized = false
+			panGestureActive.current = false
+			parentElement.style.cursor = 'default'
+			pageSetElement.style.cursor = 'default'
+		}
+
+		const releasePointer = (event: PointerEvent) => {
+			if (!activePanPointerIds.has(event.pointerId)) return
+
+			if (panGestureActive.current) {
+				panzoomRef.current?.handleUp(event)
+			}
+
+			activePanPointerIds.delete(event.pointerId)
+			pointerDownCache.delete(event.pointerId)
+
+			if (activePanPointerIds.size === 0) {
+				panInitialized = false
+				panGestureActive.current = false
+				parentElement.style.cursor = 'default'
+				pageSetElement.style.cursor = 'default'
+			}
+		}
 
 		const handlePointerDown = (event: PointerEvent) => {
 			if (event.button === 2) return
@@ -122,17 +182,7 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 
 			const deltaX = event.clientX - startX
 			const deltaY = event.clientY - startY
-			panzoomRef.current?.handleUp(event)
-			activePanPointerIds.delete(event.pointerId)
-			pointerDownCache.delete(event.pointerId)
-
-			// Always reset pan state when no more pointers are active
-			if (activePanPointerIds.size === 0) {
-				panGestureActive.current = false
-				panInitialized = false
-				parentElement.style.cursor = 'default'
-				pageSetElement.style.cursor = 'default'
-			}
+			releasePointer(event)
 
 			panningDetected.current =
 				Math.abs(deltaX) > PAN_GESTURE_THRESHOLD_PX || Math.abs(deltaY) > PAN_GESTURE_THRESHOLD_PX
@@ -141,19 +191,14 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 			}, 100)
 		}
 		const handlePointerCancel = (event: PointerEvent) => {
-			if (!activePanPointerIds.has(event.pointerId)) return
-
-			panzoomRef.current?.handleUp(event)
-			activePanPointerIds.delete(event.pointerId)
-			pointerDownCache.delete(event.pointerId)
-
-			// Always reset pan state when no more pointers are active
-			if (activePanPointerIds.size === 0) {
-				panGestureActive.current = false
-				panInitialized = false
-				parentElement.style.cursor = 'default'
-				pageSetElement.style.cursor = 'default'
-			}
+			releasePointer(event)
+		}
+		const handleLostPointerCapture = (event: PointerEvent) => {
+			releasePointer(event)
+		}
+		const handleVisibilityChange = () => {
+			if (document.visibilityState === 'visible') return
+			resetPointerTracking()
 		}
 		const handleMove = (event: PointerEvent) => {
 			if (!activePanPointerIds.has(event.pointerId)) return
@@ -212,55 +257,18 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 				pageSetElement.style.cursor = 'move'
 			}
 
-			panzoomRef.current?.handleMove(event)
-		}
-
-		/**
-		 * A function that manually calculates the correct panzoom origin due to the default origin X value being wrong
-		 *
-		 * Because we do not set pageSet imagesHolder to use w-full (for SideBarControl to expand up to the pageSet), then
-		 * for some reason '50%' from the left is marked as where this is: pageSetWidth / 2 to the left of the right side of the viewport.
-		 *
-		 * But the real center is at the center of the viewport so we must do the origin calculation with respect to this weird coordinate system.
-		 *
-		 * Hence we:
-		 * 1. Calculate the stretch factor required -> viewportWidth / pageSetWidth
-		 * 2. Calculate the fraction it is from the right side of the viewport -> 50% * viewportWidth / pageSetWidth
-		 * 3. Calculate the fraction it is from the left side of the viewport -> 1 - 50% * viewportWidth / pageSetWidth
-		 * 4. Convert to a percentage
-		 */
-		const panzoomOriginCalculation = () => {
-			const viewportWidth = window.innerWidth
-			const xOrigin = (1 - viewportWidth / (2 * pageSetWidth)) * 100
-			const origin = `${xOrigin}% 50%`
-			return origin
-		}
-
-		const createPanzoom = () => {
-			if (panzoomRef.current) {
-				panzoomRef.current.destroy()
+			if (panGestureActive.current) {
+				panzoomRef.current?.handleMove(event)
 			}
-
-			const pz = Panzoom(pageSetElement, {
-				noBind: true,
-				cursor: 'default',
-				minScale: 0.8,
-				maxScale: 2.5,
-				origin: panzoomOriginCalculation(),
-				pinchAndPan: true,
-			})
-
-			panzoomRef.current = pz
 		}
-
-		createPanzoom()
 
 		parentElement.addEventListener('wheel', handleWheel)
 		parentElement.addEventListener('pointerdown', handlePointerDown)
 		document.addEventListener('pointermove', handleMove)
 		document.addEventListener('pointerup', handlePointerUp)
 		document.addEventListener('pointercancel', handlePointerCancel)
-		window.addEventListener('resize', createPanzoom)
+		document.addEventListener('lostpointercapture', handleLostPointerCapture)
+		document.addEventListener('visibilitychange', handleVisibilityChange)
 
 		return () => {
 			pageSetElement.style.touchAction = previousTouchAction
@@ -269,17 +277,25 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 			document.removeEventListener('pointermove', handleMove)
 			document.removeEventListener('pointerup', handlePointerUp)
 			document.removeEventListener('pointercancel', handlePointerCancel)
-			window.removeEventListener('resize', createPanzoom)
+			document.removeEventListener('lostpointercapture', handleLostPointerCapture)
+			document.removeEventListener('visibilitychange', handleVisibilityChange)
+			resetPointerTracking()
+			panzoomRef.current?.reset({ animate: false })
 			panzoomRef.current?.destroy()
+			panzoomRef.current = null
 		}
-	}, [
-		currentPage,
-		imageScaling,
-		secondPageSeparate,
-		doublePageBehavior,
-		pageSetWidth,
-		panzoomWithoutCtrl,
-	])
+	}, [])
+
+	useEffect(() => {
+		if (!panzoomRef.current || !pageSetWidth) return
+		const viewportWidth = window.innerWidth
+		const xOrigin = (1 - viewportWidth / (2 * pageSetWidth)) * 100
+		panzoomRef.current.setOptions({ origin: `${xOrigin}% 50%` })
+	}, [pageSetWidth])
+
+	useEffect(() => {
+		panzoomRef.current?.reset({ animate: false })
+	}, [currentPage])
 
 	const currentSetIdx = useMemo(
 		() => pageSets.findIndex((set) => set.includes(currentPage - 1)),
