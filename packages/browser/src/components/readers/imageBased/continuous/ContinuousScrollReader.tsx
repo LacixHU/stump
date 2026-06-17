@@ -117,13 +117,9 @@ export default function ContinuousScrollReader({
 									filter: `brightness(${brightness * 100}%)`,
 								}}
 								className="flex flex-1 justify-center"
+								onClick={() => setSettings({ showToolBar: !showToolBar })}
 							>
-								<Page
-									page={currentIndex + 1}
-									src={url}
-									imageScaling={imageScaling}
-									onPageClick={() => setSettings({ showToolBar: !showToolBar })}
-								/>
+								<Page page={currentIndex + 1} src={url} imageScaling={imageScaling} />
 							</div>
 						)}
 						rangeChanged={setVisibleRange}
@@ -156,13 +152,12 @@ type PageProps = {
 	page: number
 	src: string
 	imageScaling: BookImageScaling
-	onPageClick: () => void
 }
-const Page = ({ page, src, imageScaling: { scaleToFit }, onPageClick }: PageProps) => (
+const Page = ({ page, src, imageScaling: { scaleToFit } }: PageProps) => (
 	<EntityImage
 		key={`page-${page}-scaled-${scaleToFit}`}
 		className={cn(
-			'z-30 select-none',
+			'pointer-events-none z-30 select-none',
 			{
 				'm-auto max-h-screen w-auto max-w-full object-contain':
 					scaleToFit === ReadingImageScaleFit.Auto,
@@ -183,6 +178,5 @@ const Page = ({ page, src, imageScaling: { scaleToFit }, onPageClick }: PageProp
 			// @ts-expect-error: is oke
 			err.target.src = TRANSPARENT_IMAGE
 		}}
-		onClick={onPageClick}
 	/>
 )

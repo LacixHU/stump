@@ -398,8 +398,21 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 	 */
 	useHotkeys('right, left, space, escape', (_, handler) => hotKeyHandler(handler))
 
+	const handleViewportClick = useCallback(
+		(event: React.MouseEvent<HTMLDivElement>) => {
+			if ((event.target as HTMLElement).closest('.z-50')) return
+			if (!panningDetected.current) {
+				setSettings({ showToolBar: !showToolBar })
+			}
+		},
+		[setSettings, showToolBar],
+	)
+
 	return (
-		<div className="min-h-0 relative flex h-[100dvh] w-full justify-center overflow-hidden">
+		<div
+			className="min-h-0 relative flex h-[100dvh] w-full justify-center overflow-hidden"
+			onClick={handleViewportClick}
+		>
 			{!showToolBar && tapSidesToNavigate && (
 				<SideBarControl
 					fixed={fixSideNavigation}
@@ -408,16 +421,7 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 				/>
 			)}
 
-			<PageSet
-				ref={pageSetRef}
-				currentPage={currentPage}
-				getPageUrl={getPageUrl}
-				onPageClick={() => {
-					if (!panningDetected.current) {
-						setSettings({ showToolBar: !showToolBar })
-					}
-				}}
-			/>
+			<PageSet ref={pageSetRef} currentPage={currentPage} getPageUrl={getPageUrl} />
 
 			{!showToolBar && tapSidesToNavigate && (
 				<SideBarControl
@@ -449,11 +453,13 @@ function SideBarControl({ onClick, position, fixed }: SideBarControlProps) {
 	const TAP_MOVE_TOLERANCE_PX = 10
 
 	const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+		event.stopPropagation()
 		pointerDownPosition.current = { x: event.clientX, y: event.clientY }
 	}, [])
 
 	const handlePointerUp = useCallback(
 		(event: React.PointerEvent<HTMLDivElement>) => {
+			event.stopPropagation()
 			const start = pointerDownPosition.current
 			pointerDownPosition.current = null
 			if (!start) return

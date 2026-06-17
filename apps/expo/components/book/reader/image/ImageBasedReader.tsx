@@ -4,13 +4,15 @@ import { ReadingDirection, ReadingMode } from '@stump/graphql'
 import { PageSetIndexes } from '@stump/sdk'
 import { STUMP_SAVE_BASIC_SESSION_HEADER } from '@stump/sdk/constants'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { NativeScrollEvent, NativeSyntheticEvent, useWindowDimensions, View } from 'react-native'
 import {
-	GestureStateChangeEvent,
-	State,
-	TapGestureHandlerEventPayload,
-} from 'react-native-gesture-handler'
-import { useSharedValue } from 'react-native-reanimated'
+	NativeScrollEvent,
+	NativeSyntheticEvent,
+	StyleSheet,
+	useWindowDimensions,
+	View,
+} from 'react-native'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import { runOnJS, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Success } from 'react-native-turbo-image'
 
@@ -242,18 +244,14 @@ const PageSet = React.memo(
 			],
 		)
 
-		const onSingleTap = useCallback(
-			(event: GestureStateChangeEvent<TapGestureHandlerEventPayload>) => {
-				if (event.state !== State.ACTIVE) return
-
+		const handleScreenTap = useCallback(
+			(absoluteX: number) => {
 				if (!tapSidesToNavigate || readingMode !== ReadingMode.Paged) {
 					setShowControls(!showControls)
 					return
 				}
 
-				// event.absoluteX vs event.x bc event.x is the coordinate on the image not the screen. so
-				// if e.g. zoomed in, event.x could be in the middle of the image but the user actually an edge
-				const didNavigate = onCheckForNavigationTaps(event.absoluteX)
+				const didNavigate = onCheckForNavigationTaps(absoluteX)
 				if (didNavigate) {
 					zoomableRef.current?.reset()
 				} else {
@@ -261,6 +259,16 @@ const PageSet = React.memo(
 				}
 			},
 			[showControls, setShowControls, onCheckForNavigationTaps, tapSidesToNavigate, readingMode],
+		)
+
+		const screenTapGesture = useMemo(
+			() =>
+				Gesture.Tap()
+					.maxDistance(24)
+					.onEnd((event) => {
+						runOnJS(handleScreenTap)(event.absoluteX)
+					}),
+			[handleScreenTap],
 		)
 
 		const onImageLoaded = useCallback(
@@ -287,16 +295,22 @@ const PageSet = React.memo(
 		const roughPageRenderWidth = pageIndexes.length > 1 ? maxWidth / 2 : maxWidth
 
 		return (
-			<View style={isRtl && { transform: [{ scaleX: -1 }] }}>
+			<View
+				style={[{ width: maxWidth, height: maxHeight }, isRtl && { transform: [{ scaleX: -1 }] }]}
+			>
+				<GestureDetector gesture={screenTapGesture}>
+					<View style={StyleSheet.absoluteFill} />
+				</GestureDetector>
 				<Zoomable
 					ref={zoomableRef}
 					minScale={1}
 					maxScale={5}
 					scale={scale}
 					doubleTapScale={2.5}
-					isSingleTapEnabled={true}
+					isSingleTapEnabled={false}
 					isDoubleTapEnabled={true}
-					onSingleTap={onSingleTap}
+					pointerEvents="box-none"
+					style={StyleSheet.absoluteFill}
 					onDoubleTap={(zoomType) => {
 						if (zoomType === 'ZOOM_OUT') {
 							setTimeout(() => {
@@ -306,6 +320,7 @@ const PageSet = React.memo(
 					}}
 				>
 					<View
+						pointerEvents="box-none"
 						className="relative flex-row items-center justify-center"
 						style={{
 							height:

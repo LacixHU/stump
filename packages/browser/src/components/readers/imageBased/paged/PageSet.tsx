@@ -13,87 +13,82 @@ const TRANSPARENT_IMAGE = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAA
 type Props = {
 	currentPage: number
 	getPageUrl: (page: number) => string
-	onPageClick: () => void
 }
 
-const PageSet = forwardRef<HTMLDivElement, Props>(
-	({ currentPage, getPageUrl, onPageClick }, ref) => {
-		const { setPageSize, book, pageSets } = useImageBaseReaderContext()
-		const {
-			bookPreferences: { imageScaling, brightness, readingDirection },
-		} = useBookPreferences({ book })
+const PageSet = forwardRef<HTMLDivElement, Props>(({ currentPage, getPageUrl }, ref) => {
+	const { setPageSize, book, pageSets } = useImageBaseReaderContext()
+	const {
+		bookPreferences: { imageScaling, brightness, readingDirection },
+	} = useBookPreferences({ book })
 
-		/**
-		 * A memoized callback to set the dimensions of a given page
-		 */
-		const upsertDimensions = useCallback(
-			(page: number, dimensions: ImagePageDimensionRef) => {
-				setPageSize(page - 1, dimensions)
-			},
-			[setPageSize],
-		)
+	/**
+	 * A memoized callback to set the dimensions of a given page
+	 */
+	const upsertDimensions = useCallback(
+		(page: number, dimensions: ImagePageDimensionRef) => {
+			setPageSize(page - 1, dimensions)
+		},
+		[setPageSize],
+	)
 
-		const currentSetIdx = useMemo(
-			() => pageSets.findIndex((set) => set.includes(currentPage - 1)),
-			[currentPage, pageSets],
-		)
-		const currentSet = pageSets[currentSetIdx] || [currentPage - 1]
-		const isAutoDoubleSpread =
-			imageScaling.scaleToFit === ReadingImageScaleFit.Auto && currentSet.length > 1
+	const currentSetIdx = useMemo(
+		() => pageSets.findIndex((set) => set.includes(currentPage - 1)),
+		[currentPage, pageSets],
+	)
+	const currentSet = pageSets[currentSetIdx] || [currentPage - 1]
+	const isAutoDoubleSpread =
+		imageScaling.scaleToFit === ReadingImageScaleFit.Auto && currentSet.length > 1
 
-		const nextSetIdx = currentSetIdx + (readingDirection === ReadingDirection.Ltr ? 1 : -1)
-		const nextSet = pageSets[nextSetIdx] || []
+	const nextSetIdx = currentSetIdx + (readingDirection === ReadingDirection.Ltr ? 1 : -1)
+	const nextSet = pageSets[nextSetIdx] || []
 
-		return (
+	return (
+		<div
+			ref={ref}
+			className="flex h-full shrink-0 items-center justify-center"
+			style={{
+				...styles[imageScaling.scaleToFit].imagesHolder,
+				filter: `brightness(${brightness * 100}%)`,
+			}}
+		>
 			<div
-				ref={ref}
-				className="flex h-full shrink-0 items-center justify-center"
-				style={{
-					...styles[imageScaling.scaleToFit].imagesHolder,
-					filter: `brightness(${brightness * 100}%)`,
-				}}
+				className={cn('relative flex w-full items-center justify-center', {
+					'gap-0 mx-auto flex-row': currentSet.length > 1,
+				})}
 			>
-				<div
-					className={cn('relative flex w-full items-center justify-center', {
-						'gap-0 mx-auto flex-row': currentSet.length > 1,
-					})}
-				>
-					{currentSet.map((idx) => (
-						<Page
-							key={`page-${idx + 1}`}
-							page={idx + 1}
-							getPageUrl={getPageUrl}
-							onPageClick={onPageClick}
-							upsertDimensions={upsertDimensions}
-							imageScaling={imageScaling}
-							style={{
-								...styles[imageScaling.scaleToFit].image,
-								...(isAutoDoubleSpread ? { maxWidth: '50%' } : {}),
-							}}
-						/>
-					))}
-					{nextSet.map((idx) => (
-						<Page
-							key={`page-${idx + 1}`}
-							page={idx + 1}
-							getPageUrl={getPageUrl}
-							onPageClick={() => {}}
-							upsertDimensions={() => {}}
-							imageScaling={imageScaling}
-							style={{
-								position: 'fixed',
-								maxWidth: 'max-content',
-								maxHeight: '100%',
-								zIndex: -1,
-								opacity: 0,
-							}}
-						/>
-					))}
-				</div>
+				{currentSet.map((idx) => (
+					<Page
+						key={`page-${idx + 1}`}
+						page={idx + 1}
+						getPageUrl={getPageUrl}
+						upsertDimensions={upsertDimensions}
+						imageScaling={imageScaling}
+						style={{
+							...styles[imageScaling.scaleToFit].image,
+							...(isAutoDoubleSpread ? { maxWidth: '50%' } : {}),
+						}}
+					/>
+				))}
+				{nextSet.map((idx) => (
+					<Page
+						key={`page-${idx + 1}`}
+						page={idx + 1}
+						getPageUrl={getPageUrl}
+						upsertDimensions={() => {}}
+						imageScaling={imageScaling}
+						style={{
+							position: 'fixed',
+							maxWidth: 'max-content',
+							maxHeight: '100%',
+							zIndex: -1,
+							opacity: 0,
+						}}
+					/>
+				))}
 			</div>
-		)
-	},
-)
+		</div>
+	)
+})
 PageSet.displayName = 'PageSet'
 
 export default PageSet
@@ -109,7 +104,6 @@ type PageProps = Omit<Props, 'displayedPages' | 'currentPage'> & {
 const _Page = ({
 	page,
 	getPageUrl,
-	onPageClick,
 	upsertDimensions,
 	imageScaling: { scaleToFit },
 	style,
@@ -117,7 +111,7 @@ const _Page = ({
 	return (
 		<EntityImage
 			key={`page-${page}-scaled-${scaleToFit}`}
-			className="z-30 object-contain"
+			className="pointer-events-none z-30 object-contain"
 			style={style}
 			src={getPageUrl(page)}
 			onLoad={({ height, width }) => {
@@ -131,7 +125,6 @@ const _Page = ({
 				// @ts-expect-error: is oke
 				err.target.src = TRANSPARENT_IMAGE
 			}}
-			onClick={onPageClick}
 		/>
 	)
 }

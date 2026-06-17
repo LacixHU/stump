@@ -184,12 +184,9 @@ const ItemRenderer = forwardRef<HTMLDivElement, ListChildComponentProps>(
 					scrollSnapAlign: 'start',
 				}}
 				className="flex h-full w-full items-center justify-center"
+				onClick={toggleToolbar}
 			>
-				<ReactWindowPageSetWrapper
-					pageSet={pageSet}
-					getPageUrl={getPageUrl}
-					onPageClick={toggleToolbar}
-				/>
+				<ReactWindowPageSetWrapper pageSet={pageSet} getPageUrl={getPageUrl} />
 			</div>
 		)
 	},
@@ -199,7 +196,6 @@ ItemRenderer.displayName = 'ItemRenderer'
 type ReactWindowPageSetWrapperProps = {
 	pageSet: number[]
 	getPageUrl: (page: number) => string
-	onPageClick: () => void
 }
 
 /**
@@ -207,11 +203,11 @@ type ReactWindowPageSetWrapperProps = {
  * It takes a pageSet array and renders a PageSet for the first page in the set.
  */
 const ReactWindowPageSetWrapper = memo(
-	({ pageSet, getPageUrl, onPageClick }: ReactWindowPageSetWrapperProps) => {
+	({ pageSet, getPageUrl }: ReactWindowPageSetWrapperProps) => {
 		// Use the first page in the set as the current page for PageSet
 		const currentPage = (pageSet[0] ?? 0) + 1 // Convert from 0-indexed to 1-indexed
 
-		return <PageSet currentPage={currentPage} getPageUrl={getPageUrl} onPageClick={onPageClick} />
+		return <PageSet currentPage={currentPage} getPageUrl={getPageUrl} />
 	},
 )
 
