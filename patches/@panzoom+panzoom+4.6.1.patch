@@ -1,0 +1,61 @@
+diff --git a/node_modules/@panzoom/panzoom/dist/panzoom.es.js b/node_modules/@panzoom/panzoom/dist/panzoom.es.js
+index 49eeb4c..46574ad 100644
+--- a/node_modules/@panzoom/panzoom/dist/panzoom.es.js
++++ b/node_modules/@panzoom/panzoom/dist/panzoom.es.js
+@@ -712,10 +712,11 @@ function Panzoom(elem, options) {
+             if (startDistance === 0) {
+                 startDistance = getDistance(pointers);
+             }
+-            // Use the distance between the first 2 pointers
+-            // to determine the current scale
+-            var diff = getDistance(pointers) - startDistance;
+-            toScale = constrainScale((diff * options.step) / 80 + startScale).scale;
++            // Use the ratio of finger distance to determine scale (1:1 with native pinch)
++            var currentDistance = getDistance(pointers);
++            toScale = startDistance > 0
++                ? constrainScale(startScale * (currentDistance / startDistance)).scale
++                : scale;
+             zoomToPoint(toScale, current, { animate: false }, event);
+         }
+         // Pan during pinch if pinchAndPan is true.
+diff --git a/node_modules/@panzoom/panzoom/dist/panzoom.js b/node_modules/@panzoom/panzoom/dist/panzoom.js
+index 0bc6776..3353471 100644
+--- a/node_modules/@panzoom/panzoom/dist/panzoom.js
++++ b/node_modules/@panzoom/panzoom/dist/panzoom.js
+@@ -718,10 +718,11 @@
+                 if (startDistance === 0) {
+                     startDistance = getDistance(pointers);
+                 }
+-                // Use the distance between the first 2 pointers
+-                // to determine the current scale
+-                var diff = getDistance(pointers) - startDistance;
+-                toScale = constrainScale((diff * options.step) / 80 + startScale).scale;
++                // Use the ratio of finger distance to determine scale (1:1 with native pinch)
++                var currentDistance = getDistance(pointers);
++                toScale = startDistance > 0
++                    ? constrainScale(startScale * (currentDistance / startDistance)).scale
++                    : scale;
+                 zoomToPoint(toScale, current, { animate: false }, event);
+             }
+             // Pan during pinch if pinchAndPan is true.
+diff --git a/node_modules/@panzoom/panzoom/src/panzoom.ts b/node_modules/@panzoom/panzoom/src/panzoom.ts
+index a1e74bd..68e9413 100644
+--- a/node_modules/@panzoom/panzoom/src/panzoom.ts
++++ b/node_modules/@panzoom/panzoom/src/panzoom.ts
+@@ -480,10 +480,12 @@ function Panzoom(elem: HTMLElement | SVGElement, options?: PanzoomGlobalOptions)
+       if (startDistance === 0) {
+         startDistance = getDistance(pointers)
+       }
+-      // Use the distance between the first 2 pointers
+-      // to determine the current scale
+-      const diff = getDistance(pointers) - startDistance
+-      toScale = constrainScale((diff * options.step) / 80 + startScale).scale
++      // Use the ratio of finger distance to determine scale (1:1 with native pinch)
++      const currentDistance = getDistance(pointers)
++      toScale =
++        startDistance > 0
++          ? constrainScale(startScale * (currentDistance / startDistance)).scale
++          : scale
+       zoomToPoint(toScale, current, { animate: false }, event)
+     }
+ 
