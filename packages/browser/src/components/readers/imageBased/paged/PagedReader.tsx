@@ -1,6 +1,6 @@
 import Panzoom from '@panzoom/panzoom'
-import clsx from 'clsx'
 import { IMAGE_BASED_READER_WEB_MAX_ZOOM } from '@stump/sdk'
+import clsx from 'clsx'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { Hotkey } from 'react-hotkeys-hook/dist/types'
@@ -28,13 +28,7 @@ export type PagedReaderProps = {
 function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 	const { pageSets, book, getPageUrl } = useImageBaseReaderContext()
 	const {
-		bookPreferences: {
-			tapSidesToNavigate,
-			imageScaling,
-			secondPageSeparate,
-			doublePageBehavior,
-			panzoomWithoutCtrl,
-		},
+		bookPreferences: { tapSidesToNavigate, panzoomWithoutCtrl },
 		settings: { showToolBar },
 		setSettings,
 	} = useBookPreferences({ book })
@@ -43,14 +37,21 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 
 	const isMobile = useMediaMatch('(max-width: 768px)')
 
+	// Content width (for side-nav sizing). Separate from the full-bleed panzoom surface.
 	const pageSetRef = useRef<HTMLDivElement | null>(null)
+	// Full-viewport element that panzoom transforms. Must fill its parent so default
+	// origin 50% 50% keeps pinch/wheel focal points under the fingers/cursor.
+	const panzoomSurfaceRef = useRef<HTMLDivElement | null>(null)
 	const panzoomRef = useRef<ReturnType<typeof Panzoom> | null>(null)
-	const pageSetWidthRef = useRef(0)
 	const panzoomWithoutCtrlRef = useRef(panzoomWithoutCtrl)
-	panzoomWithoutCtrlRef.current = panzoomWithoutCtrl
+	useEffect(() => {
+		panzoomWithoutCtrlRef.current = panzoomWithoutCtrl
+	}, [panzoomWithoutCtrl])
 
 	const panningDetected = useRef(false)
 	const panGestureActive = useRef(false)
+	// Blocks side-tap page turns while pinching/panning (including when one finger is on a side bar)
+	const suppressSideNavigationRef = useRef(false)
 	const PAN_GESTURE_THRESHOLD_PX = 2
 
 	const [pageSetWidth, setPageSetWidth] = useState(0)
@@ -61,7 +62,6 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 		const resizeObserver = new ResizeObserver((entries) => {
 			if (!entries[0]) return
 			const newWidth = entries[0].contentRect.width
-			pageSetWidthRef.current = newWidth
 			setPageSetWidth(newWidth)
 		})
 		resizeObserver.observe(pageSetElement)
@@ -71,35 +71,27 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 	}, [])
 
 	useEffect(() => {
-		const pageSetElement = pageSetRef.current
-		if (!pageSetElement) return
-		const previousTouchAction = pageSetElement.style.touchAction
-		pageSetElement.style.touchAction = 'none'
+		const surfaceElement = panzoomSurfaceRef.current
+		if (!surfaceElement) return
+		const previousTouchAction = surfaceElement.style.touchAction
+		surfaceElement.style.touchAction = 'none'
 
-		const parentElement = pageSetElement.parentElement
+		const parentElement = surfaceElement.parentElement
 		if (!parentElement) return
-
-		const panzoomOriginCalculation = () => {
-			const width = pageSetWidthRef.current
-			if (!width) return '50% 50%'
-
-			const viewportWidth = window.innerWidth
-			const xOrigin = (1 - viewportWidth / (2 * width)) * 100
-			return `${xOrigin}% 50%`
-		}
 
 		const createPanzoom = () => {
 			if (panzoomRef.current) {
 				panzoomRef.current.destroy()
 			}
 
-			const pz = Panzoom(pageSetElement, {
+			// Keep default origin ('50% 50%'). Custom origins break panzoom focal-point
+			// math used by pinch and wheel zoom (fingers/cursor drift off content).
+			// Pinch focal/pan behavior is corrected in patches/@panzoom+panzoom+4.6.1.patch
+			const pz = Panzoom(surfaceElement, {
 				noBind: true,
 				cursor: 'default',
 				minScale: 0.8,
 				maxScale: IMAGE_BASED_READER_WEB_MAX_ZOOM,
-				origin: panzoomOriginCalculation(),
-				pinchAndPan: true,
 			})
 
 			panzoomRef.current = pz
@@ -117,16 +109,62 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 		let startX = 0
 		let startY = 0
 		const activePanPointerIds = new Set<number>()
-		const pointerDownCache = new Map<number, PointerEvent>()
+		// Latest event per pointer (down or move) so pinch starts at current finger positions
+		const latestPointerEvents = new Map<number, PointerEvent>()
+		const pointerDownPositions = new Map<number, { x: number; y: number }>()
+		// True when that pointer's down target was a page-change side bar
+		const pointerStartedOnSideNav = new Map<number, boolean>()
 		let panInitialized = false
+
+		const setCursor = (cursor: string) => {
+			parentElement.style.cursor = cursor
+			surfaceElement.style.cursor = cursor
+		}
+
+		const markSideNavSuppressed = () => {
+			suppressSideNavigationRef.current = true
+			panningDetected.current = true
+		}
 
 		const resetPointerTracking = () => {
 			activePanPointerIds.clear()
-			pointerDownCache.clear()
+			latestPointerEvents.clear()
+			pointerDownPositions.clear()
+			pointerStartedOnSideNav.clear()
 			panInitialized = false
 			panGestureActive.current = false
-			parentElement.style.cursor = 'default'
-			pageSetElement.style.cursor = 'default'
+			setCursor('default')
+		}
+
+		const beginPanzoomWithActivePointers = () => {
+			for (const id of activePanPointerIds) {
+				const pointerEvent = latestPointerEvents.get(id)
+				if (pointerEvent) panzoomRef.current?.handleDown(pointerEvent)
+			}
+			panInitialized = true
+			panGestureActive.current = true
+			markSideNavSuppressed()
+			setCursor('move')
+		}
+
+		const isSideAreaSingleTouchBlocked = () => {
+			if (activePanPointerIds.size !== 1) return false
+			const onlyId = Array.from(activePanPointerIds)[0]
+			if (onlyId == null) return false
+
+			const scale = panzoomRef.current?.getScale() ?? 1
+			if (scale > 1) return false
+
+			// Prefer hit-target: side bars are 20% when fixed; geometric 10% is only a fallback
+			if (pointerStartedOnSideNav.get(onlyId)) return true
+
+			const down = pointerDownPositions.get(onlyId)
+			if (!down) return false
+			const elementRect = surfaceElement.getBoundingClientRect()
+			return (
+				down.x <= elementRect.left + elementRect.width * 0.1 ||
+				down.x >= elementRect.left + elementRect.width * 0.9
+			)
 		}
 
 		const releasePointer = (event: PointerEvent) => {
@@ -137,40 +175,72 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 			}
 
 			activePanPointerIds.delete(event.pointerId)
-			pointerDownCache.delete(event.pointerId)
+			latestPointerEvents.delete(event.pointerId)
+			pointerDownPositions.delete(event.pointerId)
+			pointerStartedOnSideNav.delete(event.pointerId)
 
 			if (activePanPointerIds.size === 0) {
 				panInitialized = false
 				panGestureActive.current = false
-				parentElement.style.cursor = 'default'
-				pageSetElement.style.cursor = 'default'
+				setCursor('default')
+				// Keep suppress briefly so side-bar pointerup does not change page after a pinch
+				setTimeout(() => {
+					if (activePanPointerIds.size === 0) {
+						suppressSideNavigationRef.current = false
+					}
+				}, 100)
+			} else if (panInitialized && panGestureActive.current) {
+				// Remaining finger(s): re-baseline panzoom after handleUp clears isPanning
+				for (const id of activePanPointerIds) {
+					const pointerEvent = latestPointerEvents.get(id)
+					if (pointerEvent) panzoomRef.current?.handleDown(pointerEvent)
+				}
 			}
 		}
 
 		const handlePointerDown = (event: PointerEvent) => {
 			if (event.button === 2) return
+			// Only track pointers that land inside the reader viewport
+			if (!parentElement.contains(event.target as Node)) return
 
 			startX = event.clientX
 			startY = event.clientY
 
-			const isSidebarClicked = !!(event.target as HTMLElement).closest('.z-50')
+			const startedOnSideNav = !!(event.target as HTMLElement).closest('[data-reader-side-nav]')
 
-			// Cache down event for later initialization
-			pointerDownCache.set(event.pointerId, event)
+			// Mouse on side nav: leave to SideBarControl (page turn), do not pan
+			if (event.pointerType !== 'touch' && startedOnSideNav) return
+
+			latestPointerEvents.set(event.pointerId, event)
+			pointerDownPositions.set(event.pointerId, { x: event.clientX, y: event.clientY })
+			pointerStartedOnSideNav.set(event.pointerId, startedOnSideNav)
 			activePanPointerIds.add(event.pointerId)
 
 			if (event.pointerType === 'touch') {
-				// For touch, defer initialization until movement
+				// Two or more fingers: always allow pinch, even if one is on a side bar
+				if (activePanPointerIds.size >= 2) {
+					markSideNavSuppressed()
+					if (panInitialized && panGestureActive.current) {
+						panzoomRef.current?.handleDown(event)
+					} else {
+						beginPanzoomWithActivePointers()
+					}
+					event.preventDefault()
+					return
+				}
+
+				// Single touch on side nav at 1x: defer; page turn handled by SideBarControl
+				if (startedOnSideNav && (panzoomRef.current?.getScale() ?? 1) <= 1) {
+					return
+				}
+
+				// Single touch: defer until movement so taps still work
 				return
 			}
 
-			// Non-touch: initialize immediately if not on sidebar
-			if (!isSidebarClicked && !panInitialized) {
-				panGestureActive.current = true
-				panzoomRef.current?.handleDown(event)
-				panInitialized = true
-				parentElement.style.cursor = 'move'
-				pageSetElement.style.cursor = 'move'
+			// Non-touch: initialize immediately
+			if (!panInitialized) {
+				beginPanzoomWithActivePointers()
 				event.preventDefault()
 			}
 		}
@@ -203,58 +273,27 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 		const handleMove = (event: PointerEvent) => {
 			if (!activePanPointerIds.has(event.pointerId)) return
 
-			// For touch input, only initialize pan when movement threshold exceeded
-			// Only check this once per gesture (panInitialized gates it)
-			if (event.pointerType === 'touch' && !panInitialized && activePanPointerIds.size > 0) {
-				// Compute max movement across all active pointers comparing latest -> down
+			latestPointerEvents.set(event.pointerId, event)
+
+			// For touch input, only initialize single-finger pan when movement exceeds threshold
+			if (event.pointerType === 'touch' && !panInitialized) {
 				let moved = false
 				for (const id of activePanPointerIds) {
-					const down = pointerDownCache.get(id)
-					if (!down) continue
-					const dx = event.clientX - down.clientX
-					const dy = event.clientY - down.clientY
-					if (Math.hypot(dx, dy) >= PAN_GESTURE_THRESHOLD_PX) {
+					const down = pointerDownPositions.get(id)
+					const latest = latestPointerEvents.get(id)
+					if (!down || !latest) continue
+					if (
+						Math.hypot(latest.clientX - down.x, latest.clientY - down.y) >= PAN_GESTURE_THRESHOLD_PX
+					) {
 						moved = true
 						break
 					}
 				}
 
-				// Require a meaningful movement before initializing pan/zoom
-				if (!moved) return
+				if (!moved && activePanPointerIds.size < 2) return
+				if (isSideAreaSingleTouchBlocked()) return
 
-				// If single-touch started in page-change side area (10% both sides),
-				// only initialize pan if the image is zoomed (scale > 1).
-				if (activePanPointerIds.size === 1) {
-					const onlyId = Array.from(activePanPointerIds)[0]
-					if (onlyId == null) return
-					const down = pointerDownCache.get(onlyId)
-					if (!down) return
-					// Use the actual element width, not window width, so it adapts to rotation
-					const elementRect = pageSetElement.getBoundingClientRect()
-					const elementLeft = elementRect.left
-					const elementWidth = elementRect.width
-					const startedOnSideArea =
-						down &&
-						(down.clientX <= elementLeft + elementWidth * 0.1 ||
-							down.clientX >= elementLeft + elementWidth * 0.9)
-					if (startedOnSideArea) {
-						// For side-area taps, only allow pan if image is zoomed
-						const scale = pageSetElement.style.transform
-							? parseFloat(pageSetElement.style.transform.match(/scale\(([^)]+)\)/)?.[1] || '1')
-							: 1
-						if (scale <= 1) return
-					}
-				}
-
-				// Initialize Panzoom with all cached down events
-				for (const id of activePanPointerIds) {
-					const down = pointerDownCache.get(id)
-					if (down) panzoomRef.current?.handleDown(down)
-				}
-				panInitialized = true
-				panGestureActive.current = true
-				parentElement.style.cursor = 'move'
-				pageSetElement.style.cursor = 'move'
+				beginPanzoomWithActivePointers()
 			}
 
 			if (panGestureActive.current) {
@@ -263,7 +302,8 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 		}
 
 		parentElement.addEventListener('wheel', handleWheel)
-		parentElement.addEventListener('pointerdown', handlePointerDown)
+		// Capture phase so side-nav stopPropagation cannot hide a finger from pinch tracking
+		parentElement.addEventListener('pointerdown', handlePointerDown, true)
 		document.addEventListener('pointermove', handleMove)
 		document.addEventListener('pointerup', handlePointerUp)
 		document.addEventListener('pointercancel', handlePointerCancel)
@@ -271,27 +311,21 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 		document.addEventListener('visibilitychange', handleVisibilityChange)
 
 		return () => {
-			pageSetElement.style.touchAction = previousTouchAction
+			surfaceElement.style.touchAction = previousTouchAction
 			parentElement.removeEventListener('wheel', handleWheel)
-			parentElement.removeEventListener('pointerdown', handlePointerDown)
+			parentElement.removeEventListener('pointerdown', handlePointerDown, true)
 			document.removeEventListener('pointermove', handleMove)
 			document.removeEventListener('pointerup', handlePointerUp)
 			document.removeEventListener('pointercancel', handlePointerCancel)
 			document.removeEventListener('lostpointercapture', handleLostPointerCapture)
 			document.removeEventListener('visibilitychange', handleVisibilityChange)
 			resetPointerTracking()
+			suppressSideNavigationRef.current = false
 			panzoomRef.current?.reset({ animate: false })
 			panzoomRef.current?.destroy()
 			panzoomRef.current = null
 		}
 	}, [])
-
-	useEffect(() => {
-		if (!panzoomRef.current || !pageSetWidth) return
-		const viewportWidth = window.innerWidth
-		const xOrigin = (1 - viewportWidth / (2 * pageSetWidth)) * 100
-		panzoomRef.current.setOptions({ origin: `${xOrigin}% 50%` })
-	}, [pageSetWidth])
 
 	useEffect(() => {
 		panzoomRef.current?.reset({ animate: false })
@@ -315,7 +349,7 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 	const scrollPositionMap = useRef(new Map<number, { scrollTop: number; timestamp: number }>())
 
 	useEffect(() => {
-		const scrollElement = pageSetRef.current?.parentElement?.parentElement?.parentElement
+		const scrollElement = panzoomSurfaceRef.current?.parentElement?.parentElement?.parentElement
 		const storedScrollState = scrollPositionMap.current.get(currentSetIdx)
 		let scrollTop = 0
 		if (storedScrollState && Date.now() - storedScrollState.timestamp < 3000) {
@@ -333,7 +367,7 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 	 */
 	const doChangePage = useCallback(
 		(newPage: number) => {
-			const scrollElement = pageSetRef.current?.parentElement?.parentElement?.parentElement
+			const scrollElement = panzoomSurfaceRef.current?.parentElement?.parentElement?.parentElement
 			const scrollTop = scrollElement?.scrollTop ?? 0
 			scrollPositionMap.current.set(currentSetIdx, { scrollTop: scrollTop, timestamp: Date.now() })
 
@@ -434,16 +468,24 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 					fixed={fixSideNavigation}
 					position="left"
 					onClick={() => handleLeftwardPageChange()}
+					shouldSuppressNavigation={() => suppressSideNavigationRef.current}
 				/>
 			)}
 
-			<PageSet ref={pageSetRef} currentPage={currentPage} getPageUrl={getPageUrl} />
+			{/* Full-bleed surface so panzoom focal math matches viewport (pinch stays under fingers) */}
+			<div
+				ref={panzoomSurfaceRef}
+				className="inset-0 absolute z-0 flex items-center justify-center"
+			>
+				<PageSet ref={pageSetRef} currentPage={currentPage} getPageUrl={getPageUrl} />
+			</div>
 
 			{!showToolBar && tapSidesToNavigate && (
 				<SideBarControl
 					fixed={fixSideNavigation}
 					position="right"
 					onClick={() => handleRightwardPageChange()}
+					shouldSuppressNavigation={() => suppressSideNavigationRef.current}
 				/>
 			)}
 		</div>
@@ -457,6 +499,8 @@ type SideBarControlProps = {
 	position: 'left' | 'right'
 	/** Whether the sidebar should be fixed to the screen */
 	fixed: boolean
+	/** When true, ignore the tap (e.g. pinch/pan used a finger on this bar) */
+	shouldSuppressNavigation?: () => boolean
 }
 
 /**
@@ -464,21 +508,27 @@ type SideBarControlProps = {
  * clicked, will call the onClick callback. This is used in the `PagedReader` component for
  * navigating to the next/previous page.
  */
-function SideBarControl({ onClick, position, fixed }: SideBarControlProps) {
+function SideBarControl({
+	onClick,
+	position,
+	fixed,
+	shouldSuppressNavigation,
+}: SideBarControlProps) {
 	const pointerDownPosition = useRef<{ x: number; y: number } | null>(null)
 	const TAP_MOVE_TOLERANCE_PX = 10
 
 	const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-		event.stopPropagation()
+		// Do not stopPropagation: pinch needs this finger if the other is on the page.
+		// Capture-phase panzoom tracking also observes this event.
 		pointerDownPosition.current = { x: event.clientX, y: event.clientY }
 	}, [])
 
 	const handlePointerUp = useCallback(
 		(event: React.PointerEvent<HTMLDivElement>) => {
-			event.stopPropagation()
 			const start = pointerDownPosition.current
 			pointerDownPosition.current = null
 			if (!start) return
+			if (shouldSuppressNavigation?.()) return
 
 			const deltaX = Math.abs(event.clientX - start.x)
 			const deltaY = Math.abs(event.clientY - start.y)
@@ -486,7 +536,7 @@ function SideBarControl({ onClick, position, fixed }: SideBarControlProps) {
 				onClick()
 			}
 		},
-		[onClick],
+		[onClick, shouldSuppressNavigation],
 	)
 
 	const clearPointerTracking = useCallback(() => {
@@ -495,6 +545,7 @@ function SideBarControl({ onClick, position, fixed }: SideBarControlProps) {
 
 	return (
 		<div
+			data-reader-side-nav
 			className={clsx(
 				'z-50 h-full shrink-0 border border-transparent transition-all duration-300',
 				'active:border-edge-subtle active:bg-background-surface/50',
