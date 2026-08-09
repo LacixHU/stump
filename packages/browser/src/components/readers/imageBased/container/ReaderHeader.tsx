@@ -27,7 +27,7 @@ export default function ReaderHeader() {
 	return (
 		<motion.nav
 			// @ts-expect-error: It does have className?
-			className="left-0 top-0 h-12 px-4 fixed z-100 flex w-full items-center text-foreground"
+			className="left-0 top-0 h-12 px-4 text-white fixed z-100 flex w-full items-center"
 			initial={false}
 			animate={showToolBar ? 'visible' : 'hidden'}
 			variants={transition}
@@ -36,7 +36,7 @@ export default function ReaderHeader() {
 			<div className="flex w-full items-center justify-between">
 				<div className="space-x-4 flex items-center">
 					<Link
-						className="flex items-center text-foreground hover:text-foreground/80"
+						className="text-white hover:text-white/80 flex items-center"
 						title="Go to media overview"
 						to={paths.bookOverview(id)}
 					>
@@ -44,7 +44,7 @@ export default function ReaderHeader() {
 					</Link>
 				</div>
 
-				<Text className="text-foreground">{resolvedName}</Text>
+				<Text className="text-white">{resolvedName}</Text>
 
 				<div className="space-x-1.5 flex items-center">
 					{isFullscreenAvailable && (

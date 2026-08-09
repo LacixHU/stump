@@ -19,7 +19,10 @@ export default function SettingsDialog() {
 				</ControlButton>
 			</Dialog.Trigger>
 
-			<Dialog.Content size="md" className="gap-4 z-101 flex flex-col bg-background-surface">
+			<Dialog.Content
+				size="md"
+				className="gap-4 z-101 flex flex-col bg-dialog text-dialog-foreground"
+			>
 				<Dialog.Header className="flex items-center justify-end">
 					<Dialog.Close />
 				</Dialog.Header>
