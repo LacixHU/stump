@@ -2,7 +2,7 @@ use std::{
 	collections::HashMap,
 	io::Cursor,
 	path::{Path, PathBuf},
-	sync::OnceLock,
+	sync::{Mutex, OnceLock},
 };
 
 use models::shared::image_processor_options::SupportedImageFormat;
@@ -28,7 +28,13 @@ use crate::{
 	},
 };
 
-static PDFIUM: OnceLock<Result<Pdfium, FileError>> = OnceLock::new();
+/// Successful PDFium binds only. Failed attempts are not cached so a later call
+/// with a correct `pdfium_path` can still initialize (e.g. after an early probe
+/// with `None` or a transient load failure).
+static PDFIUM: OnceLock<Pdfium> = OnceLock::new();
+
+/// Pdfium document access is not safe for concurrent use across threads.
+static PDF_OP_LOCK: Mutex<()> = Mutex::new(());
 
 pub struct PdfProcessor;
 
@@ -79,14 +85,19 @@ impl FileProcessor for PdfProcessor {
 		options: FileProcessorOptions,
 		config: &StumpConfig,
 	) -> Result<ProcessedFile, FileError> {
-		let pdfium = Self::renderer(&config.pdfium_path)?;
-		let document = pdfium.load_pdf_from_file(path, None)?;
-		let pages = document.pages().len();
+		let (pages, metadata) = {
+			let _guard = Self::lock_pdf_ops()?;
+			let pdfium = Self::renderer(&config.pdfium_path)?;
+			let document = pdfium.load_pdf_from_file(path, None)?;
+			let pages = document.pages().len();
 
-		let metadata = if options.process_metadata {
-			Self::process_metadata_internal(path, &config.pdfium_path)?
-		} else {
-			None
+			let metadata = if options.process_metadata {
+				Self::extract_metadata_from_document(&document)?
+			} else {
+				None
+			};
+
+			(pages, metadata)
 		};
 
 		let ProcessedFileHashes {
@@ -112,6 +123,7 @@ impl FileProcessor for PdfProcessor {
 	}
 
 	fn get_page_count(path: &str, config: &StumpConfig) -> Result<i32, FileError> {
+		let _guard = Self::lock_pdf_ops()?;
 		let pdfium = PdfProcessor::renderer(&config.pdfium_path)?;
 		let document = pdfium.load_pdf_from_file(path, None)?;
 
@@ -136,6 +148,7 @@ impl FileProcessor for PdfProcessor {
 		page: i32,
 		config: &StumpConfig,
 	) -> Result<AnalyzedPage, FileError> {
+		let _guard = Self::lock_pdf_ops()?;
 		let pdfium = PdfProcessor::renderer(&config.pdfium_path)?;
 		let document = pdfium.load_pdf_from_file(path, None)?;
 
@@ -167,9 +180,15 @@ impl PdfProcessor {
 		path: &str,
 		pdfium_path: &Option<String>,
 	) -> Result<Option<ProcessedMediaMetadata>, FileError> {
+		let _guard = Self::lock_pdf_ops()?;
 		let pdfium = Self::renderer(pdfium_path)?;
 		let document = pdfium.load_pdf_from_file(path, None)?;
+		Self::extract_metadata_from_document(&document)
+	}
 
+	fn extract_metadata_from_document(
+		document: &pdfium_render::prelude::PdfDocument<'_>,
+	) -> Result<Option<ProcessedMediaMetadata>, FileError> {
 		// Extract metadata from PDFium document tags
 		let mut metadata_map: HashMap<String, Vec<String>> = HashMap::new();
 		for tag in document.metadata().iter() {
@@ -199,42 +218,66 @@ impl PdfProcessor {
 		Ok(metadata)
 	}
 
-	/// Returns the global pdfium singleton, initializing it on first call
+	fn lock_pdf_ops() -> Result<std::sync::MutexGuard<'static, ()>, FileError> {
+		PDF_OP_LOCK.lock().map_err(|e| {
+			FileError::PdfProcessingError(format!("PDF operation lock poisoned: {e}"))
+		})
+	}
+
+	/// Returns the global pdfium singleton, initializing it on first successful bind.
 	///
-	/// Note that a failed init is cached permanently and requires a restart the process to retry
-	/// initialization
+	/// Failed binds are **not** cached. An early probe without a path (or a transient
+	/// load error) must not permanently disable PDF rendering for the process.
 	///
 	/// See: https://github.com/ajrcarey/pdfium-render#thread-safety
 	pub fn renderer(pdfium_path: &Option<String>) -> Result<&'static Pdfium, FileError> {
-		let result = PDFIUM.get_or_init(|| {
-			let  path = pdfium_path.clone().or_else(|| std::env::var("PDFIUM_PATH").ok());
+		if let Some(pdfium) = PDFIUM.get() {
+			return Ok(pdfium);
+		}
 
-			if let Some(path) = path {
-				tracing::info!(path, "Initializing PDFium from provided path");
-				let bindings = Pdfium::bind_to_library(&path)
-					.or_else(|e| {
-						tracing::error!(provided_path = ?path, ?e, "Failed to bind to PDFium library at provided path, attempting fallback to system library");
-						Pdfium::bind_to_system_library()
+		let resolved_path = pdfium_path
+			.clone()
+			.filter(|p| !p.trim().is_empty())
+			.or_else(|| std::env::var("PDFIUM_PATH").ok())
+			.filter(|p| !p.trim().is_empty());
+
+		let bindings = if let Some(ref path) = resolved_path {
+			tracing::info!(%path, "Initializing PDFium from provided path");
+			match Pdfium::bind_to_library(path) {
+				Ok(bindings) => Ok(bindings),
+				Err(path_err) => {
+					tracing::error!(
+						provided_path = %path,
+						?path_err,
+						"Failed to bind to PDFium library at provided path, attempting fallback to system library"
+					);
+					Pdfium::bind_to_system_library().map_err(|system_err| {
+						tracing::error!(
+							provided_path = %path,
+							?path_err,
+							?system_err,
+							"Failed to bind to system PDFium library"
+						);
+						FileError::PdfProcessingError(format!(
+							"Failed to load PDFium from '{path}' ({path_err}); system library also failed ({system_err})"
+						))
 					})
-					.map_err(|e| {
-						tracing::error!(?e, "Failed to bind to system PDFium library");
-						FileError::PdfConfigurationError
-					})?;
-				Ok(Pdfium::new(bindings))
-			} else {
-				tracing::warn!("No PDFium path provided, will attempt to bind to system library");
-				Pdfium::bind_to_system_library()
-					.map(Pdfium::new)
-					.map_err(|e| {
-						tracing::error!(?e, "Failed to bind to system PDFium library");
-						FileError::PdfConfigurationError
-					})
+				},
 			}
-		});
+		} else {
+			tracing::warn!(
+				"No PDFium path provided, will attempt to bind to system library"
+			);
+			Pdfium::bind_to_system_library().map_err(|e| {
+				tracing::error!(?e, "Failed to bind to system PDFium library");
+				FileError::PdfConfigurationError
+			})
+		}?;
 
-		result
-			.as_ref()
-			.map_err(|_| FileError::PdfConfigurationError)
+		let pdfium = Pdfium::new(bindings);
+		// Another thread may have won the race; either way the singleton is ready.
+		let _ = PDFIUM.set(pdfium);
+		PDFIUM.get().ok_or(FileError::PdfConfigurationError)
 	}
 
 	/// Synchronous page rendering without caching (used internally)
@@ -253,8 +296,12 @@ impl PdfProcessor {
 		config: &StumpConfig,
 		force_high_quality: bool,
 	) -> Result<(ContentType, Vec<u8>), FileError> {
+		let _guard = Self::lock_pdf_ops()?;
 		let pdfium = PdfProcessor::renderer(&config.pdfium_path)?;
-		let document = pdfium.load_pdf_from_file(path, None)?;
+		let document = pdfium.load_pdf_from_file(path, None).map_err(|e| {
+			tracing::error!(%path, page, ?e, "Failed to load PDF for page render");
+			FileError::from(e)
+		})?;
 		let total_pages = document.pages().len() as usize;
 
 		if page < 1 || page as usize > total_pages {
@@ -499,16 +546,33 @@ impl PdfProcessor {
 		let pdf_path_owned = pdf_path.to_string();
 		let config_owned = config.clone();
 
-		let total_pages = match Self::get_page_count(&pdf_path_owned, &config_owned) {
-			Ok(count) => count,
-			Err(e) => {
-				tracing::debug!(
-					pdf_path = %pdf_path_owned,
-					error = ?e,
-					"Failed to get page count for pre-rendering, skipping"
-				);
-				return;
-			},
+		// PDFium work must stay off the async runtime threads.
+		let total_pages = {
+			let path_for_count = pdf_path_owned.clone();
+			let config_for_count = config_owned.clone();
+			match tokio::task::spawn_blocking(move || {
+				Self::get_page_count(&path_for_count, &config_for_count)
+			})
+			.await
+			{
+				Ok(Ok(count)) => count,
+				Ok(Err(e)) => {
+					tracing::debug!(
+						pdf_path = %pdf_path_owned,
+						error = ?e,
+						"Failed to get page count for pre-rendering, skipping"
+					);
+					return;
+				},
+				Err(e) => {
+					tracing::debug!(
+						pdf_path = %pdf_path_owned,
+						error = ?e,
+						"Page-count task panicked during pre-rendering, skipping"
+					);
+					return;
+				},
+			}
 		};
 
 		let range = config_owned.pdf_prerender_range as i32;
@@ -595,70 +659,73 @@ impl FileConverter for PdfProcessor {
 		format: Option<SupportedImageFormat>,
 		config: &StumpConfig,
 	) -> Result<PathBuf, FileError> {
-		let pdfium = PdfProcessor::renderer(&config.pdfium_path)?;
-		let document = pdfium.load_pdf_from_file(path, None)?;
-
 		let chosen_format = format.unwrap_or_else(|| config.get_pdf_render_format());
 		let output_format = into_image_format(chosen_format);
 		let output_extension = chosen_format.extension();
 
-		let converted_pages = document
-			.pages()
-			.iter()
-			.enumerate()
-			.filter_map(|(idx, page)| {
-				let render_page = || -> Result<Vec<u8>, FileError> {
-					let page_width = page.width().value;
-					let page_height = page.height().value;
+		let converted_pages = {
+			let _guard = Self::lock_pdf_ops()?;
+			let pdfium = PdfProcessor::renderer(&config.pdfium_path)?;
+			let document = pdfium.load_pdf_from_file(path, None)?;
 
-					// scale from PDF's 72 DPI base to configured DPI, then clamp to max dimension
-					let dpi_scale = config.pdf_render_dpi as f32 / 72.0;
-					let mut target_width = page_width * dpi_scale;
-					let mut target_height = page_height * dpi_scale;
+			document
+				.pages()
+				.iter()
+				.enumerate()
+				.filter_map(|(idx, page)| {
+					let render_page = || -> Result<Vec<u8>, FileError> {
+						let page_width = page.width().value;
+						let page_height = page.height().value;
 
-					let max_dim = config.pdf_max_dimension as f32;
-					if max_dim > 0.0
-						&& (target_width > max_dim || target_height > max_dim)
-					{
-						let fit_scale =
-							(max_dim / target_width).min(max_dim / target_height);
-						target_width *= fit_scale;
-						target_height *= fit_scale;
+						// scale from PDF's 72 DPI base to configured DPI, then clamp to max dimension
+						let dpi_scale = config.pdf_render_dpi as f32 / 72.0;
+						let mut target_width = page_width * dpi_scale;
+						let mut target_height = page_height * dpi_scale;
+
+						let max_dim = config.pdf_max_dimension as f32;
+						if max_dim > 0.0
+							&& (target_width > max_dim || target_height > max_dim)
+						{
+							let fit_scale =
+								(max_dim / target_width).min(max_dim / target_height);
+							target_width *= fit_scale;
+							target_height *= fit_scale;
+						}
+
+						let render_config = PdfRenderConfig::new()
+							.set_target_width(target_width.max(1.0) as i32)
+							.set_maximum_height(target_height.max(1.0) as i32)
+							.use_print_quality(true)
+							.set_image_smoothing(true)
+							.set_text_smoothing(true)
+							.set_path_smoothing(true)
+							.set_clear_color(PdfColor::new(255, 255, 255, 255))
+							.clear_before_rendering(true);
+
+						let bitmap = page.render_with_config(&render_config)?;
+						let dyn_image = bitmap.as_image()?;
+
+						let image = dyn_image.as_rgba8().ok_or_else(|| {
+							FileError::PdfProcessingError(format!(
+								"Failed to render page {} as RGBA8",
+								idx + 1
+							))
+						})?;
+						let mut buffer = Cursor::new(vec![]);
+						image.write_to(&mut buffer, output_format)?;
+						Ok(buffer.into_inner())
+					};
+
+					match render_page() {
+						Ok(buf) => Some((idx, buf)),
+						Err(e) => {
+							tracing::error!(error = ?e, "Failed to render PDF page {}", idx + 1);
+							None
+						},
 					}
-
-					let render_config = PdfRenderConfig::new()
-						.set_target_width(target_width.max(1.0) as i32)
-						.set_maximum_height(target_height.max(1.0) as i32)
-						.use_print_quality(true)
-						.set_image_smoothing(true)
-						.set_text_smoothing(true)
-						.set_path_smoothing(true)
-						.set_clear_color(PdfColor::new(255, 255, 255, 255))
-						.clear_before_rendering(true);
-
-					let bitmap = page.render_with_config(&render_config)?;
-					let dyn_image = bitmap.as_image()?;
-
-					let image = dyn_image.as_rgba8().ok_or_else(|| {
-						FileError::PdfProcessingError(format!(
-							"Failed to render page {} as RGBA8",
-							idx + 1
-						))
-					})?;
-					let mut buffer = Cursor::new(vec![]);
-					image.write_to(&mut buffer, output_format)?;
-					Ok(buffer.into_inner())
-				};
-
-				match render_page() {
-					Ok(buf) => Some((idx, buf)),
-					Err(e) => {
-						tracing::error!(error = ?e, "Failed to render PDF page {}", idx + 1);
-						None
-					},
-				}
-			})
-			.collect::<Vec<(usize, Vec<u8>)>>();
+				})
+				.collect::<Vec<(usize, Vec<u8>)>>()
+		};
 
 		let path_buf = PathBuf::from(path);
 		let parent = path_buf.parent().unwrap_or_else(|| Path::new("/"));

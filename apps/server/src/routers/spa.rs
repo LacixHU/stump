@@ -1,9 +1,9 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use axum::{
 	body::Body,
 	extract::State,
-	http::{header, HeaderMap, HeaderValue, Request},
+	http::{header, HeaderMap, HeaderValue, Request, StatusCode},
 	response::IntoResponse,
 	response::Response,
 	routing::get,
@@ -19,7 +19,9 @@ use crate::{
 };
 
 pub const FAVICON: &str = "/favicon.ico";
+const REGISTER_SW: &str = "/registerSW.js";
 const SW: &str = "/sw.js";
+const MANIFEST: &str = "/manifest.webmanifest";
 const INDEX: &str = "/";
 const INDEX_HTML: &str = "/index.html";
 const ASSETS: &str = "/assets";
@@ -68,7 +70,9 @@ pub(crate) fn mount(app_state: AppState) -> Router<AppState> {
 		.route(INDEX, get(index_html))
 		.route(INDEX_HTML, get(index_html))
 		.route(FAVICON, get(favicon))
+		.route(REGISTER_SW, get(register_sw))
 		.route(SW, get(serve_sw))
+		.route(MANIFEST, get(manifest))
 		.nest_service(ASSETS, static_assets)
 		.nest_service(DIST, dist_files)
 		.fallback_service(spa_fallback)
@@ -103,7 +107,45 @@ async fn serve_sw(
 	State(ctx): State<AppState>,
 	headers: HeaderMap,
 ) -> APIResult<impl IntoResponse> {
-	serve_with_no_cache(ctx, headers, "sw.js").await
+	let dist = Path::new(&ctx.config.client_dir);
+	serve_first_existing_no_cache(
+		headers,
+		vec![dist.join("sw.js"), dist.join("assets/sw.js")],
+		"sw.js",
+	)
+	.await
+}
+
+async fn register_sw(
+	State(ctx): State<AppState>,
+	headers: HeaderMap,
+) -> APIResult<impl IntoResponse> {
+	let dist = Path::new(&ctx.config.client_dir);
+	serve_first_existing_no_cache(
+		headers,
+		vec![
+			dist.join("registerSW.js"),
+			dist.join("assets/registerSW.js"),
+		],
+		"registerSW.js",
+	)
+	.await
+}
+
+async fn manifest(
+	State(ctx): State<AppState>,
+	headers: HeaderMap,
+) -> APIResult<impl IntoResponse> {
+	let dist = Path::new(&ctx.config.client_dir);
+	serve_first_existing_no_cache(
+		headers,
+		vec![
+			dist.join("manifest.webmanifest"),
+			dist.join("assets/manifest.webmanifest"),
+		],
+		"manifest.webmanifest",
+	)
+	.await
 }
 
 async fn serve_with_no_cache(
@@ -117,6 +159,39 @@ async fn serve_with_no_cache(
 		.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
 
 	Ok(response)
+}
+
+async fn serve_first_existing_no_cache(
+	headers: HeaderMap,
+	paths: Vec<PathBuf>,
+	label: &str,
+) -> APIResult<Response> {
+	for file_path in paths {
+		if file_path.exists() {
+			let mut req = Request::new(Body::empty());
+			*req.headers_mut() = headers;
+			return match ServeFile::new(file_path).try_call(req).await {
+				Ok(res) => {
+					let mut response = res.into_response();
+					response.headers_mut().insert(
+						header::CACHE_CONTROL,
+						HeaderValue::from_static("no-cache"),
+					);
+					Ok(response)
+				},
+				Err(e) => {
+					tracing::error!(error = ?e, file = label, "Error serving static file");
+					Err(APIError::InternalServerError(e.to_string()))
+				},
+			};
+		}
+	}
+
+	tracing::debug!(filename = label, "Static file not found, returning 404");
+	Ok(Response::builder()
+		.status(StatusCode::NOT_FOUND)
+		.body(Body::empty())
+		.unwrap())
 }
 
 async fn serve_dist_file(
