@@ -71,6 +71,11 @@ pub struct StumpCore {
 }
 
 impl StumpCore {
+	/// Creates a [StumpCore] from an existing [Ctx]
+	pub fn from_ctx(ctx: Ctx) -> StumpCore {
+		StumpCore { ctx }
+	}
+
 	/// Creates a new instance of [`StumpCore`] and returns it wrapped in an [`std::sync::Arc`].
 	pub async fn new(config: StumpConfig) -> StumpCore {
 		let core_ctx = Ctx::new(config).await;
@@ -229,6 +234,11 @@ impl StumpCore {
 	/// 2. The journal mode is not already set to WAL
 	pub async fn init_journal_mode(&self) -> Result<JournalModeChanged, CoreError> {
 		let conn = self.ctx.conn.as_ref();
+
+		if conn.get_database_backend() != DatabaseBackend::Sqlite {
+			tracing::trace!("Not using SQLite, skipping journal mode initialization");
+			return Ok(false);
+		}
 
 		let wal_mode_setup_completed = server_config::Entity::find()
 			.filter(server_config::Column::InitialWalSetupComplete.eq(true))

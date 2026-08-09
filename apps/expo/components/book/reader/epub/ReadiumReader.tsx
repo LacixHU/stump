@@ -21,6 +21,7 @@ import {
 	ReadiumView,
 	ReadiumViewRef,
 } from '~/modules/readium'
+import { useVolumeListener } from '~/modules/volumeListener'
 import { usePreferencesStore, useReaderStore } from '~/stores'
 import {
 	convertNativeToc,
@@ -39,12 +40,13 @@ import {
 	UpdateAnnotationSheet,
 	UpdateAnnotationSheetRef,
 } from './annotations'
+import AnnotationsSheet from './AnnotationsSheet'
 import { EpubReaderContext, EpubReaderContextValue } from './context'
 import CustomizeThemeSheet from './CustomizeThemeSheet'
-import EpubLocationsSheet from './EpubLocationsSheet'
 import EpubSettingsSheet from './EpubSettingsSheet'
-import ReadiumFooter, { FOOTER_HEIGHT } from './ReadiumFooter'
-import ReadiumHeader, { HEADER_HEIGHT } from './ReadiumHeader'
+import ReadiumFooter from './ReadiumFooter'
+import ReadiumHeader from './ReadiumHeader'
+import TableOfContentsSheet from './TableOfContentsSheet'
 
 type BaseProps = OfflineCompatibleReader &
 	Omit<EpubReaderContextValue, 'readerRef' | 'getRequestHeaders'>
@@ -92,6 +94,7 @@ export default function ReadiumReader({
 	onCreateAnnotation,
 	onUpdateAnnotation,
 	onDeleteAnnotation,
+	timer,
 	...ctx
 }: Props) {
 	const { downloadImmediate } = useDownload({ serverId: ctx.serverId })
@@ -175,6 +178,15 @@ export default function ReadiumReader({
 			}) satisfies ReadiumViewRef,
 		[],
 	)
+
+	const volumeButtonsNavigate = useReaderStore(
+		(state) => state.globalSettings.volumeButtonsNavigate,
+	)
+	useVolumeListener({
+		enabled: volumeButtonsNavigate,
+		onVolumeUp: () => navigator.goForward(),
+		onVolumeDown: () => navigator.goBackward(),
+	})
 
 	const store = useEpubLocationStore(
 		useShallow((store) => ({
@@ -509,12 +521,15 @@ export default function ReadiumReader({
 				onCreateAnnotation,
 				onUpdateAnnotation,
 				onDeleteAnnotation,
+				timer: timer,
 			}}
 		>
 			<View
 				style={{
 					flex: 1,
 					backgroundColor: colors?.background,
+					paddingTop: initialWindowMetrics?.insets.top || insets.top || 14,
+					paddingBottom: initialWindowMetrics?.insets.bottom || insets.bottom || 14,
 				}}
 			>
 				<ReadiumHeader />
@@ -534,18 +549,15 @@ export default function ReadiumReader({
 					onAnnotationTap={handleAnnotationTap}
 					onEditHighlight={handleEditHighlight}
 					onDeleteHighlight={handleNativeDeleteAnnotation}
-					style={{
-						flex: 1,
-						marginTop: (initialWindowMetrics?.insets.top || insets.top) + HEADER_HEIGHT,
-						marginBottom: insets.bottom + FOOTER_HEIGHT,
-					}}
+					style={{ flex: 1 }}
 					{...config}
 				/>
 
 				<ReadiumFooter />
 
 				<EpubSettingsSheet />
-				<EpubLocationsSheet />
+				<TableOfContentsSheet />
+				<AnnotationsSheet />
 				<CustomizeThemeSheet />
 
 				<CreateAnnotationSheet

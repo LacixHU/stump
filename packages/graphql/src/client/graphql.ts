@@ -25,6 +25,16 @@ export type Scalars = {
   JSON: { input: any; output: any; }
   /** A scalar that can represent any JSON Object value. */
   JSONObject: { input: any; output: any; }
+  /**
+   * ISO 8601 calendar date without timezone.
+   * Format: %Y-%m-%d
+   *
+   * # Examples
+   *
+   * * `1994-11-13`
+   * * `2000-02-24`
+   */
+  NaiveDate: { input: any; output: any; }
   /** A multipart file upload */
   Upload: { input: any; output: any; }
 };
@@ -38,22 +48,6 @@ export enum AccessRole {
   Reader = 'READER',
   Writer = 'WRITER'
 }
-
-export type ActiveReadingSession = {
-  __typename?: 'ActiveReadingSession';
-  deviceId?: Maybe<Scalars['String']['output']>;
-  elapsedSeconds?: Maybe<Scalars['Int']['output']>;
-  epubcfi?: Maybe<Scalars['String']['output']>;
-  id: Scalars['Int']['output'];
-  koreaderProgress?: Maybe<Scalars['String']['output']>;
-  locator?: Maybe<ReadiumLocator>;
-  mediaId: Scalars['String']['output'];
-  page?: Maybe<Scalars['Int']['output']>;
-  percentageCompleted?: Maybe<Scalars['Decimal']['output']>;
-  startedAt: Scalars['DateTime']['output'];
-  updatedAt?: Maybe<Scalars['DateTime']['output']>;
-  userId: Scalars['String']['output'];
-};
 
 export type AddBookToClubInput = {
   book: BookClubBookInput;
@@ -778,7 +772,8 @@ export type Epub = {
 };
 
 export type EpubProgressInput = {
-  elapsedSeconds?: InputMaybe<Scalars['Int']['input']>;
+  deviceId?: InputMaybe<Scalars['String']['input']>;
+  elapsedSecondsDelta?: InputMaybe<Scalars['Int']['input']>;
   isComplete?: InputMaybe<Scalars['Boolean']['input']>;
   locator: EpubProgressLocatorInput;
   percentage?: InputMaybe<Scalars['Decimal']['input']>;
@@ -917,28 +912,6 @@ export type FilterableArrangementEntityLinkInput = {
   orderBy?: InputMaybe<Scalars['String']['input']>;
 };
 
-export type FinishedReadingSession = {
-  __typename?: 'FinishedReadingSession';
-  completedAt: Scalars['DateTime']['output'];
-  deviceId?: Maybe<Scalars['String']['output']>;
-  elapsedSeconds?: Maybe<Scalars['Int']['output']>;
-  id: Scalars['Int']['output'];
-  mediaId: Scalars['String']['output'];
-  startedAt: Scalars['DateTime']['output'];
-  userId: Scalars['String']['output'];
-};
-
-export type FinishedReadingSessionModel = {
-  __typename?: 'FinishedReadingSessionModel';
-  completedAt: Scalars['DateTime']['output'];
-  deviceId?: Maybe<Scalars['String']['output']>;
-  elapsedSeconds?: Maybe<Scalars['Int']['output']>;
-  id: Scalars['Int']['output'];
-  mediaId: Scalars['String']['output'];
-  startedAt: Scalars['DateTime']['output'];
-  userId: Scalars['String']['output'];
-};
-
 /**
  * A resize option which will resize the image to fit within the given dimensions,
  * maintaining the aspect ratio.
@@ -1066,6 +1039,14 @@ export enum InterfaceLayout {
   Table = 'TABLE'
 }
 
+/** The roundness of certain UI elements in the client interface, such as cards, buttons, inputs, etc */
+export enum InterfaceRoundness {
+  None = 'NONE',
+  Normal = 'NORMAL',
+  Pill = 'PILL',
+  Rounded = 'ROUNDED'
+}
+
 export type Job = {
   __typename?: 'Job';
   completedAt?: Maybe<Scalars['DateTime']['output']>;
@@ -1109,7 +1090,7 @@ export type JobUpdate = {
   /** The current task being worked on */
   completedTasks?: Maybe<Scalars['Int']['output']>;
   id: Scalars['String']['output'];
-  /** The message to display */
+  /** The primary message to display, e.g. "Scanning series" */
   message?: Maybe<Scalars['String']['output']>;
   /**
    * The number of tasks for the job. This number can change as
@@ -1118,6 +1099,8 @@ export type JobUpdate = {
   remainingTasks?: Maybe<Scalars['Int']['output']>;
   /** The status of the job */
   status?: Maybe<JobStatus>;
+  /** An optional secondary message providing additional detail, e.g. a path or item name */
+  subtitle?: Maybe<Scalars['String']['output']>;
   /** The number of subtasks that exist in the current task */
   totalSubtasks?: Maybe<Scalars['Int']['output']>;
 };
@@ -1439,8 +1422,8 @@ export type Media = {
   pages: Scalars['Int']['output'];
   /** The path of the underlying media file on disk */
   path: Scalars['String']['output'];
-  readHistory: Array<FinishedReadingSession>;
-  readProgress?: Maybe<ActiveReadingSession>;
+  readHistory: Array<ReadthroughRecord>;
+  readProgress?: Maybe<ResumeReadingCursor>;
   /**
    * The path to the media file **relative** to the library path. This is only useful for
    * displaying a truncated path when in the context of a library, e.g. limited space
@@ -1532,6 +1515,7 @@ export type MediaFilterInput = {
   seriesId?: InputMaybe<FieldFilterString>;
   size?: InputMaybe<NumericFilterI64>;
   status?: InputMaybe<FieldFilterFileStatus>;
+  tags?: InputMaybe<FieldFilterString>;
   updatedAt?: InputMaybe<NumericFilterDateTime>;
 };
 
@@ -1708,6 +1692,31 @@ export type MediaMetadataOverview = {
   writers: Array<Scalars['String']['output']>;
 };
 
+/**
+ * A manual override for searching metadata providers for a single media item. When
+ * provided, the caller's fields take precedence over whatever is already stored on the
+ * media, and the search is restricted to a single provider if one is given.
+ */
+export type MediaMetadataSearchInput = {
+  author?: InputMaybe<Scalars['String']['input']>;
+  /**
+   * The volume ID to search within, which will swap to a more precise lookup if provided alongside
+   * `number`
+   */
+  comicVineVolumeId?: InputMaybe<Scalars['String']['input']>;
+  isbn?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  /** The issue number (for comics/manga) */
+  number?: InputMaybe<Scalars['Float']['input']>;
+  /**
+   * Restrict the search to this provider only. If omitted, all enabled providers
+   * configured for the media's library type are searched.
+   */
+  provider?: InputMaybe<MetadataProvider>;
+  title?: InputMaybe<Scalars['String']['input']>;
+  year?: InputMaybe<Scalars['Int']['input']>;
+};
+
 export enum MediaModelOrdering {
   CreatedAt = 'CREATED_AT',
   DeletedAt = 'DELETED_AT',
@@ -1779,6 +1788,12 @@ export type MetadataFetchRecord = {
   /** The media item associated with this fetch record, if any */
   media?: Maybe<Media>;
   mediaId?: Maybe<Scalars['String']['output']>;
+  /**
+   * The total number of raw hits reported by provider searches, across all
+   * providers searched. Compare against `match_candidates.len()` to detect when
+   * hits were dropped (e.g. a per-hit detail fetch failed after the initial search).
+   */
+  rawHits: Scalars['Int']['output'];
   /** The series associated with this fetch record, if any */
   series?: Maybe<Series>;
   seriesId?: Maybe<Scalars['String']['output']>;
@@ -1867,6 +1882,8 @@ export type MetadataFieldOverride = {
 
 /** The supported external metadata providers */
 export enum MetadataProvider {
+  /** ComicVine (https://comicvine.gamespot.com/api/) */
+  ComicVine = 'COMIC_VINE',
   /** Hardcover (https://hardcover.app) */
   Hardcover = 'HARDCOVER'
 }
@@ -1953,8 +1970,15 @@ export type Mutation = {
    * This operation will also remove any associated thumbnails of the deleted media and series.
    */
   cleanLibrary: CleanLibraryResponse;
+  /** trashes current readthrough, if there is one */
+  clearMediaProgress: Scalars['Boolean']['output'];
   /** Clear the scan history for a specific library */
   clearScanHistory: Scalars['Int']['output'];
+  /**
+   * trashes all completed readthroughs for all books in this series, preserving any active
+   * readthroughs
+   */
+  clearSeriesReadingHistory: Scalars['Int']['output'];
   /** Mark the current book as completed */
   completeBook: BookClub;
   convertMedia: Scalars['Boolean']['output'];
@@ -2024,12 +2048,8 @@ export type Mutation = {
   deleteLoginActivity: Scalars['Int']['output'];
   deleteLogs: LogDeleteOutput;
   deleteMedia: Media;
-  deleteMediaProgress: Media;
-  /**
-   * Deletes all of a user's reading history for a specific media item. This cannot be undone, so
-   * use with caution.
-   */
-  deleteMediaReadHistory: Media;
+  /** trashes all completed readthroughs for the media */
+  deleteMediaReadingHistory: Scalars['Int']['output'];
   /** Delete (soft delete) your own message */
   deleteMessage: BookClubDiscussionMessage;
   deleteMetadataProvider: MetadataProviderConfigModel;
@@ -2064,16 +2084,29 @@ export type Mutation = {
   favoriteSeries: Series;
   /** Start a job which will search external metadata providers */
   fetchLibraryMetadata: Scalars['Boolean']['output'];
-  /** Search external metadata providers for a media item and return match candidates */
-  fetchMediaMetadata: Array<MatchCandidate>;
+  /**
+   * Search external metadata providers for a media item and return the resulting fetch
+   * record with its match candidates. When `search` is provided, the caller's fields
+   * take precedence over the media's stored metadata, the search can be restricted to a
+   * single provider, and auto-apply is skipped so the caller can review candidates before
+   * anything is written.
+   */
+  fetchMediaMetadata: MetadataFetchRecord;
   /** Search external metadata providers for a series and return match candidates */
   fetchSeriesMetadata: Array<MatchCandidate>;
+  /**
+   * marks current readthrough as complete:
+   * - if no current readthrough, creates one
+   * - if `dnf` is true, it will mark the readthrough as such
+   */
+  finishMediaProgress: Scalars['Boolean']['output'];
+  /** marks all books in the series as finished */
+  finishSeriesProgress: Scalars['Int']['output'];
   generateLibraryThumbnails: Scalars['Boolean']['output'];
   /** Deletes the membership of the caller to the target book club */
   leaveBookClub: BookClubMember;
   /** Lock or unlock a discussion (Moderator+) */
   lockDiscussion: Scalars['Boolean']['output'];
-  markMediaAsComplete?: Maybe<FinishedReadingSessionModel>;
   patchEmailDevice: RegisteredEmailDevice;
   /** Pin or unpin a message (Moderator+) */
   pinMessage: Scalars['Boolean']['output'];
@@ -2135,13 +2168,6 @@ export type Mutation = {
    * Returns true if the reaction was added, false if removed
    */
   toggleReaction: Scalars['Boolean']['output'];
-  /**
-   * Toggle the completion status of a series. If the series is marked as completed, all books
-   * in the series will also be marked as completed, and vice versa for marking as not completed.
-   * This is considered a dangerous operation since it can modify all your read progression related
-   * to a single series all at once. Please use with caution.
-   */
-  toggleSeriesCompletion: Series;
   /** Toggle like on a suggestion */
   toggleSuggestionLike: Scalars['Boolean']['output'];
   /** Update an annotation's note text */
@@ -2175,7 +2201,7 @@ export type Mutation = {
    */
   updateLibraryThumbnail: Library;
   updateMediaMetadata: Media;
-  updateMediaProgress: ReadingProgressOutput;
+  updateMediaProgress: ReadingSession;
   /**
    * Update the thumbnail for a book. This will replace the existing thumbnail with the the one
    * associated with the provided input (book). If the book does not have a thumbnail, one
@@ -2235,6 +2261,8 @@ export type Mutation = {
    * called by a server owner
    */
   uploadUserAvatar: User;
+  /** Validate the provided API token by making a test request using a client instance */
+  validateProviderConfig: ProviderCredentialVerification;
   /**
    * "Visit" a library, which will upsert a record of the user's last visit to the library.
    * This is used to inform the UI of the last library which was visited by the user
@@ -2307,7 +2335,17 @@ export type MutationCleanLibraryArgs = {
 };
 
 
+export type MutationClearMediaProgressArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
 export type MutationClearScanHistoryArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type MutationClearSeriesReadingHistoryArgs = {
   id: Scalars['ID']['input'];
 };
 
@@ -2491,12 +2529,7 @@ export type MutationDeleteMediaArgs = {
 };
 
 
-export type MutationDeleteMediaProgressArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
-export type MutationDeleteMediaReadHistoryArgs = {
+export type MutationDeleteMediaReadingHistoryArgs = {
   id: Scalars['ID']['input'];
 };
 
@@ -2584,10 +2617,22 @@ export type MutationFetchLibraryMetadataArgs = {
 
 export type MutationFetchMediaMetadataArgs = {
   id: Scalars['ID']['input'];
+  search?: InputMaybe<MediaMetadataSearchInput>;
 };
 
 
 export type MutationFetchSeriesMetadataArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type MutationFinishMediaProgressArgs = {
+  dnf?: InputMaybe<Scalars['Boolean']['input']>;
+  id: Scalars['ID']['input'];
+};
+
+
+export type MutationFinishSeriesProgressArgs = {
   id: Scalars['ID']['input'];
 };
 
@@ -2606,13 +2651,6 @@ export type MutationLeaveBookClubArgs = {
 export type MutationLockDiscussionArgs = {
   discussionId: Scalars['ID']['input'];
   locked: Scalars['Boolean']['input'];
-};
-
-
-export type MutationMarkMediaAsCompleteArgs = {
-  id: Scalars['ID']['input'];
-  isComplete: Scalars['Boolean']['input'];
-  page?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -2761,12 +2799,6 @@ export type MutationToggleReactionArgs = {
   customEmojiId?: InputMaybe<Scalars['Int']['input']>;
   emoji?: InputMaybe<Scalars['String']['input']>;
   messageId: Scalars['ID']['input'];
-};
-
-
-export type MutationToggleSeriesCompletionArgs = {
-  id: Scalars['ID']['input'];
-  isCompleted: Scalars['Boolean']['input'];
 };
 
 
@@ -2995,6 +3027,11 @@ export type MutationUploadUserAvatarArgs = {
 };
 
 
+export type MutationValidateProviderConfigArgs = {
+  config: ValidateMetadataProviderConfigInput;
+};
+
+
 export type MutationVisitLibraryArgs = {
   id: Scalars['ID']['input'];
 };
@@ -3124,7 +3161,8 @@ export type PageDimension = {
 };
 
 export type PagedProgressInput = {
-  elapsedSeconds?: InputMaybe<Scalars['Int']['input']>;
+  deviceId?: InputMaybe<Scalars['String']['input']>;
+  elapsedSecondsDelta?: InputMaybe<Scalars['Int']['input']>;
   page: Scalars['Int']['input'];
 };
 
@@ -3248,6 +3286,13 @@ export type PlaceholderGenerationOutput = {
   skippedEntities: Scalars['Int']['output'];
   /** The total number of entities that were visited */
   visitedEntities: Scalars['Int']['output'];
+};
+
+export type ProviderCredentialVerification = {
+  __typename?: 'ProviderCredentialVerification';
+  error?: Maybe<Scalars['String']['output']>;
+  isValid: Scalars['Boolean']['output'];
+  responseStatus: Scalars['Int']['output'];
 };
 
 export enum PublicationStatus {
@@ -3693,12 +3738,53 @@ export enum ReadingMode {
   Paged = 'PAGED'
 }
 
-export type ReadingProgressOutput = ActiveReadingSession | FinishedReadingSession;
+export type ReadingSession = {
+  __typename?: 'ReadingSession';
+  createdAt: Scalars['DateTime']['output'];
+  deviceIds: Array<Scalars['String']['output']>;
+  /** accumulated reading time for this session, updated via deltas (not overwritten) */
+  elapsedSeconds?: Maybe<Scalars['Int']['output']>;
+  endLocator?: Maybe<ReadiumLocator>;
+  endPage?: Maybe<Scalars['Int']['output']>;
+  endPercentage?: Maybe<Scalars['Decimal']['output']>;
+  /** @deprecated future releases of Stump will remove support for this field */
+  epubcfi?: Maybe<Scalars['String']['output']>;
+  id: Scalars['Int']['output'];
+  koreaderProgress?: Maybe<Scalars['String']['output']>;
+  mediaId: Scalars['String']['output'];
+  notes?: Maybe<Scalars['String']['output']>;
+  /** which read-through of this book this session belongs to (1-indexed) */
+  readthroughNumber: Scalars['Int']['output'];
+  /** the "logical" date of this session, based on user prefs and start time */
+  sessionDate: Scalars['NaiveDate']['output'];
+  startLocator?: Maybe<ReadiumLocator>;
+  startPage?: Maybe<Scalars['Int']['output']>;
+  startPercentage?: Maybe<Scalars['Decimal']['output']>;
+  /**
+   * the status of this session. this might feel confusing when considering that sessions will
+   * remain in place even after completion/dnf, but the idea is that the status represents the
+   * state of the session when it was last updated
+   */
+  status: ReadingStatus;
+  updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  userId: Scalars['String']['output'];
+};
 
+/**
+ * the different reading statuses a book can be categorized as based on a user's
+ * reading sessions
+ */
 export enum ReadingStatus {
+  /** a user actively started reading a book but decided not to finish it (i.e., dnf-ing a book) */
   Abandoned = 'ABANDONED',
+  /** there is at least one completed readthrough for this book */
   Finished = 'FINISHED',
+  /** no sessions have been recorded for this book */
   NotStarted = 'NOT_STARTED',
+  /**
+   * there is an active reading session for this book. it may or may not have been completed in
+   * the past, this is strictly about the presence of an active session
+   */
   Reading = 'READING'
 }
 
@@ -3753,6 +3839,19 @@ export type ReadiumTextInput = {
   highlight?: InputMaybe<Scalars['String']['input']>;
 };
 
+/**
+ * a completed readthrough of a book, aggregated across all sessions that
+ * share the same `readthrough_number`
+ */
+export type ReadthroughRecord = {
+  __typename?: 'ReadthroughRecord';
+  completedAt: Scalars['DateTime']['output'];
+  dnf: Scalars['Boolean']['output'];
+  elapsedSeconds: Scalars['Int']['output'];
+  readthroughNumber: Scalars['Int']['output'];
+  startedAt: Scalars['DateTime']['output'];
+};
+
 export type RecentlyAdded = {
   __typename?: 'RecentlyAdded';
   entity: FilterableArrangementEntity;
@@ -3773,6 +3872,24 @@ export type RegisteredEmailDevice = {
   id: Scalars['Int']['output'];
   name: Scalars['String']['output'];
   sendHistory: Array<EmailerSendRecord>;
+};
+
+/**
+ * the current reading position for a book, derived from the latest session
+ * with the highest `readthrough_number`
+ */
+export type ResumeReadingCursor = {
+  __typename?: 'ResumeReadingCursor';
+  /** total reading time across all sessions in the current readthrough */
+  elapsedSeconds: Scalars['Int']['output'];
+  epubcfi?: Maybe<Scalars['String']['output']>;
+  locator?: Maybe<ReadiumLocator>;
+  page?: Maybe<Scalars['Int']['output']>;
+  percentageCompleted?: Maybe<Scalars['Decimal']['output']>;
+  readthroughNumber: Scalars['Int']['output'];
+  /** when the very first session in the current readthrough started */
+  startedAt?: Maybe<Scalars['DateTime']['output']>;
+  updatedAt?: Maybe<Scalars['DateTime']['output']>;
 };
 
 export type SaveSmartListInput = {
@@ -4311,8 +4428,6 @@ export type StumpConfig = {
   accessTokenTtl: Scalars['Int']['output'];
   /** A list of origins for CORS. */
   allowedOrigins: Array<Scalars['String']['output']>;
-  /** The number of seconds after which a book can be re-completed */
-  bookCompletionDedupTimeoutSecs: Scalars['Int']['output'];
   /** The client directory. */
   clientDir: Scalars['String']['output'];
   /** Whether or not to include ANSI color codes in log files. */
@@ -4336,6 +4451,8 @@ export type StumpConfig = {
   enableUpload: Scalars['Boolean']['output'];
   /** The interval at which automatic deleted session cleanup is performed. */
   expiredSessionCleanupInterval: Scalars['Int']['output'];
+  /** The IP address on which to listen on (default: "0.0.0.0"). */
+  ip: Scalars['String']['output'];
   /** The directory where the applicaiton logs will be stored */
   logDir?: Maybe<Scalars['String']['output']>;
   /** The maximum size, in bytes, of files that can be uploaded to be included in libraries. */
@@ -4346,18 +4463,10 @@ export type StumpConfig = {
    */
   maxImageUploadSize: Scalars['Int']['output'];
   /**
-   * The maximum number of concurrent files which may be processed by a scanner. This is used
-   * to limit/increase the number of files that are processed at once. This may be useful for those
-   * with high or low performance systems to configure to their needs.
+   * A multiplier applied to the number of logical CPUs to derive the default scanner concurrency
+   * limit. Increasing can speed things up but will increase resource usage
    */
-  maxScannerConcurrency: Scalars['Int']['output'];
-  /**
-   * The maximum number of concurrent files which may be processed by a thumbnail generator. This is used
-   * to limit/increase the number of images that are processed at once. Image generation can be
-   * resource intensive, so this may be useful for those with high or low performance systems to
-   * configure to their needs.
-   */
-  maxThumbnailConcurrency: Scalars['Int']['output'];
+  parallelismMultiplier: Scalars['Int']['output'];
   /** Password hash cost */
   passwordHashCost: Scalars['Int']['output'];
   /** Whether to enable disk caching for rendered PDF pages. */
@@ -4533,6 +4642,7 @@ export type UpdateUserInput = {
 export type UpdateUserPreferencesInput = {
   appFont: SupportedFont;
   appTheme: Scalars['String']['input'];
+  dayResetHourOffset: Scalars['Int']['input'];
   enableAlphabetSelect: Scalars['Boolean']['input'];
   enableCompactDisplay: Scalars['Boolean']['input'];
   enableDiscordPresence: Scalars['Boolean']['input'];
@@ -4542,16 +4652,19 @@ export type UpdateUserPreferencesInput = {
   enableHideScrollbar: Scalars['Boolean']['input'];
   enableJobOverlay: Scalars['Boolean']['input'];
   enableLiveRefetch: Scalars['Boolean']['input'];
+  enableReadingJournal: Scalars['Boolean']['input'];
   enableReplacePrimarySidebar: Scalars['Boolean']['input'];
+  interfaceRoundness: InterfaceRoundness;
   layoutMaxWidthPx?: InputMaybe<Scalars['Int']['input']>;
   locale: Scalars['String']['input'];
   preferAccentColor: Scalars['Boolean']['input'];
   preferredLayoutMode: InterfaceLayout;
   primaryNavigationMode: Scalars['String']['input'];
+  readingSessionGracePeriodSecs: Scalars['Int']['input'];
   showQueryIndicator: Scalars['Boolean']['input'];
-  showThumbnailsInHeaders: Scalars['Boolean']['input'];
   thumbnailPlaceholderStyle: ThumbnailPlaceholderStyle;
   thumbnailRatio: Scalars['Float']['input'];
+  thumbnailRoundness: InterfaceRoundness;
 };
 
 export type UploadBooksInput = {
@@ -4718,6 +4831,11 @@ export type UserPreferences = {
   __typename?: 'UserPreferences';
   appFont: SupportedFont;
   appTheme: Scalars['String']['output'];
+  /**
+   * hour offset from midnight at which a new "logical day" begins for reading sessions
+   * 0 = midnight, 2 = 2am, etc
+   */
+  dayResetHourOffset: Scalars['Int']['output'];
   enableAlphabetSelect: Scalars['Boolean']['output'];
   enableCompactDisplay: Scalars['Boolean']['output'];
   enableDiscordPresence: Scalars['Boolean']['output'];
@@ -4727,19 +4845,30 @@ export type UserPreferences = {
   enableHideScrollbar: Scalars['Boolean']['output'];
   enableJobOverlay: Scalars['Boolean']['output'];
   enableLiveRefetch: Scalars['Boolean']['output'];
+  enableReadingJournal: Scalars['Boolean']['output'];
   enableReplacePrimarySidebar: Scalars['Boolean']['output'];
   homeArrangement: Arrangement;
+  interfaceRoundness: InterfaceRoundness;
   layoutMaxWidthPx?: Maybe<Scalars['Int']['output']>;
   locale: Scalars['String']['output'];
   navigationArrangement: Arrangement;
   preferAccentColor: Scalars['Boolean']['output'];
   preferredLayoutMode: InterfaceLayout;
   primaryNavigationMode: Scalars['String']['output'];
+  /** seconds of inactivity after which the current reading session is considered ended */
+  readingSessionGracePeriodSecs: Scalars['Int']['output'];
   showQueryIndicator: Scalars['Boolean']['output'];
-  showThumbnailsInHeaders: Scalars['Boolean']['output'];
   thumbnailPlaceholderStyle: ThumbnailPlaceholderStyle;
   thumbnailRatio: Scalars['Float']['output'];
+  thumbnailRoundness: InterfaceRoundness;
   userId?: Maybe<Scalars['String']['output']>;
+};
+
+export type ValidateMetadataProviderConfigInput = {
+  /** The API token for authenticating with the provider */
+  apiToken: Scalars['String']['input'];
+  /** The provider type */
+  providerType: MetadataProvider;
 };
 
 export type CreateBookClubMobileMutationVariables = Exact<{
@@ -4806,7 +4935,7 @@ export type BookByIdQueryVariables = Exact<{
 
 
 export type BookByIdQuery = { __typename?: 'Query', mediaById?: (
-    { __typename?: 'Media', id: string, extension: string, pages: number, resolvedName: string, seriesPosition?: number | null, size: number, metadata?: { __typename?: 'MediaMetadata', ageRating?: number | null, characters: Array<string>, colorists: Array<string>, coverArtists: Array<string>, day?: number | null, editors: Array<string>, identifierAmazon?: string | null, identifierCalibre?: string | null, identifierGoogle?: string | null, identifierIsbn?: string | null, identifierMobiAsin?: string | null, identifierUuid?: string | null, genres: Array<string>, inkers: Array<string>, language?: string | null, letterers: Array<string>, links: Array<string>, month?: number | null, notes?: string | null, number?: any | null, pageCount?: number | null, pencillers: Array<string>, publisher?: string | null, series?: string | null, summary?: string | null, teams: Array<string>, title?: string | null, titleSort?: string | null, volume?: number | null, writers: Array<string>, year?: number | null } | null, readProgress?: { __typename?: 'ActiveReadingSession', page?: number | null, percentageCompleted?: any | null, epubcfi?: string | null, startedAt: any, elapsedSeconds?: number | null, updatedAt?: any | null, locator?: { __typename?: 'ReadiumLocator', chapterTitle: string, href: string, title?: string | null, type: string, locations?: { __typename?: 'ReadiumLocation', fragments?: Array<string> | null, position?: number | null, progression?: any | null, totalProgression?: any | null, cssSelector?: string | null, partialCfi?: string | null } | null } | null } | null, readHistory: Array<{ __typename?: 'FinishedReadingSession', completedAt: any, elapsedSeconds?: number | null }>, series: { __typename?: 'Series', id: string, resolvedName: string, mediaCount: number, metadata?: { __typename?: 'SeriesMetadata', totalIssues?: number | null } | null }, library: { __typename?: 'Library', id: string, name: string }, thumbnail: { __typename?: 'ImageRef', url: string, height?: number | null, width?: number | null, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null }, ebook?: { __typename?: 'Epub', toc: Array<string> } | null }
+    { __typename?: 'Media', id: string, extension: string, pages: number, resolvedName: string, seriesPosition?: number | null, size: number, metadata?: { __typename?: 'MediaMetadata', ageRating?: number | null, characters: Array<string>, colorists: Array<string>, coverArtists: Array<string>, day?: number | null, editors: Array<string>, identifierAmazon?: string | null, identifierCalibre?: string | null, identifierGoogle?: string | null, identifierIsbn?: string | null, identifierMobiAsin?: string | null, identifierUuid?: string | null, genres: Array<string>, inkers: Array<string>, language?: string | null, letterers: Array<string>, links: Array<string>, month?: number | null, notes?: string | null, number?: any | null, pageCount?: number | null, pencillers: Array<string>, publisher?: string | null, series?: string | null, summary?: string | null, teams: Array<string>, title?: string | null, titleSort?: string | null, volume?: number | null, writers: Array<string>, year?: number | null } | null, readProgress?: { __typename?: 'ResumeReadingCursor', page?: number | null, percentageCompleted?: any | null, epubcfi?: string | null, startedAt?: any | null, elapsedSeconds: number, updatedAt?: any | null, locator?: { __typename?: 'ReadiumLocator', chapterTitle: string, href: string, title?: string | null, type: string, locations?: { __typename?: 'ReadiumLocation', fragments?: Array<string> | null, position?: number | null, progression?: any | null, totalProgression?: any | null, cssSelector?: string | null, partialCfi?: string | null } | null } | null } | null, readHistory: Array<{ __typename?: 'ReadthroughRecord', completedAt: any, elapsedSeconds: number }>, series: { __typename?: 'Series', id: string, resolvedName: string, mediaCount: number, metadata?: { __typename?: 'SeriesMetadata', totalIssues?: number | null } | null }, library: { __typename?: 'Library', id: string, name: string }, thumbnail: { __typename?: 'ImageRef', url: string, height?: number | null, width?: number | null, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null }, ebook?: { __typename?: 'Epub', toc: Array<string> } | null }
     & { ' $fragmentRefs'?: { 'BookMenuFragment': BookMenuFragment } }
   ) | null };
 
@@ -4815,7 +4944,7 @@ export type BookReadScreenQueryVariables = Exact<{
 }>;
 
 
-export type BookReadScreenQuery = { __typename?: 'Query', mediaById?: { __typename?: 'Media', id: string, pages: number, extension: string, name: string, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null }, readProgress?: { __typename?: 'ActiveReadingSession', percentageCompleted?: any | null, epubcfi?: string | null, page?: number | null, elapsedSeconds?: number | null, locator?: { __typename?: 'ReadiumLocator', chapterTitle: string, href: string, title?: string | null, type: string, locations?: { __typename?: 'ReadiumLocation', fragments?: Array<string> | null, progression?: any | null, position?: number | null, totalProgression?: any | null, cssSelector?: string | null, partialCfi?: string | null } | null } | null } | null, series: { __typename?: 'Series', id: string, resolvedName: string }, library: { __typename?: 'Library', id: string, name: string }, libraryConfig: { __typename?: 'LibraryConfig', defaultReadingImageScaleFit: ReadingImageScaleFit, defaultReadingMode: ReadingMode, defaultReadingDir: ReadingDirection }, metadata?: { __typename?: 'MediaMetadata', writers: Array<string>, publisher?: string | null, summary?: string | null } | null, analysisData?: { __typename?: 'MediaAnalysisData', dimensions: Array<{ __typename?: 'PageDimension', height: number, width: number }> } | null, nextInSeries: { __typename?: 'PaginatedMediaResponse', nodes: Array<{ __typename?: 'Media', id: string, name: string, thumbnail: { __typename?: 'ImageRef', url: string } }> }, ebook?: { __typename?: 'Epub', toc: Array<string>, bookmarks: Array<{ __typename?: 'Bookmark', id: string, epubcfi?: string | null, mediaId: string, previewContent?: string | null, createdAt: any, locator?: { __typename?: 'ReadiumLocator', chapterTitle: string, href: string, locations?: { __typename?: 'ReadiumLocation', fragments?: Array<string> | null, progression?: any | null, position?: number | null, totalProgression?: any | null, cssSelector?: string | null, partialCfi?: string | null } | null } | null }>, annotations: Array<{ __typename?: 'MediaAnnotationModel', id: string, annotationText?: string | null, createdAt: any, updatedAt: any, locator: { __typename?: 'ReadiumLocator', chapterTitle: string, href: string, title?: string | null, type: string, locations?: { __typename?: 'ReadiumLocation', fragments?: Array<string> | null, progression?: any | null, position?: number | null, totalProgression?: any | null, cssSelector?: string | null, partialCfi?: string | null } | null, text?: { __typename?: 'ReadiumText', after?: string | null, before?: string | null, highlight?: string | null } | null } }>, spine: Array<{ __typename?: 'SpineItem', id?: string | null, idref: string, properties?: string | null, linear: boolean }> } | null } | null };
+export type BookReadScreenQuery = { __typename?: 'Query', mediaById?: { __typename?: 'Media', id: string, pages: number, extension: string, name: string, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null }, readProgress?: { __typename?: 'ResumeReadingCursor', percentageCompleted?: any | null, epubcfi?: string | null, page?: number | null, elapsedSeconds: number, locator?: { __typename?: 'ReadiumLocator', chapterTitle: string, href: string, title?: string | null, type: string, locations?: { __typename?: 'ReadiumLocation', fragments?: Array<string> | null, progression?: any | null, position?: number | null, totalProgression?: any | null, cssSelector?: string | null, partialCfi?: string | null } | null } | null } | null, series: { __typename?: 'Series', id: string, resolvedName: string }, library: { __typename?: 'Library', id: string, name: string }, libraryConfig: { __typename?: 'LibraryConfig', defaultReadingImageScaleFit: ReadingImageScaleFit, defaultReadingMode: ReadingMode, defaultReadingDir: ReadingDirection }, metadata?: { __typename?: 'MediaMetadata', writers: Array<string>, publisher?: string | null, summary?: string | null } | null, analysisData?: { __typename?: 'MediaAnalysisData', dimensions: Array<{ __typename?: 'PageDimension', height: number, width: number }> } | null, nextInSeries: { __typename?: 'PaginatedMediaResponse', nodes: Array<{ __typename?: 'Media', id: string, name: string, thumbnail: { __typename?: 'ImageRef', url: string } }> }, ebook?: { __typename?: 'Epub', toc: Array<string>, bookmarks: Array<{ __typename?: 'Bookmark', id: string, epubcfi?: string | null, mediaId: string, previewContent?: string | null, createdAt: any, locator?: { __typename?: 'ReadiumLocator', chapterTitle: string, href: string, locations?: { __typename?: 'ReadiumLocation', fragments?: Array<string> | null, progression?: any | null, position?: number | null, totalProgression?: any | null, cssSelector?: string | null, partialCfi?: string | null } | null } | null }>, annotations: Array<{ __typename?: 'MediaAnnotationModel', id: string, annotationText?: string | null, createdAt: any, updatedAt: any, locator: { __typename?: 'ReadiumLocator', chapterTitle: string, href: string, title?: string | null, type: string, locations?: { __typename?: 'ReadiumLocation', fragments?: Array<string> | null, progression?: any | null, position?: number | null, totalProgression?: any | null, cssSelector?: string | null, partialCfi?: string | null } | null, text?: { __typename?: 'ReadiumText', after?: string | null, before?: string | null, highlight?: string | null } | null } }>, spine: Array<{ __typename?: 'SpineItem', id?: string | null, idref: string, properties?: string | null, linear: boolean }> } | null } | null };
 
 export type UpdateReadProgressionMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -4823,7 +4952,7 @@ export type UpdateReadProgressionMutationVariables = Exact<{
 }>;
 
 
-export type UpdateReadProgressionMutation = { __typename?: 'Mutation', updateMediaProgress: { __typename: 'ActiveReadingSession' } | { __typename: 'FinishedReadingSession' } };
+export type UpdateReadProgressionMutation = { __typename?: 'Mutation', updateMediaProgress: { __typename: 'ReadingSession' } };
 
 export type CreateBookmarkMobileMutationVariables = Exact<{
   input: BookmarkInput;
@@ -4868,7 +4997,7 @@ export type BooksScreenQueryVariables = Exact<{
 
 
 export type BooksScreenQuery = { __typename?: 'Query', media: { __typename?: 'PaginatedMediaResponse', nodes: Array<(
-      { __typename?: 'Media', id: string }
+      { __typename?: 'Media', id: string, thumbnail: { __typename?: 'ImageRef', metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null } | null } }
       & { ' $fragmentRefs'?: { 'BookListItemFragment': BookListItemFragment } }
     )>, pageInfo: { __typename: 'CursorPaginationInfo' } | { __typename: 'OffsetPaginationInfo', totalPages: number, currentPage: number, pageSize: number, pageOffset: number, zeroBased: boolean } } };
 
@@ -5014,7 +5143,7 @@ export type BookClubDetailScreenQuery = { __typename?: 'Query', bookClubById: (
       { __typename?: 'BookClubBook', id: string, discussions: Array<(
         { __typename?: 'BookClubDiscussion', id: string }
         & { ' $fragmentRefs'?: { 'DiscussionListItemFragment': DiscussionListItemFragment } }
-      )>, entity?: { __typename?: 'Media', id: string, readProgress?: { __typename?: 'ActiveReadingSession', percentageCompleted?: any | null, elapsedSeconds?: number | null, startedAt: any } | null, readHistory: Array<{ __typename: 'FinishedReadingSession', completedAt: any }> } | null }
+      )>, entity?: { __typename?: 'Media', id: string, readProgress?: { __typename?: 'ResumeReadingCursor', percentageCompleted?: any | null, elapsedSeconds: number, startedAt?: any | null } | null, readHistory: Array<{ __typename: 'ReadthroughRecord', completedAt: any }> } | null }
       & { ' $fragmentRefs'?: { 'CurrentBookCardFragment': CurrentBookCardFragment } }
     ) | null }
     & { ' $fragmentRefs'?: { 'PastDiscussionsLinkFragment': PastDiscussionsLinkFragment } }
@@ -5069,7 +5198,7 @@ export type LibrarySeriesScreenQueryVariables = Exact<{
 
 
 export type LibrarySeriesScreenQuery = { __typename?: 'Query', series: { __typename?: 'PaginatedSeriesResponse', nodes: Array<(
-      { __typename?: 'Series', id: string }
+      { __typename?: 'Series', id: string, thumbnail: { __typename?: 'ImageRef', metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null } | null } }
       & { ' $fragmentRefs'?: { 'SeriesListItemFragment': SeriesListItemFragment } }
     )>, pageInfo: { __typename: 'CursorPaginationInfo', currentCursor?: string | null, nextCursor?: string | null, limit: number } | { __typename: 'OffsetPaginationInfo' } } };
 
@@ -5098,7 +5227,7 @@ export type SeriesBooksScreenQueryVariables = Exact<{
 
 
 export type SeriesBooksScreenQuery = { __typename?: 'Query', media: { __typename?: 'PaginatedMediaResponse', nodes: Array<(
-      { __typename?: 'Media', id: string }
+      { __typename?: 'Media', id: string, thumbnail: { __typename?: 'ImageRef', metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null } | null } }
       & { ' $fragmentRefs'?: { 'BookListItemFragment': BookListItemFragment } }
     )>, pageInfo: { __typename: 'CursorPaginationInfo' } | { __typename: 'OffsetPaginationInfo', totalPages: number, currentPage: number, pageSize: number, pageOffset: number, zeroBased: boolean } } };
 
@@ -5110,7 +5239,7 @@ export type SeriesScreenQueryVariables = Exact<{
 
 
 export type SeriesScreenQuery = { __typename?: 'Query', series: { __typename?: 'PaginatedSeriesResponse', nodes: Array<(
-      { __typename?: 'Series', id: string }
+      { __typename?: 'Series', id: string, thumbnail: { __typename?: 'ImageRef', metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null } | null } }
       & { ' $fragmentRefs'?: { 'SeriesListItemFragment': SeriesListItemFragment } }
     )>, pageInfo: { __typename: 'CursorPaginationInfo' } | { __typename: 'OffsetPaginationInfo', totalPages: number, currentPage: number, pageSize: number, pageOffset: number, zeroBased: boolean } } };
 
@@ -5159,7 +5288,7 @@ export type PullServerReadProgressionQueryVariables = Exact<{
 }>;
 
 
-export type PullServerReadProgressionQuery = { __typename?: 'Query', media: { __typename?: 'PaginatedMediaResponse', nodes: Array<{ __typename?: 'Media', id: string, readProgress?: { __typename?: 'ActiveReadingSession', page?: number | null, percentageCompleted?: any | null, epubcfi?: string | null, updatedAt?: any | null, elapsedSeconds?: number | null, locator?: { __typename?: 'ReadiumLocator', chapterTitle: string, href: string, title?: string | null, type: string, locations?: { __typename?: 'ReadiumLocation', fragments?: Array<string> | null, progression?: any | null, position?: number | null, totalProgression?: any | null, cssSelector?: string | null, partialCfi?: string | null } | null } | null } | null, readHistory: Array<{ __typename?: 'FinishedReadingSession', completedAt: any }> }> } };
+export type PullServerReadProgressionQuery = { __typename?: 'Query', media: { __typename?: 'PaginatedMediaResponse', nodes: Array<{ __typename?: 'Media', id: string, readProgress?: { __typename?: 'ResumeReadingCursor', page?: number | null, percentageCompleted?: any | null, epubcfi?: string | null, updatedAt?: any | null, elapsedSeconds: number, locator?: { __typename?: 'ReadiumLocator', chapterTitle: string, href: string, title?: string | null, type: string, locations?: { __typename?: 'ReadiumLocation', fragments?: Array<string> | null, progression?: any | null, position?: number | null, totalProgression?: any | null, cssSelector?: string | null, partialCfi?: string | null } | null } | null } | null, readHistory: Array<{ __typename?: 'ReadthroughRecord', completedAt: any }> }> } };
 
 export type PushCreateAnnotationMutationVariables = Exact<{
   input: CreateAnnotationInput;
@@ -5202,7 +5331,7 @@ export type PushLocalReadProgressionMutationVariables = Exact<{
 }>;
 
 
-export type PushLocalReadProgressionMutation = { __typename?: 'Mutation', updateMediaProgress: { __typename: 'ActiveReadingSession' } | { __typename: 'FinishedReadingSession' } };
+export type PushLocalReadProgressionMutation = { __typename?: 'Mutation', updateMediaProgress: { __typename: 'ReadingSession' } };
 
 export type ContinueReadingQueryVariables = Exact<{
   pagination?: InputMaybe<Pagination>;
@@ -5224,7 +5353,7 @@ export type OnDeckBooksQuery = { __typename?: 'Query', onDeck: { __typename?: 'P
       & { ' $fragmentRefs'?: { 'OnDeckBookItemFragment': OnDeckBookItemFragment } }
     )>, pageInfo: { __typename: 'CursorPaginationInfo' } | { __typename: 'OffsetPaginationInfo', totalPages: number, currentPage: number, pageSize: number, pageOffset: number, zeroBased: boolean } } };
 
-export type ReadingNowFragment = { __typename?: 'Media', id: string, resolvedName: string, pages: number, metadata?: { __typename?: 'MediaMetadata', summary?: string | null, genres: Array<string>, links: Array<string>, publisher?: string | null, year?: number | null } | null, thumbnail: { __typename?: 'ImageRef', url: string, height?: number | null, width?: number | null, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null }, readProgress?: { __typename?: 'ActiveReadingSession', epubcfi?: string | null, page?: number | null, percentageCompleted?: any | null, updatedAt?: any | null, locator?: { __typename?: 'ReadiumLocator', locations?: { __typename?: 'ReadiumLocation', position?: number | null } | null } | null } | null } & { ' $fragmentName'?: 'ReadingNowFragment' };
+export type ReadingNowFragment = { __typename?: 'Media', id: string, resolvedName: string, pages: number, metadata?: { __typename?: 'MediaMetadata', summary?: string | null, genres: Array<string>, links: Array<string>, publisher?: string | null, year?: number | null } | null, thumbnail: { __typename?: 'ImageRef', url: string, height?: number | null, width?: number | null, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null }, readProgress?: { __typename?: 'ResumeReadingCursor', epubcfi?: string | null, page?: number | null, percentageCompleted?: any | null, updatedAt?: any | null, locator?: { __typename?: 'ReadiumLocator', locations?: { __typename?: 'ReadiumLocation', position?: number | null } | null } | null } | null } & { ' $fragmentName'?: 'ReadingNowFragment' };
 
 export type RecentlyAddedBooksQueryVariables = Exact<{
   pagination?: InputMaybe<Pagination>;
@@ -5246,7 +5375,7 @@ export type RecentlyAddedSeriesHorizontalQuery = { __typename?: 'Query', recentl
       & { ' $fragmentRefs'?: { 'RecentlyAddedSeriesItemFragment': RecentlyAddedSeriesItemFragment } }
     )>, pageInfo: { __typename: 'CursorPaginationInfo', currentCursor?: string | null, nextCursor?: string | null, limit: number } | { __typename: 'OffsetPaginationInfo' } } };
 
-export type BookListItemFragment = { __typename?: 'Media', id: string, resolvedName: string, pages: number, thumbnail: { __typename?: 'ImageRef', url: string, height?: number | null, width?: number | null, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null }, readProgress?: { __typename?: 'ActiveReadingSession', page?: number | null, percentageCompleted?: any | null } | null, readHistory: Array<{ __typename?: 'FinishedReadingSession', completedAt: any }> } & { ' $fragmentName'?: 'BookListItemFragment' };
+export type BookListItemFragment = { __typename?: 'Media', id: string, resolvedName: string, pages: number, thumbnail: { __typename?: 'ImageRef', url: string, height?: number | null, width?: number | null, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null }, readProgress?: { __typename?: 'ResumeReadingCursor', page?: number | null, percentageCompleted?: any | null } | null, readHistory: Array<{ __typename?: 'ReadthroughRecord', completedAt: any }> } & { ' $fragmentName'?: 'BookListItemFragment' };
 
 export type BookSearchItemFragment = { __typename?: 'Media', id: string, resolvedName: string, size: number, pages: number, thumbnail: { __typename?: 'ImageRef', url: string, height?: number | null, width?: number | null, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } } & { ' $fragmentName'?: 'BookSearchItemFragment' };
 
@@ -5272,30 +5401,28 @@ export type SeriesBooksListHeaderScanSeriesMutationVariables = Exact<{
 
 export type SeriesBooksListHeaderScanSeriesMutation = { __typename?: 'Mutation', scanSeries: boolean };
 
-export type BookMenuFragment = { __typename?: 'Media', id: string, resolvedName: string, isFavorite: boolean, library: { __typename?: 'Library', id: string, name: string }, series: { __typename?: 'Series', id: string, resolvedName: string }, readProgress?: { __typename: 'ActiveReadingSession' } | null, readHistory: Array<{ __typename: 'FinishedReadingSession' }> } & { ' $fragmentName'?: 'BookMenuFragment' };
+export type BookMenuFragment = { __typename?: 'Media', id: string, resolvedName: string, isFavorite: boolean, library: { __typename?: 'Library', id: string, name: string }, series: { __typename?: 'Series', id: string, resolvedName: string }, readProgress?: { __typename: 'ResumeReadingCursor' } | null, readHistory: Array<{ __typename: 'ReadthroughRecord' }> } & { ' $fragmentName'?: 'BookMenuFragment' };
 
 export type BookMenuCompleteMutationVariables = Exact<{
   id: Scalars['ID']['input'];
-  isComplete: Scalars['Boolean']['input'];
-  page?: InputMaybe<Scalars['Int']['input']>;
 }>;
 
 
-export type BookMenuCompleteMutation = { __typename?: 'Mutation', markMediaAsComplete?: { __typename?: 'FinishedReadingSessionModel', completedAt: any } | null };
+export type BookMenuCompleteMutation = { __typename?: 'Mutation', finishMediaProgress: boolean };
 
 export type BookMenuDeleteSessionMutationVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
 
 
-export type BookMenuDeleteSessionMutation = { __typename?: 'Mutation', deleteMediaProgress: { __typename: 'Media' } };
+export type BookMenuDeleteSessionMutation = { __typename?: 'Mutation', clearMediaProgress: boolean };
 
 export type BookMenuDeleteHistoryMutationVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
 
 
-export type BookMenuDeleteHistoryMutation = { __typename?: 'Mutation', deleteMediaReadHistory: { __typename: 'Media' } };
+export type BookMenuDeleteHistoryMutation = { __typename?: 'Mutation', deleteMediaReadingHistory: number };
 
 export type AddBookSheetQueryVariables = Exact<{
   pagination?: InputMaybe<Pagination>;
@@ -5396,7 +5523,7 @@ export type SeriesOverviewSheetQuery = { __typename?: 'Query', seriesById?: { __
 
 export type SeriesSearchItemFragment = { __typename?: 'Series', id: string, resolvedName: string, readCount: number, mediaCount: number, percentageCompleted: number, thumbnail: { __typename?: 'ImageRef', url: string, height?: number | null, width?: number | null, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } } & { ' $fragmentName'?: 'SeriesSearchItemFragment' };
 
-export type SmartListBookItemFragment = { __typename?: 'Media', id: string, resolvedName: string, name: string, pages: number, size: number, readProgress?: { __typename?: 'ActiveReadingSession', page?: number | null, percentageCompleted?: any | null, locator?: { __typename?: 'ReadiumLocator', chapterTitle: string } | null } | null, thumbnail: { __typename?: 'ImageRef', url: string, height?: number | null, width?: number | null, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } } & { ' $fragmentName'?: 'SmartListBookItemFragment' };
+export type SmartListBookItemFragment = { __typename?: 'Media', id: string, resolvedName: string, name: string, pages: number, size: number, readProgress?: { __typename?: 'ResumeReadingCursor', page?: number | null, percentageCompleted?: any | null, locator?: { __typename?: 'ReadiumLocator', chapterTitle: string } | null } | null, thumbnail: { __typename?: 'ImageRef', url: string, height?: number | null, width?: number | null, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } } & { ' $fragmentName'?: 'SmartListBookItemFragment' };
 
 export type SmartListGridItemFragment = { __typename?: 'SmartList', id: string, name: string, description?: string | null, books: Array<{ __typename?: 'Media', thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } }>, meta: { __typename?: 'SmartListMeta', matchedBooks: number, matchedSeries: number, matchedLibraries: number } } & { ' $fragmentName'?: 'SmartListGridItemFragment' };
 
@@ -5405,7 +5532,7 @@ export type SeriesBooksForDownloadQueryVariables = Exact<{
 }>;
 
 
-export type SeriesBooksForDownloadQuery = { __typename?: 'Query', seriesById?: { __typename?: 'Series', id: string, resolvedName: string, library: { __typename?: 'Library', id: string, name: string }, media: Array<{ __typename?: 'Media', id: string, extension: string, resolvedName: string, metadata?: { __typename?: 'MediaMetadata', ageRating?: number | null, characters: Array<string>, colorists: Array<string>, coverArtists: Array<string>, day?: number | null, editors: Array<string>, format?: string | null, identifierAmazon?: string | null, identifierCalibre?: string | null, identifierGoogle?: string | null, identifierIsbn?: string | null, identifierMobiAsin?: string | null, identifierUuid?: string | null, genres: Array<string>, inkers: Array<string>, language?: string | null, letterers: Array<string>, links: Array<string>, month?: number | null, notes?: string | null, number?: any | null, pageCount?: number | null, pencillers: Array<string>, publisher?: string | null, series?: string | null, seriesGroup?: string | null, storyArc?: string | null, storyArcNumber?: any | null, summary?: string | null, teams: Array<string>, title?: string | null, titleSort?: string | null, volume?: number | null, writers: Array<string>, year?: number | null } | null, readProgress?: { __typename?: 'ActiveReadingSession', page?: number | null, percentageCompleted?: any | null, elapsedSeconds?: number | null, updatedAt?: any | null, locator?: { __typename?: 'ReadiumLocator', chapterTitle: string, href: string, type: string, title?: string | null, locations?: { __typename?: 'ReadiumLocation', fragments?: Array<string> | null, position?: number | null, progression?: any | null, totalProgression?: any | null, cssSelector?: string | null, partialCfi?: string | null } | null } | null } | null, thumbnail: { __typename?: 'ImageRef', metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null }, ebook?: { __typename?: 'Epub', toc: Array<string> } | null }> } | null };
+export type SeriesBooksForDownloadQuery = { __typename?: 'Query', seriesById?: { __typename?: 'Series', id: string, resolvedName: string, library: { __typename?: 'Library', id: string, name: string }, media: Array<{ __typename?: 'Media', id: string, extension: string, resolvedName: string, metadata?: { __typename?: 'MediaMetadata', ageRating?: number | null, characters: Array<string>, colorists: Array<string>, coverArtists: Array<string>, day?: number | null, editors: Array<string>, format?: string | null, identifierAmazon?: string | null, identifierCalibre?: string | null, identifierGoogle?: string | null, identifierIsbn?: string | null, identifierMobiAsin?: string | null, identifierUuid?: string | null, genres: Array<string>, inkers: Array<string>, language?: string | null, letterers: Array<string>, links: Array<string>, month?: number | null, notes?: string | null, number?: any | null, pageCount?: number | null, pencillers: Array<string>, publisher?: string | null, series?: string | null, seriesGroup?: string | null, storyArc?: string | null, storyArcNumber?: any | null, summary?: string | null, teams: Array<string>, title?: string | null, titleSort?: string | null, volume?: number | null, writers: Array<string>, year?: number | null } | null, readProgress?: { __typename?: 'ResumeReadingCursor', page?: number | null, percentageCompleted?: any | null, elapsedSeconds: number, updatedAt?: any | null, locator?: { __typename?: 'ReadiumLocator', chapterTitle: string, href: string, type: string, title?: string | null, locations?: { __typename?: 'ReadiumLocation', fragments?: Array<string> | null, position?: number | null, progression?: any | null, totalProgression?: any | null, cssSelector?: string | null, partialCfi?: string | null } | null } | null } | null, thumbnail: { __typename?: 'ImageRef', metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null }, ebook?: { __typename?: 'Epub', toc: Array<string> } | null }> } | null };
 
 export type UseFavoriteBookMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -5420,7 +5547,7 @@ export type TagSelectQueryQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type TagSelectQueryQuery = { __typename?: 'Query', tags: Array<{ __typename?: 'Tag', id: number, name: string }> };
 
-export type BookCardFragment = { __typename?: 'Media', id: string, resolvedName: string, extension: string, pages: number, size: number, status: FileStatus, createdAt: any, thumbnail: { __typename?: 'ImageRef', url: string, height?: number | null, width?: number | null, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null }, readProgress?: { __typename?: 'ActiveReadingSession', percentageCompleted?: any | null, epubcfi?: string | null, page?: number | null, updatedAt?: any | null } | null, readHistory: Array<{ __typename: 'FinishedReadingSession', completedAt: any }>, libraryConfig: { __typename?: 'LibraryConfig', skipBookOverview: boolean } } & { ' $fragmentName'?: 'BookCardFragment' };
+export type BookCardFragment = { __typename?: 'Media', id: string, resolvedName: string, extension: string, pages: number, size: number, status: FileStatus, createdAt: any, thumbnail: { __typename?: 'ImageRef', url: string, height?: number | null, width?: number | null, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null }, readProgress?: { __typename?: 'ResumeReadingCursor', percentageCompleted?: any | null, epubcfi?: string | null, page?: number | null, updatedAt?: any | null } | null, readHistory: Array<{ __typename: 'ReadthroughRecord', completedAt: any }>, libraryConfig: { __typename?: 'LibraryConfig', skipBookOverview: boolean } } & { ' $fragmentName'?: 'BookCardFragment' };
 
 export type BookSearchOverlayQueryVariables = Exact<{
   pagination?: InputMaybe<Pagination>;
@@ -5432,6 +5559,8 @@ export type BookSearchOverlayQuery = { __typename?: 'Query', media: { __typename
       { __typename?: 'Media', id: string }
       & { ' $fragmentRefs'?: { 'BookCardFragment': BookCardFragment } }
     )>, pageInfo: { __typename: 'CursorPaginationInfo', currentCursor?: string | null, nextCursor?: string | null, limit: number } | { __typename: 'OffsetPaginationInfo' } } };
+
+export type SimpleBookCardFragment = { __typename?: 'Media', id: string, resolvedName: string, createdAt: any, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } } & { ' $fragmentName'?: 'SimpleBookCardFragment' };
 
 export type MediaMetadataEditorFragment = { __typename?: 'MediaMetadata', ageRating?: number | null, characters: Array<string>, colorists: Array<string>, coverArtists: Array<string>, day?: number | null, editors: Array<string>, format?: string | null, identifierAmazon?: string | null, identifierCalibre?: string | null, identifierGoogle?: string | null, identifierIsbn?: string | null, identifierMobiAsin?: string | null, identifierUuid?: string | null, genres: Array<string>, inkers: Array<string>, language?: string | null, letterers: Array<string>, links: Array<string>, month?: number | null, notes?: string | null, number?: any | null, pageCount?: number | null, pencillers: Array<string>, publisher?: string | null, series?: string | null, seriesGroup?: string | null, storyArc?: string | null, storyArcNumber?: any | null, summary?: string | null, teams: Array<string>, title?: string | null, titleSort?: string | null, volume?: number | null, writers: Array<string>, year?: number | null, lockedFields: Array<MetadataField> } & { ' $fragmentName'?: 'MediaMetadataEditorFragment' };
 
@@ -5463,7 +5592,7 @@ export type BookOverviewSceneQuery = { __typename?: 'Query', mediaById?: (
     { __typename?: 'Media', id: string, resolvedName: string, extension: string, seriesId?: string | null, pages: number, size: number, metadata?: (
       { __typename?: 'MediaMetadata', links: Array<string>, summary?: string | null, ageRating?: number | null, genres: Array<string>, language?: string | null, publisher?: string | null, writers: Array<string>, year?: number | null }
       & { ' $fragmentRefs'?: { 'MediaMetadataEditorFragment': MediaMetadataEditorFragment } }
-    ) | null, tags: Array<{ __typename?: 'Tag', id: number, name: string }>, readHistory: Array<{ __typename?: 'FinishedReadingSession', completedAt: any }> }
+    ) | null, tags: Array<{ __typename?: 'Tag', id: number, name: string }>, readHistory: Array<{ __typename?: 'ReadthroughRecord', completedAt: any }> }
     & { ' $fragmentRefs'?: { 'BookCardFragment': BookCardFragment;'BookFileInformationFragment': BookFileInformationFragment } }
   ) | null };
 
@@ -5540,8 +5669,6 @@ export type LibrarySeriesAlphabetQueryVariables = Exact<{
 
 export type LibrarySeriesAlphabetQuery = { __typename?: 'Query', libraryById?: { __typename?: 'Library', seriesAlphabet: any } | null };
 
-export type PendingMatchRecordFragment = { __typename?: 'MetadataFetchRecord', id: number, status: MetadataFetchStatus, mediaId?: string | null, seriesId?: string | null, addedAt: any, updatedAt?: any | null, matchCandidates: Array<{ __typename?: 'MatchCandidate', provider: string, externalId: string, confidence: number, metadata: { __typename: 'ExternalMediaMetadata', title?: string | null, seriesName?: string | null, seriesExternalId?: string | null, summary?: string | null, pageCount?: number | null, number?: number | null, day?: number | null, month?: number | null, year?: number | null, genres?: Array<string> | null, tags?: Array<string> | null, isbn?: string | null, isbn13?: string | null, writers?: Array<string> | null, artists?: Array<string> | null, colorists?: Array<string> | null, letterers?: Array<string> | null, coverArtists?: Array<string> | null } | { __typename: 'ExternalSeriesMetadata', alternativeTitles: Array<string>, summary?: string | null, volumeCount?: number | null, coverUrl?: string | null, status?: PublicationStatus | null, year?: number | null, endYear?: number | null, genres?: Array<string> | null, tags?: Array<string> | null, authors?: Array<string> | null, ageRating?: string | null, publisher?: string | null, seriesTitle: string }, confidenceFactors: Array<{ __typename?: 'ConfidenceFactor', factor: string, weight: number, matched: boolean }> }>, media?: { __typename?: 'Media', id: string, resolvedName: string, metadata?: { __typename?: 'MediaMetadata', title?: string | null, summary?: string | null, genres: Array<string>, writers: Array<string>, colorists: Array<string>, letterers: Array<string>, coverArtists: Array<string>, publisher?: string | null, year?: number | null, month?: number | null, day?: number | null, pageCount?: number | null, identifierIsbn?: string | null, lockedFields: Array<MetadataField> } | null } | null, series?: { __typename?: 'Series', id: string, resolvedName: string, metadata?: { __typename?: 'SeriesMetadata', title?: string | null, summary?: string | null, genres: Array<string>, writers: Array<string>, publisher?: string | null, year?: number | null, status?: string | null, ageRating?: number | null, volume?: number | null, lockedFields: Array<MetadataField> } | null } | null } & { ' $fragmentName'?: 'PendingMatchRecordFragment' };
-
 export type PendingMetadataMatchesQueryVariables = Exact<{ [key: string]: never; }>;
 
 
@@ -5562,6 +5689,8 @@ export type RejectAllPendingMatchesMutationVariables = Exact<{ [key: string]: ne
 
 
 export type RejectAllPendingMatchesMutation = { __typename?: 'Mutation', rejectAllPendingMatches: number };
+
+export type PendingMatchRecordFragment = { __typename?: 'MetadataFetchRecord', id: number, status: MetadataFetchStatus, mediaId?: string | null, seriesId?: string | null, rawHits: number, addedAt: any, updatedAt?: any | null, matchCandidates: Array<{ __typename?: 'MatchCandidate', provider: string, externalId: string, confidence: number, metadata: { __typename: 'ExternalMediaMetadata', title?: string | null, seriesName?: string | null, seriesExternalId?: string | null, summary?: string | null, pageCount?: number | null, number?: number | null, day?: number | null, month?: number | null, year?: number | null, genres?: Array<string> | null, tags?: Array<string> | null, isbn?: string | null, isbn13?: string | null, writers?: Array<string> | null, artists?: Array<string> | null, colorists?: Array<string> | null, letterers?: Array<string> | null, coverArtists?: Array<string> | null } | { __typename: 'ExternalSeriesMetadata', alternativeTitles: Array<string>, summary?: string | null, volumeCount?: number | null, coverUrl?: string | null, status?: PublicationStatus | null, year?: number | null, endYear?: number | null, genres?: Array<string> | null, tags?: Array<string> | null, authors?: Array<string> | null, ageRating?: string | null, publisher?: string | null, seriesTitle: string }, confidenceFactors: Array<{ __typename?: 'ConfidenceFactor', factor: string, weight: number, matched: boolean }> }>, media?: { __typename?: 'Media', id: string, resolvedName: string, metadata?: { __typename?: 'MediaMetadata', title?: string | null, summary?: string | null, series?: string | null, number?: any | null, genres: Array<string>, writers: Array<string>, colorists: Array<string>, letterers: Array<string>, coverArtists: Array<string>, publisher?: string | null, year?: number | null, month?: number | null, day?: number | null, pageCount?: number | null, identifierIsbn?: string | null, lockedFields: Array<MetadataField> } | null } | null, series?: { __typename?: 'Series', id: string, resolvedName: string, metadata?: { __typename?: 'SeriesMetadata', title?: string | null, summary?: string | null, genres: Array<string>, writers: Array<string>, publisher?: string | null, year?: number | null, status?: string | null, ageRating?: number | null, volume?: number | null, lockedFields: Array<MetadataField> } | null } | null } & { ' $fragmentName'?: 'PendingMatchRecordFragment' };
 
 export type AcceptMediaMatchMutationVariables = Exact<{
   mediaId: Scalars['ID']['input'];
@@ -5689,7 +5818,7 @@ export type EpubJsReaderQueryVariables = Exact<{
 }>;
 
 
-export type EpubJsReaderQuery = { __typename?: 'Query', epubById: { __typename?: 'Epub', mediaId: string, rootBase: string, rootFile: string, extraCss: Array<string>, toc: Array<string>, resources: any, metadata: any, spine: Array<{ __typename?: 'SpineItem', id?: string | null, idref: string, properties?: string | null, linear: boolean }>, bookmarks: Array<{ __typename?: 'Bookmark', id: string, userId: string, epubcfi?: string | null, mediaId: string, createdAt: any }>, media: { __typename?: 'Media', id: string, resolvedName: string, pages: number, extension: string, readProgress?: { __typename?: 'ActiveReadingSession', percentageCompleted?: any | null, epubcfi?: string | null, page?: number | null, elapsedSeconds?: number | null } | null, libraryConfig: { __typename?: 'LibraryConfig', defaultReadingImageScaleFit: ReadingImageScaleFit, defaultReadingMode: ReadingMode, defaultReadingDir: ReadingDirection }, nextInSeries: { __typename?: 'PaginatedMediaResponse', nodes: Array<{ __typename?: 'Media', id: string, name: string, thumbnail: { __typename?: 'ImageRef', url: string } }> } } } };
+export type EpubJsReaderQuery = { __typename?: 'Query', epubById: { __typename?: 'Epub', mediaId: string, rootBase: string, rootFile: string, extraCss: Array<string>, toc: Array<string>, resources: any, metadata: any, spine: Array<{ __typename?: 'SpineItem', id?: string | null, idref: string, properties?: string | null, linear: boolean }>, bookmarks: Array<{ __typename?: 'Bookmark', id: string, userId: string, epubcfi?: string | null, mediaId: string, createdAt: any }>, media: { __typename?: 'Media', id: string, resolvedName: string, pages: number, extension: string, readProgress?: { __typename?: 'ResumeReadingCursor', percentageCompleted?: any | null, epubcfi?: string | null, page?: number | null, elapsedSeconds: number } | null, libraryConfig: { __typename?: 'LibraryConfig', defaultReadingImageScaleFit: ReadingImageScaleFit, defaultReadingMode: ReadingMode, defaultReadingDir: ReadingDirection }, nextInSeries: { __typename?: 'PaginatedMediaResponse', nodes: Array<{ __typename?: 'Media', id: string, name: string, thumbnail: { __typename?: 'ImageRef', url: string } }> } } } };
 
 export type UpdateEpubProgressMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -5697,7 +5826,7 @@ export type UpdateEpubProgressMutationVariables = Exact<{
 }>;
 
 
-export type UpdateEpubProgressMutation = { __typename?: 'Mutation', updateMediaProgress: { __typename: 'ActiveReadingSession', percentageCompleted?: any | null, epubcfi?: string | null, page?: number | null, elapsedSeconds?: number | null } | { __typename: 'FinishedReadingSession' } };
+export type UpdateEpubProgressMutation = { __typename?: 'Mutation', updateMediaProgress: { __typename: 'ReadingSession' } };
 
 export type CreateBookmarkMutationVariables = Exact<{
   input: BookmarkInput;
@@ -5744,7 +5873,7 @@ export type SeriesEditorSetLockedFieldsMutation = { __typename?: 'Mutation', set
 export type UseCoreEventSubscriptionVariables = Exact<{ [key: string]: never; }>;
 
 
-export type UseCoreEventSubscription = { __typename?: 'Subscription', readEvents: { __typename: 'CreatedManySeries', count: number, libraryId: string } | { __typename: 'CreatedMedia', id: string, seriesId: string } | { __typename: 'CreatedOrUpdatedManyMedia', count: number, seriesId: string } | { __typename: 'DiscoveredMissingLibrary', id: string } | { __typename: 'JobOutput', id: string, output: { __typename: 'AnalyzeMediaOutput' } | { __typename: 'LibraryScanOutput', createdMedia: number, createdSeries: number, updatedMedia: number, updatedSeries: number } | { __typename: 'MetadataFetchJobOutput' } | { __typename: 'PlaceholderGenerationOutput' } | { __typename: 'SeriesScanOutput', createdMedia: number, updatedMedia: number } | { __typename: 'ThumbnailGenerationOutput' } } | { __typename: 'JobStarted', id: string } | { __typename: 'JobUpdate', id: string, status?: JobStatus | null, message?: string | null, completedTasks?: number | null, remainingTasks?: number | null, completedSubtasks?: number | null, totalSubtasks?: number | null } };
+export type UseCoreEventSubscription = { __typename?: 'Subscription', readEvents: { __typename: 'CreatedManySeries', count: number, libraryId: string } | { __typename: 'CreatedMedia', id: string, seriesId: string } | { __typename: 'CreatedOrUpdatedManyMedia', count: number, seriesId: string } | { __typename: 'DiscoveredMissingLibrary', id: string } | { __typename: 'JobOutput', id: string, output: { __typename: 'AnalyzeMediaOutput' } | { __typename: 'LibraryScanOutput', createdMedia: number, createdSeries: number, updatedMedia: number, updatedSeries: number } | { __typename: 'MetadataFetchJobOutput' } | { __typename: 'PlaceholderGenerationOutput' } | { __typename: 'SeriesScanOutput', createdMedia: number, updatedMedia: number } | { __typename: 'ThumbnailGenerationOutput' } } | { __typename: 'JobStarted', id: string } | { __typename: 'JobUpdate', id: string, status?: JobStatus | null, message?: string | null, completedTasks?: number | null, remainingTasks?: number | null, completedSubtasks?: number | null, totalSubtasks?: number | null, subtitle?: string | null } };
 
 export type UsePreferencesMutationVariables = Exact<{
   input: UpdateUserPreferencesInput;
@@ -5755,26 +5884,24 @@ export type UsePreferencesMutation = { __typename?: 'Mutation', updateViewerPref
 
 export type BookActionMenuCompleteMutationVariables = Exact<{
   id: Scalars['ID']['input'];
-  isComplete: Scalars['Boolean']['input'];
-  page?: InputMaybe<Scalars['Int']['input']>;
 }>;
 
 
-export type BookActionMenuCompleteMutation = { __typename?: 'Mutation', markMediaAsComplete?: { __typename?: 'FinishedReadingSessionModel', completedAt: any } | null };
+export type BookActionMenuCompleteMutation = { __typename?: 'Mutation', finishMediaProgress: boolean };
 
 export type BookActionMenuDeleteSessionMutationVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
 
 
-export type BookActionMenuDeleteSessionMutation = { __typename?: 'Mutation', deleteMediaProgress: { __typename: 'Media' } };
+export type BookActionMenuDeleteSessionMutation = { __typename?: 'Mutation', clearMediaProgress: boolean };
 
 export type BookActionMenuDeleteHistoryMutationVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
 
 
-export type BookActionMenuDeleteHistoryMutation = { __typename?: 'Mutation', deleteMediaReadHistory: { __typename: 'Media' } };
+export type BookActionMenuDeleteHistoryMutation = { __typename?: 'Mutation', deleteMediaReadingHistory: number };
 
 export type BookFileInformationFragment = { __typename?: 'Media', id: string, size: number, extension: string, hash?: string | null, relativeLibraryPath: string } & { ' $fragmentName'?: 'BookFileInformationFragment' };
 
@@ -5821,7 +5948,7 @@ export type BookReaderSceneQueryVariables = Exact<{
 }>;
 
 
-export type BookReaderSceneQuery = { __typename?: 'Query', mediaById?: { __typename?: 'Media', id: string, resolvedName: string, pages: number, extension: string, readProgress?: { __typename?: 'ActiveReadingSession', percentageCompleted?: any | null, epubcfi?: string | null, page?: number | null, elapsedSeconds?: number | null } | null, libraryConfig: { __typename?: 'LibraryConfig', defaultReadingImageScaleFit: ReadingImageScaleFit, defaultReadingMode: ReadingMode, defaultReadingDir: ReadingDirection }, analysisData?: { __typename?: 'MediaAnalysisData', dimensions: Array<{ __typename?: 'PageDimension', height: number, width: number }> } | null, nextInSeries: { __typename?: 'PaginatedMediaResponse', nodes: Array<{ __typename?: 'Media', id: string, name: string, thumbnail: { __typename?: 'ImageRef', url: string } }> } } | null };
+export type BookReaderSceneQuery = { __typename?: 'Query', mediaById?: { __typename?: 'Media', id: string, resolvedName: string, pages: number, extension: string, readProgress?: { __typename?: 'ResumeReadingCursor', percentageCompleted?: any | null, epubcfi?: string | null, page?: number | null, elapsedSeconds: number } | null, libraryConfig: { __typename?: 'LibraryConfig', defaultReadingImageScaleFit: ReadingImageScaleFit, defaultReadingMode: ReadingMode, defaultReadingDir: ReadingDirection }, analysisData?: { __typename?: 'MediaAnalysisData', dimensions: Array<{ __typename?: 'PageDimension', height: number, width: number }> } | null, nextInSeries: { __typename?: 'PaginatedMediaResponse', nodes: Array<{ __typename?: 'Media', id: string, name: string, thumbnail: { __typename?: 'ImageRef', url: string } }> } } | null };
 
 export type UpdateReadProgressMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -5829,7 +5956,7 @@ export type UpdateReadProgressMutationVariables = Exact<{
 }>;
 
 
-export type UpdateReadProgressMutation = { __typename?: 'Mutation', updateMediaProgress: { __typename: 'ActiveReadingSession' } | { __typename: 'FinishedReadingSession' } };
+export type UpdateReadProgressMutation = { __typename?: 'Mutation', updateMediaProgress: { __typename: 'ReadingSession' } };
 
 export type BookManagementSceneQueryVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -5847,6 +5974,29 @@ export type BookManagementSceneAnalyzeMutationVariables = Exact<{
 
 
 export type BookManagementSceneAnalyzeMutation = { __typename?: 'Mutation', analyzeMedia: boolean };
+
+export type BookMetadataSearchProvidersQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type BookMetadataSearchProvidersQuery = { __typename?: 'Query', metadataProviderConfigs: Array<{ __typename?: 'MetadataProviderConfigModel', id: number, providerType: MetadataProvider, enabled: boolean }> };
+
+export type BookMetadataSearchContextQueryVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type BookMetadataSearchContextQuery = { __typename?: 'Query', mediaById?: { __typename?: 'Media', id: string, series: { __typename?: 'Series', id: string, metadata?: { __typename?: 'SeriesMetadata', comicid?: number | null } | null } } | null };
+
+export type SearchMediaMetadataMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+  search?: InputMaybe<MediaMetadataSearchInput>;
+}>;
+
+
+export type SearchMediaMetadataMutation = { __typename?: 'Mutation', fetchMediaMetadata: (
+    { __typename?: 'MetadataFetchRecord' }
+    & { ' $fragmentRefs'?: { 'PendingMatchRecordFragment': PendingMatchRecordFragment } }
+  ) };
 
 export type BookTagEditorSetTagsMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -5965,7 +6115,7 @@ export type CreateSmartListSceneMutationVariables = Exact<{
 
 export type CreateSmartListSceneMutation = { __typename?: 'Mutation', createSmartList: { __typename?: 'SmartList', id: string, name: string } };
 
-export type ContinueReadingBookFragment = { __typename?: 'Media', id: string, resolvedName: string, pages: number, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null }, readProgress?: { __typename?: 'ActiveReadingSession', percentageCompleted?: any | null, epubcfi?: string | null, page?: number | null, updatedAt?: any | null } | null } & { ' $fragmentName'?: 'ContinueReadingBookFragment' };
+export type ContinueReadingBookFragment = { __typename?: 'Media', id: string, resolvedName: string, pages: number, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null }, readProgress?: { __typename?: 'ResumeReadingCursor', percentageCompleted?: any | null, epubcfi?: string | null, page?: number | null, updatedAt?: any | null } | null } & { ' $fragmentName'?: 'ContinueReadingBookFragment' };
 
 export type ContinueReadingMediaQueryVariables = Exact<{
   pagination: Pagination;
@@ -6019,7 +6169,7 @@ export type LibraryLayoutQueryVariables = Exact<{
 
 
 export type LibraryLayoutQuery = { __typename?: 'Query', libraryById?: (
-    { __typename?: 'Library', id: string, name: string, description?: string | null, path: string, genres: Array<string>, publishers: Array<string>, stats: { __typename?: 'LibraryStats', seriesCount: number, bookCount: number, completedBooks: number, inProgressBooks: number, totalBytes: number, totalReadingTimeSeconds: number }, tags: Array<{ __typename?: 'Tag', id: number, name: string }>, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null }, config: { __typename?: 'LibraryConfig', defaultLibraryViewMode: LibraryViewMode, hideSeriesView: boolean } }
+    { __typename?: 'Library', id: string, name: string, description?: string | null, path: string, stats: { __typename?: 'LibraryStats', seriesCount: number, bookCount: number, completedBooks: number, inProgressBooks: number, totalBytes: number, totalReadingTimeSeconds: number }, tags: Array<{ __typename?: 'Tag', id: number, name: string }>, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null }, config: { __typename?: 'LibraryConfig', defaultLibraryViewMode: LibraryViewMode, hideSeriesView: boolean } }
     & { ' $fragmentRefs'?: { 'LibrarySettingsConfigFragment': LibrarySettingsConfigFragment } }
   ) | null };
 
@@ -6059,7 +6209,7 @@ export type LibrarySeriesGridQueryVariables = Exact<{
 
 export type LibrarySeriesGridQuery = { __typename?: 'Query', series: { __typename?: 'PaginatedSeriesResponse', nodes: Array<{ __typename?: 'Series', id: string, thumbnail: { __typename?: 'ImageRef', url: string } }>, pageInfo: { __typename: 'CursorPaginationInfo', currentCursor?: string | null, nextCursor?: string | null, limit: number } | { __typename: 'OffsetPaginationInfo' } } };
 
-export type LibrarySettingsConfigFragment = { __typename?: 'Library', config: { __typename?: 'LibraryConfig', id: number, convertRarToZip: boolean, hardDeleteConversions: boolean, defaultReadingDir: ReadingDirection, defaultReadingMode: ReadingMode, defaultReadingImageScaleFit: ReadingImageScaleFit, defaultLibraryViewMode: LibraryViewMode, hideSeriesView: boolean, skipBookOverview: boolean, generateFileHashes: boolean, generateKoreaderHashes: boolean, processMetadata: boolean, watch: boolean, libraryPattern: LibraryPattern, processThumbnailColorsEvenWithoutConfig: boolean, ignoreRules?: Array<string> | null, thumbnailConfig?: { __typename: 'ImageProcessorOptions', format: SupportedImageFormat, quality?: number | null, page?: number | null, resizeMethod?: { __typename: 'ExactDimensionResize', width: number, height: number } | { __typename: 'FitWithinResize' } | { __typename: 'ScaleEvenlyByFactor', factor: any } | { __typename: 'ScaledDimensionResize', dimension: Dimension, size: number } | null } | null } } & { ' $fragmentName'?: 'LibrarySettingsConfigFragment' };
+export type LibrarySettingsConfigFragment = { __typename?: 'Library', config: { __typename?: 'LibraryConfig', id: number, convertRarToZip: boolean, hardDeleteConversions: boolean, defaultReadingDir: ReadingDirection, defaultReadingMode: ReadingMode, defaultReadingImageScaleFit: ReadingImageScaleFit, defaultLibraryViewMode: LibraryViewMode, hideSeriesView: boolean, skipBookOverview: boolean, generateFileHashes: boolean, generateKoreaderHashes: boolean, processMetadata: boolean, watch: boolean, libraryPattern: LibraryPattern, libraryType: LibraryType, processThumbnailColorsEvenWithoutConfig: boolean, ignoreRules?: Array<string> | null, thumbnailConfig?: { __typename: 'ImageProcessorOptions', format: SupportedImageFormat, quality?: number | null, page?: number | null, resizeMethod?: { __typename: 'ExactDimensionResize', width: number, height: number } | { __typename: 'FitWithinResize' } | { __typename: 'ScaleEvenlyByFactor', factor: any } | { __typename: 'ScaledDimensionResize', dimension: Dimension, size: number } | null } | null } } & { ' $fragmentName'?: 'LibrarySettingsConfigFragment' };
 
 export type LibrarySettingsRouterEditLibraryMutationMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -6197,12 +6347,19 @@ export type RegenerateThumbnailsMutationVariables = Exact<{
 
 export type RegenerateThumbnailsMutation = { __typename?: 'Mutation', generateLibraryThumbnails: boolean };
 
+export type SeriesActionCompleteMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type SeriesActionCompleteMutation = { __typename?: 'Mutation', finishSeriesProgress: number };
+
 export type SeriesLayoutQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
 
 
-export type SeriesLayoutQuery = { __typename?: 'Query', seriesById?: { __typename?: 'Series', id: string, path: string, resolvedName: string, resolvedDescription?: string | null, library: { __typename?: 'Library', id: string, name: string }, tags: Array<{ __typename?: 'Tag', id: number, name: string }>, stats: { __typename?: 'SeriesStats', bookCount: number, completedBooks: number, inProgressBooks: number, totalBytes: number, totalReadingTimeSeconds: number }, metadata?: { __typename?: 'SeriesMetadata', status?: string | null, publisher?: string | null, year?: number | null, genres: Array<string>, booktype?: string | null, volume?: number | null, totalIssues?: number | null, writers: Array<string>, summary?: string | null, descriptionFormatted?: string | null, links: Array<string> } | null, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } } | null };
+export type SeriesLayoutQuery = { __typename?: 'Query', seriesById?: { __typename?: 'Series', id: string, path: string, resolvedName: string, resolvedDescription?: string | null, createdAt: any, updatedAt?: any | null, library: { __typename?: 'Library', id: string, name: string }, stats: { __typename?: 'SeriesStats', bookCount: number, completedBooks: number, inProgressBooks: number, totalBytes: number, totalReadingTimeSeconds: number }, tags: Array<{ __typename?: 'Tag', id: number, name: string }>, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } } | null };
 
 export type SeriesLibrayLinkQueryVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -6210,6 +6367,16 @@ export type SeriesLibrayLinkQueryVariables = Exact<{
 
 
 export type SeriesLibrayLinkQuery = { __typename?: 'Query', libraryById?: { __typename?: 'Library', id: string, name: string } | null };
+
+export type SeriesOverviewSheetExtasQueryVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type SeriesOverviewSheetExtasQuery = { __typename?: 'Query', seriesById?: { __typename?: 'Series', id: string, metadata?: { __typename?: 'SeriesMetadata', publisher?: string | null, year?: number | null, summary?: string | null, links: Array<string> } | null, upNext: Array<(
+      { __typename?: 'Media', id: string }
+      & { ' $fragmentRefs'?: { 'SimpleBookCardFragment': SimpleBookCardFragment } }
+    )> } | null };
 
 export type SeriesBooksSceneQueryVariables = Exact<{
   filter: MediaFilterInput;
@@ -6622,6 +6789,13 @@ export type DeleteProviderDialogMutationVariables = Exact<{
 export type DeleteProviderDialogMutation = { __typename?: 'Mutation', deleteMetadataProvider: { __typename?: 'MetadataProviderConfigModel', id: number } };
 
 export type ExistingProviderCardFragment = { __typename?: 'MetadataProviderConfigModel', id: number, providerType: MetadataProvider, enabled: boolean, apiTokenExpiresAt?: any | null, autoApplyConfig?: any | null, createdAt: any, updatedAt?: any | null } & { ' $fragmentName'?: 'ExistingProviderCardFragment' };
+
+export type ProviderApiKeyInputValidateKeyMutationVariables = Exact<{
+  config: ValidateMetadataProviderConfigInput;
+}>;
+
+
+export type ProviderApiKeyInputValidateKeyMutation = { __typename?: 'Mutation', validateProviderConfig: { __typename?: 'ProviderCredentialVerification', isValid: boolean, error?: string | null, responseStatus: number } };
 
 export type ProvidersSectionGetProvidersQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -7350,6 +7524,24 @@ export const BookCardFragmentDoc = new TypedDocumentString(`
   }
 }
     `, {"fragmentName":"BookCard"}) as unknown as TypedDocumentString<BookCardFragment, unknown>;
+export const SimpleBookCardFragmentDoc = new TypedDocumentString(`
+    fragment SimpleBookCard on Media {
+  id
+  resolvedName
+  createdAt
+  thumbnail {
+    url
+    metadata {
+      averageColor
+      colors {
+        color
+        percentage
+      }
+      thumbhash
+    }
+  }
+}
+    `, {"fragmentName":"SimpleBookCard"}) as unknown as TypedDocumentString<SimpleBookCardFragment, unknown>;
 export const MediaMetadataEditorFragmentDoc = new TypedDocumentString(`
     fragment MediaMetadataEditor on MediaMetadata {
   ageRating
@@ -7418,6 +7610,7 @@ export const PendingMatchRecordFragmentDoc = new TypedDocumentString(`
   status
   mediaId
   seriesId
+  rawHits
   matchCandidates {
     provider
     externalId
@@ -7474,6 +7667,8 @@ export const PendingMatchRecordFragmentDoc = new TypedDocumentString(`
     metadata {
       title
       summary
+      series
+      number
       genres
       writers
       colorists
@@ -7664,6 +7859,7 @@ export const LibrarySettingsConfigFragmentDoc = new TypedDocumentString(`
     processMetadata
     watch
     libraryPattern
+    libraryType
     thumbnailConfig {
       __typename
       resizeMethod {
@@ -8317,6 +8513,11 @@ export const BooksScreenDocument = new TypedDocumentString(`
     nodes {
       id
       ...BookListItem
+      thumbnail {
+        metadata {
+          averageColor
+        }
+      }
     }
     pageInfo {
       __typename
@@ -8831,6 +9032,11 @@ export const LibrarySeriesScreenDocument = new TypedDocumentString(`
     nodes {
       id
       ...SeriesListItem
+      thumbnail {
+        metadata {
+          averageColor
+        }
+      }
     }
     pageInfo {
       __typename
@@ -8918,6 +9124,11 @@ export const SeriesBooksScreenDocument = new TypedDocumentString(`
     nodes {
       id
       ...BookListItem
+      thumbnail {
+        metadata {
+          averageColor
+        }
+      }
     }
     pageInfo {
       __typename
@@ -8962,6 +9173,11 @@ export const SeriesScreenDocument = new TypedDocumentString(`
     nodes {
       id
       ...SeriesListItem
+      thumbnail {
+        metadata {
+          averageColor
+        }
+      }
     }
     pageInfo {
       __typename
@@ -9495,24 +9711,18 @@ export const SeriesBooksListHeaderScanSeriesDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<SeriesBooksListHeaderScanSeriesMutation, SeriesBooksListHeaderScanSeriesMutationVariables>;
 export const BookMenuCompleteDocument = new TypedDocumentString(`
-    mutation BookMenuComplete($id: ID!, $isComplete: Boolean!, $page: Int) {
-  markMediaAsComplete(id: $id, isComplete: $isComplete, page: $page) {
-    completedAt
-  }
+    mutation BookMenuComplete($id: ID!) {
+  finishMediaProgress(id: $id)
 }
     `) as unknown as TypedDocumentString<BookMenuCompleteMutation, BookMenuCompleteMutationVariables>;
 export const BookMenuDeleteSessionDocument = new TypedDocumentString(`
     mutation BookMenuDeleteSession($id: ID!) {
-  deleteMediaProgress(id: $id) {
-    __typename
-  }
+  clearMediaProgress(id: $id)
 }
     `) as unknown as TypedDocumentString<BookMenuDeleteSessionMutation, BookMenuDeleteSessionMutationVariables>;
 export const BookMenuDeleteHistoryDocument = new TypedDocumentString(`
     mutation BookMenuDeleteHistory($id: ID!) {
-  deleteMediaReadHistory(id: $id) {
-    __typename
-  }
+  deleteMediaReadingHistory(id: $id)
 }
     `) as unknown as TypedDocumentString<BookMenuDeleteHistoryMutation, BookMenuDeleteHistoryMutationVariables>;
 export const AddBookSheetDocument = new TypedDocumentString(`
@@ -10169,6 +10379,7 @@ export const PendingMetadataMatchesDocument = new TypedDocumentString(`
   status
   mediaId
   seriesId
+  rawHits
   matchCandidates {
     provider
     externalId
@@ -10225,6 +10436,8 @@ export const PendingMetadataMatchesDocument = new TypedDocumentString(`
     metadata {
       title
       summary
+      series
+      number
       genres
       writers
       colorists
@@ -10283,6 +10496,7 @@ export const AcceptMediaMatchDocument = new TypedDocumentString(`
   status
   mediaId
   seriesId
+  rawHits
   matchCandidates {
     provider
     externalId
@@ -10339,6 +10553,8 @@ export const AcceptMediaMatchDocument = new TypedDocumentString(`
     metadata {
       title
       summary
+      series
+      number
       genres
       writers
       colorists
@@ -10387,6 +10603,7 @@ export const AcceptSeriesMatchDocument = new TypedDocumentString(`
   status
   mediaId
   seriesId
+  rawHits
   matchCandidates {
     provider
     externalId
@@ -10443,6 +10660,8 @@ export const AcceptSeriesMatchDocument = new TypedDocumentString(`
     metadata {
       title
       summary
+      series
+      number
       genres
       writers
       colorists
@@ -10485,6 +10704,7 @@ export const RejectMediaMatchDocument = new TypedDocumentString(`
   status
   mediaId
   seriesId
+  rawHits
   matchCandidates {
     provider
     externalId
@@ -10541,6 +10761,8 @@ export const RejectMediaMatchDocument = new TypedDocumentString(`
     metadata {
       title
       summary
+      series
+      number
       genres
       writers
       colorists
@@ -10583,6 +10805,7 @@ export const RejectSeriesMatchDocument = new TypedDocumentString(`
   status
   mediaId
   seriesId
+  rawHits
   matchCandidates {
     provider
     externalId
@@ -10639,6 +10862,8 @@ export const RejectSeriesMatchDocument = new TypedDocumentString(`
     metadata {
       title
       summary
+      series
+      number
       genres
       writers
       colorists
@@ -10859,12 +11084,6 @@ export const UpdateEpubProgressDocument = new TypedDocumentString(`
     mutation UpdateEpubProgress($id: ID!, $input: MediaProgressInput!) {
   updateMediaProgress(id: $id, input: $input) {
     __typename
-    ... on ActiveReadingSession {
-      percentageCompleted
-      epubcfi
-      page
-      elapsedSeconds
-    }
   }
 }
     `) as unknown as TypedDocumentString<UpdateEpubProgressMutation, UpdateEpubProgressMutationVariables>;
@@ -10963,6 +11182,7 @@ export const UseCoreEventDocument = new TypedDocumentString(`
       remainingTasks
       completedSubtasks
       totalSubtasks
+      subtitle
     }
     ... on JobOutput {
       id
@@ -10991,24 +11211,18 @@ export const UsePreferencesDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<UsePreferencesMutation, UsePreferencesMutationVariables>;
 export const BookActionMenuCompleteDocument = new TypedDocumentString(`
-    mutation BookActionMenuComplete($id: ID!, $isComplete: Boolean!, $page: Int) {
-  markMediaAsComplete(id: $id, isComplete: $isComplete, page: $page) {
-    completedAt
-  }
+    mutation BookActionMenuComplete($id: ID!) {
+  finishMediaProgress(id: $id)
 }
     `) as unknown as TypedDocumentString<BookActionMenuCompleteMutation, BookActionMenuCompleteMutationVariables>;
 export const BookActionMenuDeleteSessionDocument = new TypedDocumentString(`
     mutation BookActionMenuDeleteSession($id: ID!) {
-  deleteMediaProgress(id: $id) {
-    __typename
-  }
+  clearMediaProgress(id: $id)
 }
     `) as unknown as TypedDocumentString<BookActionMenuDeleteSessionMutation, BookActionMenuDeleteSessionMutationVariables>;
 export const BookActionMenuDeleteHistoryDocument = new TypedDocumentString(`
     mutation BookActionMenuDeleteHistory($id: ID!) {
-  deleteMediaReadHistory(id: $id) {
-    __typename
-  }
+  deleteMediaReadingHistory(id: $id)
 }
     `) as unknown as TypedDocumentString<BookActionMenuDeleteHistoryMutation, BookActionMenuDeleteHistoryMutationVariables>;
 export const BookLibrarySeriesLinksDocument = new TypedDocumentString(`
@@ -11173,6 +11387,129 @@ export const BookManagementSceneAnalyzeDocument = new TypedDocumentString(`
   analyzeMedia(id: $id)
 }
     `) as unknown as TypedDocumentString<BookManagementSceneAnalyzeMutation, BookManagementSceneAnalyzeMutationVariables>;
+export const BookMetadataSearchProvidersDocument = new TypedDocumentString(`
+    query BookMetadataSearchProviders {
+  metadataProviderConfigs {
+    id
+    providerType
+    enabled
+  }
+}
+    `) as unknown as TypedDocumentString<BookMetadataSearchProvidersQuery, BookMetadataSearchProvidersQueryVariables>;
+export const BookMetadataSearchContextDocument = new TypedDocumentString(`
+    query BookMetadataSearchContext($id: ID!) {
+  mediaById(id: $id) {
+    id
+    series {
+      id
+      metadata {
+        comicid
+      }
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<BookMetadataSearchContextQuery, BookMetadataSearchContextQueryVariables>;
+export const SearchMediaMetadataDocument = new TypedDocumentString(`
+    mutation SearchMediaMetadata($id: ID!, $search: MediaMetadataSearchInput) {
+  fetchMediaMetadata(id: $id, search: $search) {
+    ...PendingMatchRecord
+  }
+}
+    fragment PendingMatchRecord on MetadataFetchRecord {
+  id
+  status
+  mediaId
+  seriesId
+  rawHits
+  matchCandidates {
+    provider
+    externalId
+    metadata {
+      __typename
+      ... on ExternalMediaMetadata {
+        title
+        seriesName
+        seriesExternalId
+        summary
+        pageCount
+        number
+        day
+        month
+        year
+        genres
+        tags
+        isbn
+        isbn13
+        writers
+        artists
+        colorists
+        letterers
+        coverArtists
+      }
+      ... on ExternalSeriesMetadata {
+        seriesTitle: title
+        alternativeTitles
+        summary
+        volumeCount
+        coverUrl
+        status
+        year
+        endYear
+        genres
+        tags
+        authors
+        ageRating
+        publisher
+      }
+    }
+    confidence
+    confidenceFactors {
+      factor
+      weight
+      matched
+    }
+  }
+  addedAt
+  updatedAt
+  media {
+    id
+    resolvedName
+    metadata {
+      title
+      summary
+      series
+      number
+      genres
+      writers
+      colorists
+      letterers
+      coverArtists
+      publisher
+      year
+      month
+      day
+      pageCount
+      identifierIsbn
+      lockedFields
+    }
+  }
+  series {
+    id
+    resolvedName
+    metadata {
+      title
+      summary
+      genres
+      writers
+      publisher
+      year
+      status
+      ageRating
+      volume
+      lockedFields
+    }
+  }
+}`) as unknown as TypedDocumentString<SearchMediaMetadataMutation, SearchMediaMetadataMutationVariables>;
 export const BookTagEditorSetTagsDocument = new TypedDocumentString(`
     mutation BookTagEditorSetTags($id: ID!, $tags: [String!]!) {
   setMediaTags(id: $id, tags: $tags) {
@@ -11634,8 +11971,6 @@ export const LibraryLayoutDocument = new TypedDocumentString(`
       totalBytes
       totalReadingTimeSeconds
     }
-    genres
-    publishers
     tags {
       id
       name
@@ -11674,6 +12009,7 @@ export const LibraryLayoutDocument = new TypedDocumentString(`
     processMetadata
     watch
     libraryPattern
+    libraryType
     thumbnailConfig {
       __typename
       resizeMethod {
@@ -12030,6 +12366,11 @@ export const RegenerateThumbnailsDocument = new TypedDocumentString(`
   generateLibraryThumbnails(id: $id, forceRegenerate: $forceRegenerate)
 }
     `) as unknown as TypedDocumentString<RegenerateThumbnailsMutation, RegenerateThumbnailsMutationVariables>;
+export const SeriesActionCompleteDocument = new TypedDocumentString(`
+    mutation SeriesActionComplete($id: ID!) {
+  finishSeriesProgress(id: $id)
+}
+    `) as unknown as TypedDocumentString<SeriesActionCompleteMutation, SeriesActionCompleteMutationVariables>;
 export const SeriesLayoutDocument = new TypedDocumentString(`
     query SeriesLayout($id: ID!) {
   seriesById(id: $id) {
@@ -12041,10 +12382,6 @@ export const SeriesLayoutDocument = new TypedDocumentString(`
     }
     resolvedName
     resolvedDescription
-    tags {
-      id
-      name
-    }
     stats {
       bookCount
       completedBooks
@@ -12052,18 +12389,9 @@ export const SeriesLayoutDocument = new TypedDocumentString(`
       totalBytes
       totalReadingTimeSeconds
     }
-    metadata {
-      status
-      publisher
-      year
-      genres
-      booktype
-      volume
-      totalIssues
-      writers
-      summary
-      descriptionFormatted
-      links
+    tags {
+      id
+      name
     }
     thumbnail {
       url
@@ -12076,6 +12404,8 @@ export const SeriesLayoutDocument = new TypedDocumentString(`
         }
       }
     }
+    createdAt
+    updatedAt
   }
 }
     `) as unknown as TypedDocumentString<SeriesLayoutQuery, SeriesLayoutQueryVariables>;
@@ -12087,6 +12417,38 @@ export const SeriesLibrayLinkDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SeriesLibrayLinkQuery, SeriesLibrayLinkQueryVariables>;
+export const SeriesOverviewSheetExtasDocument = new TypedDocumentString(`
+    query SeriesOverviewSheetExtas($id: ID!) {
+  seriesById(id: $id) {
+    id
+    metadata {
+      publisher
+      year
+      summary
+      links
+    }
+    upNext(take: 10) {
+      id
+      ...SimpleBookCard
+    }
+  }
+}
+    fragment SimpleBookCard on Media {
+  id
+  resolvedName
+  createdAt
+  thumbnail {
+    url
+    metadata {
+      averageColor
+      colors {
+        color
+        percentage
+      }
+      thumbhash
+    }
+  }
+}`) as unknown as TypedDocumentString<SeriesOverviewSheetExtasQuery, SeriesOverviewSheetExtasQueryVariables>;
 export const SeriesBooksSceneDocument = new TypedDocumentString(`
     query SeriesBooksScene($filter: MediaFilterInput!, $orderBy: [MediaOrderBy!]!, $pagination: Pagination!) {
   media(filter: $filter, orderBy: $orderBy, pagination: $pagination) {
@@ -12767,6 +13129,15 @@ export const DeleteProviderDialogDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<DeleteProviderDialogMutation, DeleteProviderDialogMutationVariables>;
+export const ProviderApiKeyInputValidateKeyDocument = new TypedDocumentString(`
+    mutation ProviderApiKeyInputValidateKey($config: ValidateMetadataProviderConfigInput!) {
+  validateProviderConfig(config: $config) {
+    isValid
+    error
+    responseStatus
+  }
+}
+    `) as unknown as TypedDocumentString<ProviderApiKeyInputValidateKeyMutation, ProviderApiKeyInputValidateKeyMutationVariables>;
 export const ProvidersSectionGetProvidersDocument = new TypedDocumentString(`
     query ProvidersSectionGetProviders {
   metadataProviderConfigs {

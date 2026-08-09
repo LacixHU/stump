@@ -1,7 +1,7 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use apalis::prelude::{Monitor, WorkerBuilder, WorkerFactoryFn};
-use axum::{extract::connect_info::Connected, Router};
+use apalis::prelude::*;
+use axum::{extract::connect_info::Connected, serve::IncomingStream, Extension, Router};
 use axum_server::tls_rustls::RustlsConfig;
 use rustls::crypto::{ring::default_provider, CryptoProvider};
 use stump_core::{
@@ -9,10 +9,18 @@ use stump_core::{
 	job::dispatch_job,
 	StumpCore,
 };
-use tower_http::trace::TraceLayer;
+use tokio::net::TcpListener;
+use tokio::sync::Notify;
+use tower_http::{
+	compression::{
+		predicate::{DefaultPredicate, NotForContentType, Predicate},
+		CompressionLayer,
+	},
+	trace::TraceLayer,
+};
 
 use crate::{
-	config::{cors, session::get_session_layer},
+	config::{cors, oidc::OidcProvider, session::get_session_layer},
 	errors::{EntryError, ServerError, ServerResult},
 	routers,
 	utils::shutdown_signal_with_cleanup,
@@ -52,8 +60,7 @@ pub async fn run_http_server(config: StumpConfig) -> ServerResult<()> {
 		.map_err(|e| ServerError::ServerStartError(e.to_string()))?;
 
 	// Initialize the scheduler
-	let _scheduler = core
-		.init_scheduler()
+	core.init_scheduler()
 		.await
 		.map_err(|e| ServerError::ServerStartError(e.to_string()))?;
 
@@ -61,49 +68,90 @@ pub async fn run_http_server(config: StumpConfig) -> ServerResult<()> {
 		.await
 		.map_err(|e| ServerError::ServerStartError(e.to_string()))?;
 
-	let server_ctx = core.get_context();
-	let job_worker_handle = {
-		let job_storage = server_ctx.job_storage.clone();
-		let apalis_state = server_ctx.apalis_state.clone();
-		tokio::spawn(async move {
-			let result = Monitor::new()
-				.register(
-					WorkerBuilder::new("stump-job-worker")
-						.data(apalis_state)
-						.backend(job_storage)
-						.build_fn(dispatch_job),
-				)
-				.run()
-				.await;
-
-			if let Err(error) = result {
-				tracing::error!(?error, "Job worker exited unexpectedly");
-			}
-		})
+	let oidc_provider: Option<Arc<OidcProvider>> = {
+		if let Some(oidc_config) = config.oidc.as_ref().filter(|c| c.is_configured()) {
+			let state = OidcProvider::new(oidc_config).await.map_err(|e| {
+				tracing::error!(?e, "OIDC client initialization failed");
+				ServerError::ServerStartError(format!("OIDC client init failed: {e:?}"))
+			})?;
+			tracing::info!("OIDC client initialized successfully");
+			Some(Arc::new(state))
+		} else {
+			None
+		}
 	};
+
+	let server_ctx = core.get_context();
 	let app_state = server_ctx.arced();
 	let cors_layer = cors::get_cors_layer(config.clone());
 
 	println!("{}", core.get_shadow_text());
 
 	let app_router = routers::mount(app_state.clone()).await;
+
+	// we have to exclude downloadable content types from compression, 1 bc a lot are already compressed
+	// but also because compression seems to strip the content-length header which breaks download progress
+	// tracking on the mobile app
+	let compression_predicate = DefaultPredicate::new()
+		.and(NotForContentType::const_new("application/epub"))
+		.and(NotForContentType::const_new("application/zip"))
+		.and(NotForContentType::const_new("application/pdf"))
+		.and(NotForContentType::const_new("application/octet-stream"))
+		.and(NotForContentType::const_new("application/x-rar"))
+		.and(NotForContentType::const_new("application/vnd.rar"))
+		.and(NotForContentType::const_new(
+			"application/vnd.comicbook+zip",
+		))
+		.and(NotForContentType::const_new("application/x-cbr"))
+		.and(NotForContentType::const_new("application/x-cbz"));
+
 	let app = Router::new()
 		.merge(app_router)
 		.with_state(app_state.clone())
 		.layer(get_session_layer(app_state.clone()))
 		.layer(cors_layer)
-		.layer(TraceLayer::new_for_http());
+		.layer(CompressionLayer::new().compress_when(compression_predicate))
+		.layer(TraceLayer::new_for_http())
+		.layer(Extension(oidc_provider));
+
+	let shutdown_notify = Arc::new(Notify::new());
 
 	// TODO: Refactor to use https://docs.rs/async-shutdown/latest/async_shutdown/
 	let cleanup = {
+		let shutdown_notify = shutdown_notify.clone();
 		|| async move {
 			println!("Initializing graceful shutdown...");
 			let _ = core.get_context().library_watcher.stop().await;
-			job_worker_handle.abort();
+			shutdown_notify.notify_waiters();
 		}
 	};
 
-	let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
+	let ip: std::net::IpAddr =
+		config.ip.parse().map_err(|e: std::net::AddrParseError| {
+			ServerError::ServerStartError(e.to_string())
+		})?;
+	let addr = SocketAddr::from((ip, config.port));
+
+	// TODO: Experiment with higher concurrency, YEARS ago at this point (before enforcing WAL even)
+	// I experienced multi-writer issues but perhaps with SeaORM + WAL we can have parallel scans.
+	let monitor = Monitor::new()
+		.register(
+			WorkerBuilder::new("stump-worker")
+				.enable_tracing()
+				.data(server_ctx.apalis_state.clone())
+				.concurrency(1)
+				.backend(server_ctx.job_storage.clone())
+				.build_fn(dispatch_job),
+		)
+		.with_terminator(tokio::time::sleep(Duration::from_secs(30)))
+		.run_with_signal({
+			let shutdown_notify = shutdown_notify.clone();
+			async move {
+				shutdown_notify.notified().await;
+				Ok(())
+			}
+		});
+
 	if config.tls_enabled {
 		if CryptoProvider::get_default().is_none() {
 			default_provider().install_default().map_err(|_| {
@@ -137,26 +185,25 @@ pub async fn run_http_server(config: StumpConfig) -> ServerResult<()> {
 
 		tracing::info!("⚡️ Stump HTTPS server starting on https://{}", addr);
 
-		axum_server::bind_rustls(addr, tls_config)
+		let https = axum_server::bind_rustls(addr, tls_config)
 			.handle(handle)
-			.serve(app.into_make_service_with_connect_info::<StumpRequestInfo>())
+			.serve(app.into_make_service_with_connect_info::<StumpRequestInfo>());
+
+		let _ = tokio::join!(monitor, https);
+	} else {
+		let listener = tokio::net::TcpListener::bind(&addr)
 			.await
 			.map_err(|e| ServerError::ServerStartError(e.to_string()))?;
-	} else {
-		let handle = axum_server::Handle::new();
-		let shutdown_handle = handle.clone();
-		tokio::spawn(async move {
-			shutdown_signal_with_cleanup(Some(cleanup)).await;
-			shutdown_handle.graceful_shutdown(None);
-		});
 
 		tracing::info!("⚡️ Stump HTTP server starting on http://{}", addr);
 
-		axum_server::bind(addr)
-			.handle(handle)
-			.serve(app.into_make_service_with_connect_info::<StumpRequestInfo>())
-			.await
-			.map_err(|e| ServerError::ServerStartError(e.to_string()))?;
+		let http = axum::serve(
+			listener,
+			app.into_make_service_with_connect_info::<StumpRequestInfo>(),
+		)
+		.with_graceful_shutdown(shutdown_signal_with_cleanup(Some(cleanup)));
+
+		let _ = tokio::join!(monitor, http);
 	}
 
 	Ok(())
@@ -190,6 +237,14 @@ impl Connected<SocketAddr> for StumpRequestInfo {
 	fn connect_info(target: SocketAddr) -> Self {
 		StumpRequestInfo {
 			ip_addr: target.ip(),
+		}
+	}
+}
+
+impl Connected<IncomingStream<'_, TcpListener>> for StumpRequestInfo {
+	fn connect_info(target: IncomingStream<'_, TcpListener>) -> Self {
+		StumpRequestInfo {
+			ip_addr: target.remote_addr().ip(),
 		}
 	}
 }

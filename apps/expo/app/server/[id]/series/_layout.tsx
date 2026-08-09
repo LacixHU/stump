@@ -4,10 +4,12 @@ import { Platform } from 'react-native'
 
 import BackLink from '~/components/BackLink'
 import { IS_IOS_26_PLUS } from '~/lib/constants'
+import { useTranslate } from '~/lib/hooks'
 import { usePreferencesStore } from '~/stores'
 import { createSeriesFilterStore, SeriesFilterContext } from '~/stores/filters'
 
 export default function Screen() {
+	const { t } = useTranslate()
 	const animationEnabled = usePreferencesStore((state) => !state.reduceAnimations)
 
 	// eslint-disable-next-line react-hooks/refs
@@ -25,13 +27,12 @@ export default function Screen() {
 				<Stack.Screen
 					name="index"
 					options={{
-						headerTitle: 'Series',
+						headerTitle: t('stumpServer.browse.series'),
 						headerShown: true,
 						headerTransparent: Platform.OS === 'ios',
 						headerLargeTitleStyle: {
 							fontSize: 30,
 						},
-						headerLargeTitle: Platform.OS === 'ios',
 						headerBlurEffect: IS_IOS_26_PLUS ? undefined : 'regular',
 						animation: animationEnabled ? 'default' : 'none',
 						headerLeft: Platform.OS === 'android' ? undefined : () => <BackLink />,

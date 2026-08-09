@@ -15,6 +15,7 @@ import {
 	PDFViewRef,
 	ReadiumLocator,
 } from '~/modules/readium'
+import { useVolumeListener } from '~/modules/volumeListener'
 import { useReaderStore } from '~/stores'
 import { usePdfStore } from '~/stores/pdf'
 import { Timer, useBookPreferences } from '~/stores/reader'
@@ -46,7 +47,7 @@ type Props = {
 	/**
 	 * The active book's timer
 	 */
-	timer?: Timer
+	timer: Timer
 } & OfflineCompatibleReader
 
 // TODO(expo-pdf): Long term, consider just using a library like https://github.com/wonday/react-native-pdf
@@ -73,6 +74,14 @@ export default function PdfReader({ book, initialPage, onPageChanged, ...ctx }: 
 
 	const controlsVisible = useReaderStore((state) => state.showControls)
 	const setControlsVisible = useReaderStore((state) => state.setShowControls)
+
+	useEffect(() => {
+		if (controlsVisible) {
+			ctx.timer.pause()
+		} else {
+			ctx.timer.resume()
+		}
+	}, [controlsVisible, ctx.timer])
 
 	const { preferences: bookPreferences } = useBookPreferences({ book, serverId: ctx.serverId })
 
@@ -123,6 +132,12 @@ export default function PdfReader({ book, initialPage, onPageChanged, ...ctx }: 
 			}) satisfies PDFViewRef,
 		[],
 	)
+
+	useVolumeListener({
+		enabled: bookPreferences.volumeButtonsNavigate,
+		onVolumeUp: () => navigator.goForward(),
+		onVolumeDown: () => navigator.goBackward(),
+	})
 
 	const store = usePdfStore(
 		useShallow((store) => ({
