@@ -35,6 +35,24 @@ fn series_with_media_subquery() -> sea_orm::sea_query::SelectStatement {
 		.to_owned()
 }
 
+/// Series that are parents of other series (nested hierarchy intermediate/root nodes).
+/// Without this, parent folders with no loose files are hidden from series lists.
+fn series_that_are_parents_subquery() -> sea_orm::sea_query::SelectStatement {
+	Query::select()
+		.distinct()
+		.column(series::Column::ParentSeriesId)
+		.from(series::Entity)
+		.and_where(series::Column::ParentSeriesId.is_not_null())
+		.and_where(series::Column::DeletedAt.is_null())
+		.to_owned()
+}
+
+fn series_visible_in_lists_condition() -> sea_orm::Condition {
+	sea_orm::Condition::any()
+		.add(series::Column::Id.in_subquery(series_with_media_subquery()))
+		.add(series::Column::Id.in_subquery(series_that_are_parents_subquery()))
+}
+
 #[Object]
 impl SeriesQuery {
 	async fn series(
@@ -52,7 +70,7 @@ impl SeriesQuery {
 
 		let conditions = filter
 			.into_filter_with_user(&user.id)
-			.add(series::Column::Id.in_subquery(series_with_media_subquery()));
+			.add(series_visible_in_lists_condition());
 		let query = SeriesOrderBy::add_order_by(
 			&order_by,
 			series::ModelWithMetadata::find_for_user(user).filter(conditions),

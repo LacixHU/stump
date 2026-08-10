@@ -29,6 +29,11 @@ pub struct SeriesFilterInput {
 	pub path: Option<StringLikeFilter<String>>,
 	#[graphql(default)]
 	pub library_id: Option<StringLikeFilter<String>>,
+	#[graphql(default)]
+	pub parent_series_id: Option<StringLikeFilter<String>>,
+	/// When true, only series with no parent (library roots / top-level).
+	#[graphql(default)]
+	pub is_root: Option<bool>,
 
 	#[graphql(default)]
 	pub reading_status: Option<ConceptualFilter<ReadingStatus>>,
@@ -270,6 +275,17 @@ impl SeriesFilterInput {
 				self.library_id
 					.map(|f| apply_string_filter(series::Column::LibraryId, f)),
 			)
+			.add_option(
+				self.parent_series_id
+					.map(|f| apply_string_filter(series::Column::ParentSeriesId, f)),
+			)
+			.add_option(self.is_root.map(|is_root| {
+				if is_root {
+					Condition::all().add(series::Column::ParentSeriesId.is_null())
+				} else {
+					Condition::all().add(series::Column::ParentSeriesId.is_not_null())
+				}
+			}))
 			.add_option(self.library_type.map(apply_library_type_filter))
 			.add_option(self.metadata.map(|f| f.into_filter()))
 			.add_option(self.library.map(|f| f.into_filter()))

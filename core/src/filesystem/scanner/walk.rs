@@ -29,6 +29,8 @@ pub struct WalkerCtx {
 	pub ignore_rules: GlobSet,
 	// Will be 1 if the library is collection based, None
 	pub max_depth: Option<usize>,
+	/// When true, intermediate ancestor folders of media dirs become series too
+	pub nested: bool,
 	/// The scan options to apply during the walk
 	pub options: ScanOptions,
 	/// Stored directory mtimes, loaded at scan start to be used for
@@ -73,6 +75,7 @@ pub async fn walk_library(
 		db,
 		ignore_rules,
 		max_depth,
+		nested,
 		..
 	}: WalkerCtx,
 ) -> CoreResult<WalkedLibrary> {
@@ -83,18 +86,23 @@ pub async fn walk_library(
 	}
 
 	let walk_start = std::time::Instant::now();
-	let is_collection_based = max_depth.is_some_and(|d| d == 1);
+	let is_collection_based = max_depth.is_some_and(|d| d == 1) && !nested;
 	tracing::debug!(
 		?path,
 		max_depth,
 		is_collection_based,
+		nested,
 		?ignore_rules,
 		"Walking library",
 	);
 
 	let path_owned = path.to_string();
-	let (valid_entries, ignored_entries): (Vec<DirEntry>, Vec<DirEntry>) =
+	let (valid_paths, ignored_paths): (Vec<PathBuf>, Vec<PathBuf>) =
 		tokio::task::spawn_blocking(move || {
+			if nested {
+				return walk_library_nested(&path_owned, &ignore_rules);
+			}
+
 			let mut walkdir = WalkDir::new(&path_owned);
 			if let Some(num) = max_depth {
 				walkdir = walkdir.max_depth(num);
@@ -127,21 +135,21 @@ pub async fn walk_library(
 					tracing::trace!(?is_valid, ?entry_path_str);
 
 					if is_valid {
-						Either::Left(entry)
+						Either::Left(entry.path().to_owned())
 					} else {
-						Either::Right(entry)
+						Either::Right(entry.path().to_owned())
 					}
 				})
 		})
 		.await
 		.map_err(|e| CoreError::InternalError(format!("Failed to walk library! {e}")))?;
 
-	let ignored_directories = ignored_entries.len() as u64;
-	let seen_directories = valid_entries.len() as u64 + ignored_directories;
+	let ignored_directories = ignored_paths.len() as u64;
+	let seen_directories = valid_paths.len() as u64 + ignored_directories;
 
 	tracing::debug!(
 		seen_directories,
-		ignored_entries = ignored_entries.len(),
+		ignored_entries = ignored_paths.len(),
 		"Walk finished in {}ms",
 		walk_start.elapsed().as_millis()
 	);
@@ -162,11 +170,7 @@ pub async fn walk_library(
 			tracing::debug!(
 				"No existing series found in the database, all series are new"
 			);
-			let series_to_create = valid_entries
-				.into_iter()
-				.map(|e| e.path().to_owned())
-				.collect::<Vec<PathBuf>>();
-			(series_to_create, vec![], vec![], vec![])
+			(valid_paths, vec![], vec![], vec![])
 		} else {
 			let existing_series_map = existing_records
 				.iter()
@@ -188,22 +192,21 @@ pub async fn walk_library(
 				.collect::<Vec<String>>();
 
 			let (series_to_create, series_to_visit) = {
-				// existing series in ignored_entries should be -> empty dirs but exist on disk, so we still
+				// existing series in ignored_paths should be -> empty dirs but exist on disk, so we still
 				// want to visit them. relates to https://github.com/stumpapp/stump/issues/1051
-				let existing_empty_series: Vec<PathBuf> = ignored_entries
+				let existing_empty_series: Vec<PathBuf> = ignored_paths
 					.iter()
-					.filter_map(|e| {
-						let path_str = e.path().to_string_lossy().to_string();
+					.filter_map(|p| {
+						let path_str = p.to_string_lossy().to_string();
 						existing_series_map
 							.contains_key(&path_str)
-							.then(|| e.path().to_owned())
+							.then(|| p.clone())
 					})
 					.collect();
 
-				valid_entries
-					.iter()
-					.filter(|e| !missing_series.contains(&e.path().to_path_buf()))
-					.map(|e| e.path().to_owned())
+				valid_paths
+					.into_iter()
+					.filter(|p| !missing_series.contains(p))
 					.chain(existing_empty_series)
 					.partition_map(|path| {
 						let already_exists = existing_series_map
@@ -251,6 +254,141 @@ pub async fn walk_library(
 	})
 }
 
+/// Nested library discovery: every directory that directly contains media, plus all
+/// ancestor directories up to (but not including) the library root unless the root
+/// itself contains media, becomes a series path.
+fn walk_library_nested(
+	library_path: &str,
+	ignore_rules: &GlobSet,
+) -> (Vec<PathBuf>, Vec<PathBuf>) {
+	use std::collections::HashSet;
+
+	let library = PathBuf::from(library_path);
+	let mut all_dirs: Vec<PathBuf> = Vec::new();
+	let mut media_dirs: HashSet<PathBuf> = HashSet::new();
+	let mut ignored: Vec<PathBuf> = Vec::new();
+
+	for entry in WalkDir::new(&library)
+		.min_depth(0)
+		.into_iter()
+		.filter_entry(|e| e.path().is_dir())
+		.filter_map(Result::ok)
+	{
+		let entry_path = entry.path().to_path_buf();
+		if ignore_rules.is_match(&entry_path) {
+			ignored.push(entry_path);
+			continue;
+		}
+		all_dirs.push(entry_path.clone());
+		if entry_path.dir_has_media(ignore_rules) {
+			media_dirs.insert(entry_path);
+		}
+	}
+
+	let mut series_paths: HashSet<PathBuf> = HashSet::new();
+	for media_dir in &media_dirs {
+		series_paths.insert(media_dir.clone());
+
+		let mut current = media_dir.clone();
+		while let Some(parent) = current.parent().map(Path::to_path_buf) {
+			if parent == library {
+				// Library root is only a series when it directly contains media
+				if media_dirs.contains(&library) {
+					series_paths.insert(library.clone());
+				}
+				break;
+			}
+			if !parent.starts_with(&library) {
+				break;
+			}
+			if ignore_rules.is_match(&parent) {
+				break;
+			}
+			series_paths.insert(parent.clone());
+			current = parent;
+		}
+	}
+
+	let valid: Vec<PathBuf> = series_paths.into_iter().collect();
+	let valid_set: HashSet<PathBuf> = valid.iter().cloned().collect();
+	for dir in all_dirs {
+		if !valid_set.contains(&dir) && !ignored.iter().any(|p| p == &dir) {
+			ignored.push(dir);
+		}
+	}
+
+	tracing::trace!(
+		valid = valid.len(),
+		ignored = ignored.len(),
+		"Nested library walk classified directories"
+	);
+
+	(valid, ignored)
+}
+
+#[cfg(test)]
+mod nested_walk_tests {
+	use super::*;
+	use globset::GlobSetBuilder;
+	use std::fs;
+	use tempfile::tempdir;
+
+	fn empty_ignore() -> GlobSet {
+		GlobSetBuilder::new().build().unwrap()
+	}
+
+	#[test]
+	fn nested_includes_ancestor_without_direct_media() {
+		let dir = tempdir().unwrap();
+		let library = dir.path().join("lib");
+		let author = library.join("Author");
+		let series = author.join("Mistborn");
+		fs::create_dir_all(&series).unwrap();
+		fs::write(series.join("book1.epub"), b"fake").unwrap();
+		fs::write(author.join("standalone.epub"), b"fake").unwrap();
+
+		let (valid, _) = walk_library_nested(library.to_str().unwrap(), &empty_ignore());
+
+		assert!(valid.iter().any(|p| p == &author));
+		assert!(valid.iter().any(|p| p == &series));
+		assert!(!valid.iter().any(|p| p == &library));
+	}
+
+	#[test]
+	fn nested_kockas_regi_style_tree() {
+		// F:\Ebooks\Kockás\Régi\*.cbz → series Kockás (root) + Régi (child)
+		let dir = tempdir().unwrap();
+		let library = dir.path().join("Ebooks");
+		let kockas = library.join("Kockás");
+		let regi = kockas.join("Régi");
+		fs::create_dir_all(&regi).unwrap();
+		fs::write(regi.join("Kockás 01.cbz"), b"fake").unwrap();
+
+		let (valid, _) = walk_library_nested(library.to_str().unwrap(), &empty_ignore());
+
+		assert!(
+			valid.iter().any(|p| p == &kockas),
+			"parent folder Kockás must be a series: {valid:?}"
+		);
+		assert!(
+			valid.iter().any(|p| p == &regi),
+			"leaf folder Régi must be a series: {valid:?}"
+		);
+	}
+
+	#[test]
+	fn nested_includes_library_root_when_it_has_media() {
+		let dir = tempdir().unwrap();
+		let library = dir.path().join("lib");
+		fs::create_dir_all(&library).unwrap();
+		fs::write(library.join("root-book.epub"), b"fake").unwrap();
+
+		let (valid, _) = walk_library_nested(library.to_str().unwrap(), &empty_ignore());
+
+		assert!(valid.iter().any(|p| p == &library));
+	}
+}
+
 /// The output of walking a series
 #[derive(Default)]
 pub struct WalkedSeries {
@@ -295,6 +433,7 @@ pub async fn walk_series(
 		options,
 		dir_mtimes,
 		series_id,
+		..
 	}: WalkerCtx,
 ) -> CoreResult<WalkedSeries> {
 	if tokio::fs::metadata(path).await.is_err() {

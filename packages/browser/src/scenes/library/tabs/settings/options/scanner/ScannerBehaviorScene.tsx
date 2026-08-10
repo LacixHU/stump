@@ -2,6 +2,7 @@ import { useLibraryManagement } from '../../context'
 import FileConversionOptionsPatchForm from './FileConversionOptionsPatchForm'
 import ScanHistorySection from './history'
 import IgnoreRulesPatchForm from './IgnoreRulesPatchForm'
+import LibraryPatternPatchForm from './LibraryPatternPatchForm'
 import ScannerActionsSection from './ScannerActionsSection'
 import ScannerFeaturesPatchForm from './ScannerFeaturesPatchForm'
 
@@ -14,6 +15,7 @@ export default function GeneralFileOptionsScene() {
 
 			<ScanHistorySection />
 
+			<LibraryPatternPatchForm />
 			<ScannerFeaturesPatchForm />
 			<FileConversionOptionsPatchForm />
 			<IgnoreRulesPatchForm />

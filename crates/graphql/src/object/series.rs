@@ -91,6 +91,117 @@ impl Series {
 		Ok(Library::from(model))
 	}
 
+	/// Parent series in a nested library hierarchy, if any.
+	async fn parent(&self, ctx: &Context<'_>) -> Result<Option<Series>> {
+		let Some(parent_id) = self.model.parent_series_id.clone() else {
+			return Ok(None);
+		};
+
+		let AuthContext { user, .. } = ctx.data::<AuthContext>()?;
+		let conn = ctx.data::<CoreContext>()?.conn.as_ref();
+
+		let model = series::ModelWithMetadata::find_by_id_for_user(parent_id, user)
+			.into_model::<series::ModelWithMetadata>()
+			.one(conn)
+			.await?;
+
+		Ok(model.map(Series::from))
+	}
+
+	/// Direct child series under this series (nested libraries).
+	async fn children(
+		&self,
+		ctx: &Context<'_>,
+		#[graphql(default, validator(minimum = 1))] take: Option<u64>,
+		#[graphql(default, validator(minimum = 0))] skip: Option<u64>,
+	) -> Result<Vec<Series>> {
+		let AuthContext { user, .. } = ctx.data::<AuthContext>()?;
+		let conn = ctx.data::<CoreContext>()?.conn.as_ref();
+
+		let models = series::ModelWithMetadata::find_for_user(user)
+			.filter(series::Column::ParentSeriesId.eq(self.model.id.clone()))
+			.order_by_asc(series::Column::Name)
+			.apply_if(take, |query, take| query.limit(take))
+			.apply_if(skip, |query, skip| query.offset(skip))
+			.into_model::<series::ModelWithMetadata>()
+			.all(conn)
+			.await?;
+
+		Ok(models.into_iter().map(Series::from).collect())
+	}
+
+	/// Ancestor series from root to immediate parent (root-first).
+	async fn ancestors(&self, ctx: &Context<'_>) -> Result<Vec<Series>> {
+		let AuthContext { user, .. } = ctx.data::<AuthContext>()?;
+		let conn = ctx.data::<CoreContext>()?.conn.as_ref();
+
+		let mut chain = Vec::new();
+		let mut current_parent_id = self.model.parent_series_id.clone();
+		// Guard against cycles
+		let mut seen = std::collections::HashSet::new();
+		seen.insert(self.model.id.clone());
+
+		while let Some(parent_id) = current_parent_id {
+			if !seen.insert(parent_id.clone()) {
+				break;
+			}
+			let Some(model) =
+				series::ModelWithMetadata::find_by_id_for_user(parent_id, user)
+					.into_model::<series::ModelWithMetadata>()
+					.one(conn)
+					.await?
+			else {
+				break;
+			};
+			current_parent_id = model.series.parent_series_id.clone();
+			chain.push(Series::from(model));
+		}
+
+		chain.reverse();
+		Ok(chain)
+	}
+
+	async fn child_count(&self, ctx: &Context<'_>) -> Result<i64> {
+		let AuthContext { user, .. } = ctx.data::<AuthContext>()?;
+		let conn = ctx.data::<CoreContext>()?.conn.as_ref();
+
+		let count = series::Entity::find_for_user(user)
+			.filter(series::Column::ParentSeriesId.eq(self.model.id.clone()))
+			.count(conn)
+			.await? as i64;
+
+		Ok(count)
+	}
+
+	/// Count of media in this series and all descendant series (path-prefix rollup).
+	async fn descendant_media_count(&self, ctx: &Context<'_>) -> Result<i64> {
+		let AuthContext { user, .. } = ctx.data::<AuthContext>()?;
+		let conn = ctx.data::<CoreContext>()?.conn.as_ref();
+
+		// Self + descendants via path prefix under this series path
+		let series_path = self.model.path.clone();
+		let path_prefix = format!("{}{}", series_path, std::path::MAIN_SEPARATOR);
+		let count = media::Entity::find_for_user(user)
+			.filter(
+				media::Column::SeriesId.in_subquery(
+					Query::select()
+						.column(series::Column::Id)
+						.from(series::Entity)
+						.and_where(
+							series::Column::Id
+								.eq(self.model.id.clone())
+								.or(series::Column::Path.starts_with(path_prefix)),
+						)
+						.and_where(series::Column::DeletedAt.is_null())
+						.to_owned(),
+				),
+			)
+			.count(conn)
+			.await? as i64;
+
+		Ok(count)
+	}
+
 	// TODO(perf): We probably could put this behind a dataloader if used frequently
 	/// Get media in this series
 	async fn media(

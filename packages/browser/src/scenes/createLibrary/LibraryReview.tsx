@@ -144,7 +144,9 @@ export default function LibraryReview() {
 					<Text variant="muted" size="sm">
 						{state.libraryPattern === LibraryPattern.CollectionBased
 							? t(getPatternKey('collectionPriority.label'))
-							: t(getPatternKey('seriesPriority.label'))}
+							: state.libraryPattern === LibraryPattern.Nested
+								? t(getPatternKey('nested.label'))
+								: t(getPatternKey('seriesPriority.label'))}
 					</Text>
 				</div>
 

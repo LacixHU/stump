@@ -2,10 +2,9 @@
 title: Libraries
 ---
 
-import { File, Folder, Files } from 'fumadocs-ui/components/files';
-import { Step, Steps } from 'fumadocs-ui/components/steps';
-import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
-
+import { File, Folder, Files } from 'fumadocs-ui/components/files'
+import { Step, Steps } from 'fumadocs-ui/components/steps'
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs'
 
 There are a couple key concepts to go over regarding how Stump represents libraries:
 
@@ -16,10 +15,11 @@ As long as a directory is accessible by Stump, and abides by the above specifica
 
 ## Supported Patterns
 
-There are way too many varying organizational preferences for Stump to support all of them. Instead, Stump supports two different patterns for organizing your library:
+There are way too many varying organizational preferences for Stump to support all of them. Instead, Stump supports three different patterns for organizing your library:
 
 - **Collection-Priority**: Takes the top most folders and collapses their contents into it as a single series.
 - **Series-Priority**: Will create a separate series for each folder that directly contains media files, not just the top most folder.
+- **Nested**: Builds a parent/child series tree from the full folder hierarchy (e.g. Author → Series → books).
 
 <Callout>
 	I'm **very** actively trying to figure out better names for these patterns. Please reach out if
@@ -33,6 +33,14 @@ A collection-priority library is useful for libraries that have many nested fold
 ### Series-Priority
 
 A series-priority library is useful for libraries which should be grouped by any directory that directly contains media files. **Any descendant directories (including the library root itself) will be considered for series creation**, so long as they directly contain media files.
+
+### Nested
+
+A nested library turns the folder tree into a **series hierarchy**. Every directory that directly contains media becomes a series, and every ancestor folder up to the library root also becomes a series (so intermediate folders without loose files still appear as parents).
+
+- Media always belong to the series whose folder **directly** contains the file.
+- Parent series can have their own books and child series (for example, an author folder with a standalone ebook plus a Mistborn subfolder).
+- The library series view lists **root** series first; open a series to browse sub-series and breadcrumbs.
 
 ### Examples
 
@@ -349,6 +357,7 @@ The process for creating a library is broken up into a few steps:
 #### Basics
 
 The first step is for filling out the very basic information about the library, such as its name and path. Optionally, you can also configure any tags or a description for the library here.
+
 </Step>
 
 <Step>
@@ -357,6 +366,7 @@ The first step is for filling out the very basic information about the library, 
 The second step is a bit larger, and is primarily focused on gathering information about how the scanner should process the library. This includes the library pattern, metadata processing, file hashing and conversion, and ignore rules.
 
 With the exception of the library pattern, all of these options may be changed at any time after the library is created. So don't worry too much about getting them perfect the first time!
+
 </Step>
 
 <Step>
@@ -369,7 +379,7 @@ When enabled, you will be presented with a few options for defining the generati
 - **Size**: Either "Evenly Scaled", "Auto Scaled", or "Explicitly Sized". Evenly Scaled will scale the image to fit within the specified ratio, while Auto Scaled will resize the image to fit within the exact dimensions (in pixels) specified while maintaining the aspect ratio.
 - **Format**: The output format for the thumbnail, e.g., `JPEG`, `PNG`, etc.
 - **Quality**: The quality of the output image, a number between 0 and 1. Higher numbers generally mean higher quality, but also larger file sizes.
-</Step>
+  </Step>
 
 <Step>
 #### Review
@@ -377,6 +387,7 @@ When enabled, you will be presented with a few options for defining the generati
 There is a final review step to ensure that all of the information you've entered is correct. If you need to make any changes, you can navigate back to the appropriate step by clicking it in the header. Additionally, you have the option to skip the initial scan.
 
 When you are ready to create the library, click the "Create Library" button. You should be redirected to the library's page by default.
+
 </Step>
 
 </Steps>
@@ -387,9 +398,7 @@ You can edit a library by navigating to the library's settings page. From there,
 
 #### Analysis
 
-<Callout>
-	This section is not feature complete and is subject to change in the future.
-</Callout>
+<Callout>This section is not feature complete and is subject to change in the future.</Callout>
 
 There are more resource-intensive analysis operations which can be done on a library. At the moment, the only option is `Analyze books`.
 

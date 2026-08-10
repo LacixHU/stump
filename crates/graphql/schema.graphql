@@ -1150,6 +1150,7 @@ enum LibraryModelOrdering {
 enum LibraryPattern {
 	SERIES_BASED
 	COLLECTION_BASED
+	NESTED
 }
 
 input LibraryScanConfigInput {
@@ -2483,7 +2484,7 @@ type Query {
 	numberOfLibraries: Int!
 	lastVisitedLibrary: Library
 	libraryMissingEntities(libraryId: ID!, pagination: Pagination! = {offset: {page: 1, pageSize: 20, zeroBased: false}}): PaginatedMissingEntityResponse!
-	series(filter: SeriesFilterInput! = {name: null, path: null, libraryId: null, readingStatus: null, libraryType: null, metadata: null, library: null, _and: null, _not: null, _or: null}, orderBy: [SeriesOrderBy!]! = [{series: {field: NAME, direction: ASC}}], pagination: Pagination! = {offset: {page: 1, pageSize: 20, zeroBased: false}}): PaginatedSeriesResponse!
+	series(filter: SeriesFilterInput! = {name: null, path: null, libraryId: null, parentSeriesId: null, isRoot: null, readingStatus: null, libraryType: null, metadata: null, library: null, _and: null, _not: null, _or: null}, orderBy: [SeriesOrderBy!]! = [{series: {field: NAME, direction: ASC}}], pagination: Pagination! = {offset: {page: 1, pageSize: 20, zeroBased: false}}): PaginatedSeriesResponse!
 	seriesById(id: ID!): Series
 	"Returns the available alphabet for all series in the server"
 	seriesAlphabet: JSONObject!
@@ -2859,11 +2860,21 @@ type Series {
 	thumbnailMeta: ImageMetadata
 	thumbnailPath: String
 	libraryId: String
+	parentSeriesId: String
 	metadata: SeriesMetadata
 	isFavorite: Boolean!
 	resolvedName: String!
 	resolvedDescription: String
 	library: Library!
+	"Parent series in a nested library hierarchy, if any."
+	parent: Series
+	"Direct child series under this series (nested libraries)."
+	children(take: Int = null, skip: Int = null): [Series!]!
+	"Ancestor series from root to immediate parent (root-first)."
+	ancestors: [Series!]!
+	childCount: Int!
+	"Count of media in this series and all descendant series (path-prefix rollup)."
+	descendantMediaCount: Int!
 	"Get media in this series"
 	media(take: Int = null, skip: Int = null): [Media!]!
 	mediaCount: Int!
@@ -2886,6 +2897,9 @@ input SeriesFilterInput {
 	name: FieldFilterString = null
 	path: FieldFilterString = null
 	libraryId: FieldFilterString = null
+	parentSeriesId: FieldFilterString = null
+	"When true, only series with no parent (library roots / top-level)."
+	isRoot: Boolean = null
 	readingStatus: ComputedFilterReadingStatus = null
 	libraryType: ComputedFilterLibraryType = null
 	metadata: SeriesMetadataFilterInput = null
@@ -3026,6 +3040,7 @@ enum SeriesModelOrdering {
 	THUMBNAIL_META
 	THUMBNAIL_PATH
 	LIBRARY_ID
+	PARENT_SERIES_ID
 }
 
 input SeriesOrderBy @oneOf {
@@ -3263,6 +3278,12 @@ type StumpConfig {
 	When disabled, clients loading/preloading pages won't trigger progress updates.
 	"""
 	enableOpdsProgression: Boolean!
+	"Whether HTTPS should be enabled for the server listener."
+	tlsEnabled: Boolean!
+	"Path to the TLS certificate PEM chain (e.g. fullchain.pem)."
+	tlsCertPath: String
+	"Path to the TLS private key PEM file (e.g. domain.key)."
+	tlsKeyPath: String
 	"Password hash cost"
 	passwordHashCost: Int!
 	"The time in seconds that a login session will be valid for."

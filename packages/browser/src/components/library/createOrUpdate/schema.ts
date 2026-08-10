@@ -24,7 +24,11 @@ type Library = ILibraryContext['library']
  * A type guard to check if the input is a valid {@link LibraryPattern}
  */
 const isLibraryPattern = (input: string): input is LibraryPattern => {
-	return input === LibraryPattern.SeriesBased || input === LibraryPattern.CollectionBased
+	return (
+		input === LibraryPattern.SeriesBased ||
+		input === LibraryPattern.CollectionBased ||
+		input === LibraryPattern.Nested
+	)
 }
 
 /**

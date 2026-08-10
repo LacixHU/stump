@@ -31,6 +31,7 @@ mod m20260613_000000_add_series_path_index;
 mod m20260617_200820_rm_thumbnails_in_headers_pref;
 mod m20260702_000000_metadata_fetch_partial_results;
 mod m20260804_000000_smart_list_role_to_integer;
+mod m20260809_000000_nested_series;
 
 pub struct Migrator;
 
@@ -68,6 +69,7 @@ impl MigratorTrait for Migrator {
 			Box::new(m20260617_200820_rm_thumbnails_in_headers_pref::Migration),
 			Box::new(m20260702_000000_metadata_fetch_partial_results::Migration),
 			Box::new(m20260804_000000_smart_list_role_to_integer::Migration),
+			Box::new(m20260809_000000_nested_series::Migration),
 		]
 	}
 }

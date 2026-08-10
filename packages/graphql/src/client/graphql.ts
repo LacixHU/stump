@@ -1245,6 +1245,7 @@ export enum LibraryModelOrdering {
 /** The different patterns a library may be organized by */
 export enum LibraryPattern {
   CollectionBased = 'COLLECTION_BASED',
+  Nested = 'NESTED',
   SeriesBased = 'SERIES_BASED'
 }
 
@@ -4006,8 +4007,15 @@ export type SendToEmail = {
 
 export type Series = {
   __typename?: 'Series';
+  /** Ancestor series from root to immediate parent (root-first). */
+  ancestors: Array<Series>;
+  childCount: Scalars['Int']['output'];
+  /** Direct child series under this series (nested libraries). */
+  children: Array<Series>;
   createdAt: Scalars['DateTime']['output'];
   deletedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** Count of media in this series and all descendant series (path-prefix rollup). */
+  descendantMediaCount: Scalars['Int']['output'];
   description?: Maybe<Scalars['String']['output']>;
   id: Scalars['String']['output'];
   isComplete: Scalars['Boolean']['output'];
@@ -4020,6 +4028,9 @@ export type Series = {
   mediaCount: Scalars['Int']['output'];
   metadata?: Maybe<SeriesMetadata>;
   name: Scalars['String']['output'];
+  /** Parent series in a nested library hierarchy, if any. */
+  parent?: Maybe<Series>;
+  parentSeriesId?: Maybe<Scalars['String']['output']>;
   path: Scalars['String']['output'];
   percentageCompleted: Scalars['Float']['output'];
   readCount: Scalars['Int']['output'];
@@ -4038,6 +4049,12 @@ export type Series = {
   unreadCount: Scalars['Int']['output'];
   upNext: Array<Media>;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
+};
+
+
+export type SeriesChildrenArgs = {
+  skip?: InputMaybe<Scalars['Int']['input']>;
+  take?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -4061,11 +4078,14 @@ export type SeriesFilterInput = {
   _and?: InputMaybe<Array<SeriesFilterInput>>;
   _not?: InputMaybe<Array<SeriesFilterInput>>;
   _or?: InputMaybe<Array<SeriesFilterInput>>;
+  /** When true, only series with no parent (library roots / top-level). */
+  isRoot?: InputMaybe<Scalars['Boolean']['input']>;
   library?: InputMaybe<LibraryFilterInput>;
   libraryId?: InputMaybe<FieldFilterString>;
   libraryType?: InputMaybe<ComputedFilterLibraryType>;
   metadata?: InputMaybe<SeriesMetadataFilterInput>;
   name?: InputMaybe<FieldFilterString>;
+  parentSeriesId?: InputMaybe<FieldFilterString>;
   path?: InputMaybe<FieldFilterString>;
   readingStatus?: InputMaybe<ComputedFilterReadingStatus>;
 };
@@ -4197,6 +4217,7 @@ export enum SeriesModelOrdering {
   Id = 'ID',
   LibraryId = 'LIBRARY_ID',
   Name = 'NAME',
+  ParentSeriesId = 'PARENT_SERIES_ID',
   Path = 'PATH',
   Status = 'STATUS',
   ThumbnailMeta = 'THUMBNAIL_META',
@@ -4436,6 +4457,7 @@ export type StumpConfig = {
   configDir: Scalars['String']['output'];
   /** An optional custom path for the database. */
   dbPath?: Maybe<Scalars['String']['output']>;
+  dbTimeoutSecs: Scalars['Int']['output'];
   /** Indicates if the Kobo sync feature should be enabled. */
   enableKoboSync: Scalars['Boolean']['output'];
   /** Indicates if the KoReader sync feature should be enabled. */
@@ -4492,6 +4514,12 @@ export type StumpConfig = {
   refreshTokenTtl: Scalars['Int']['output'];
   /** The time in seconds that a login session will be valid for. */
   sessionTtl: Scalars['Int']['output'];
+  /** Path to the TLS certificate PEM chain (e.g. fullchain.pem). */
+  tlsCertPath?: Maybe<Scalars['String']['output']>;
+  /** Whether HTTPS should be enabled for the server listener. */
+  tlsEnabled: Scalars['Boolean']['output'];
+  /** Path to the TLS private key PEM file (e.g. domain.key). */
+  tlsKeyPath?: Maybe<Scalars['String']['output']>;
   /** Whether to trust proxy headers for determining client IP and scheme (e.g., X-Forwarded-For) */
   trustProxyHeaders: Scalars['Boolean']['output'];
   /** The verbosity with which system logs are visible (default: 1). */
@@ -6169,7 +6197,7 @@ export type LibraryLayoutQueryVariables = Exact<{
 
 
 export type LibraryLayoutQuery = { __typename?: 'Query', libraryById?: (
-    { __typename?: 'Library', id: string, name: string, description?: string | null, path: string, stats: { __typename?: 'LibraryStats', seriesCount: number, bookCount: number, completedBooks: number, inProgressBooks: number, totalBytes: number, totalReadingTimeSeconds: number }, tags: Array<{ __typename?: 'Tag', id: number, name: string }>, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null }, config: { __typename?: 'LibraryConfig', defaultLibraryViewMode: LibraryViewMode, hideSeriesView: boolean } }
+    { __typename?: 'Library', id: string, name: string, description?: string | null, path: string, stats: { __typename?: 'LibraryStats', seriesCount: number, bookCount: number, completedBooks: number, inProgressBooks: number, totalBytes: number, totalReadingTimeSeconds: number }, tags: Array<{ __typename?: 'Tag', id: number, name: string }>, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null }, config: { __typename?: 'LibraryConfig', defaultLibraryViewMode: LibraryViewMode, hideSeriesView: boolean, libraryPattern: LibraryPattern } }
     & { ' $fragmentRefs'?: { 'LibrarySettingsConfigFragment': LibrarySettingsConfigFragment } }
   ) | null };
 
@@ -6199,7 +6227,7 @@ export type LibrarySeriesQueryVariables = Exact<{
 }>;
 
 
-export type LibrarySeriesQuery = { __typename?: 'Query', series: { __typename?: 'PaginatedSeriesResponse', nodes: Array<{ __typename?: 'Series', id: string, resolvedName: string, mediaCount: number, percentageCompleted: number, status: FileStatus, media: Array<{ __typename?: 'Media', id: string, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } }>, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } }>, pageInfo: { __typename: 'CursorPaginationInfo' } | { __typename: 'OffsetPaginationInfo', totalPages: number, currentPage: number, pageSize: number, pageOffset: number, zeroBased: boolean } } };
+export type LibrarySeriesQuery = { __typename?: 'Query', series: { __typename?: 'PaginatedSeriesResponse', nodes: Array<{ __typename?: 'Series', id: string, resolvedName: string, mediaCount: number, childCount: number, descendantMediaCount: number, percentageCompleted: number, status: FileStatus, media: Array<{ __typename?: 'Media', id: string, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } }>, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } }>, pageInfo: { __typename: 'CursorPaginationInfo' } | { __typename: 'OffsetPaginationInfo', totalPages: number, currentPage: number, pageSize: number, pageOffset: number, zeroBased: boolean } } };
 
 export type LibrarySeriesGridQueryVariables = Exact<{
   id: Scalars['String']['input'];
@@ -6359,7 +6387,7 @@ export type SeriesLayoutQueryVariables = Exact<{
 }>;
 
 
-export type SeriesLayoutQuery = { __typename?: 'Query', seriesById?: { __typename?: 'Series', id: string, path: string, resolvedName: string, resolvedDescription?: string | null, createdAt: any, updatedAt?: any | null, library: { __typename?: 'Library', id: string, name: string }, stats: { __typename?: 'SeriesStats', bookCount: number, completedBooks: number, inProgressBooks: number, totalBytes: number, totalReadingTimeSeconds: number }, tags: Array<{ __typename?: 'Tag', id: number, name: string }>, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } } | null };
+export type SeriesLayoutQuery = { __typename?: 'Query', seriesById?: { __typename?: 'Series', id: string, path: string, resolvedName: string, resolvedDescription?: string | null, childCount: number, descendantMediaCount: number, createdAt: any, updatedAt?: any | null, library: { __typename?: 'Library', id: string, name: string }, ancestors: Array<{ __typename?: 'Series', id: string, resolvedName: string }>, children: Array<{ __typename?: 'Series', id: string, resolvedName: string, mediaCount: number, childCount: number, descendantMediaCount: number, percentageCompleted: number, status: FileStatus, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } }>, stats: { __typename?: 'SeriesStats', bookCount: number, completedBooks: number, inProgressBooks: number, totalBytes: number, totalReadingTimeSeconds: number }, tags: Array<{ __typename?: 'Tag', id: number, name: string }>, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } } | null };
 
 export type SeriesLibrayLinkQueryVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -11989,6 +12017,7 @@ export const LibraryLayoutDocument = new TypedDocumentString(`
     config {
       defaultLibraryViewMode
       hideSeriesView
+      libraryPattern
     }
     ...LibrarySettingsConfig
   }
@@ -12125,6 +12154,8 @@ export const LibrarySeriesDocument = new TypedDocumentString(`
       id
       resolvedName
       mediaCount
+      childCount
+      descendantMediaCount
       percentageCompleted
       status
       media(take: 2, skip: 1) {
@@ -12382,6 +12413,32 @@ export const SeriesLayoutDocument = new TypedDocumentString(`
     }
     resolvedName
     resolvedDescription
+    childCount
+    descendantMediaCount
+    ancestors {
+      id
+      resolvedName
+    }
+    children(take: 50) {
+      id
+      resolvedName
+      mediaCount
+      childCount
+      descendantMediaCount
+      percentageCompleted
+      status
+      thumbnail {
+        url
+        metadata {
+          averageColor
+          thumbhash
+          colors {
+            color
+            percentage
+          }
+        }
+      }
+    }
     stats {
       bookCount
       completedBooks

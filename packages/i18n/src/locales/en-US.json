@@ -482,7 +482,8 @@
 						"for more information.",
 						"You cannot change this setting later"
 					],
-					"disabled": "You cannot change this setting"
+					"disabled": "You cannot change this setting",
+					"rescanHint": "After changing the pattern, save and scan the library so the series tree is rebuilt."
 				},
 				"options": {
 					"label": "Library pattern",
@@ -493,7 +494,11 @@
 					},
 					"seriesPriority": {
 						"label": "Series priority",
-						"description": "Each folder at any level recursively is a single series"
+						"description": "Folder tree becomes a series hierarchy (e.g. Kockás → Régi → books)"
+					},
+					"nested": {
+						"label": "Nested",
+						"description": "Same as series priority: parent/child series from folder hierarchy"
 					}
 				}
 			}

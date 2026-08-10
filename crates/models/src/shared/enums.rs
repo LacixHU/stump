@@ -314,6 +314,7 @@ pub enum LibraryPattern {
 	#[default]
 	SeriesBased,
 	CollectionBased,
+	Nested,
 }
 
 #[derive(

@@ -45,6 +45,8 @@ pub struct Model {
 	pub thumbnail_path: Option<String>,
 	#[sea_orm(column_type = "Text", nullable)]
 	pub library_id: Option<String>,
+	#[sea_orm(column_type = "Text", nullable)]
+	pub parent_series_id: Option<String>,
 }
 
 pub fn get_age_restriction_filter(min_age: i32, restrict_on_unset: bool) -> Condition {
@@ -221,6 +223,14 @@ pub enum Relation {
 		on_delete = "Cascade"
 	)]
 	Library,
+	#[sea_orm(
+		belongs_to = "Entity",
+		from = "Column::ParentSeriesId",
+		to = "Column::Id",
+		on_update = "Cascade",
+		on_delete = "SetNull"
+	)]
+	Parent,
 	#[sea_orm(has_many = "super::media::Entity")]
 	Media,
 	#[sea_orm(has_one = "super::series_metadata::Entity")]

@@ -58,6 +58,16 @@ impl Model {
 		self.library_pattern == LibraryPattern::CollectionBased
 	}
 
+	pub fn is_nested(&self) -> bool {
+		self.library_pattern == LibraryPattern::Nested
+	}
+
+	/// Series-priority and Nested both build a folder tree with parent/child series.
+	/// Collection-priority collapses each top-level folder into a single series.
+	pub fn is_hierarchical(&self) -> bool {
+		!self.is_collection_based()
+	}
+
 	pub fn ignore_rules(&self) -> IgnoreRules {
 		self.ignore_rules.clone().unwrap_or_default()
 	}

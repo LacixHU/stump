@@ -149,6 +149,7 @@ impl JobLifecycle for SeriesScanJob {
 			max_depth = Some(1);
 		}
 
+		let is_hierarchical = config.is_hierarchical();
 		self.config = Some(config);
 
 		let WalkedSeries {
@@ -167,6 +168,7 @@ impl JobLifecycle for SeriesScanJob {
 				db: ctx.apalis_state.conn.clone(),
 				ignore_rules,
 				max_depth,
+				nested: is_hierarchical,
 				options: self.options,
 				dir_mtimes: HashMap::new(),
 				series_id: Some(self.id.clone()),

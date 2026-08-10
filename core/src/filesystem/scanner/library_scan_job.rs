@@ -28,7 +28,6 @@ use crate::{
 			ThumbnailGenerationJobParams,
 		},
 		metadata::MetadataFetchJobParams,
-		scanner::utils::safely_insert_series,
 	},
 	job::{
 		error::JobError, stump_job::StumpJob, CoreJobOutput, JobContext, JobExecuteLog,
@@ -42,8 +41,9 @@ use super::{
 	series_scan_job::SeriesScanTask,
 	utils::{
 		handle_missing_media, handle_missing_series, handle_restored_media,
-		safely_build_and_insert_media, safely_build_series, visit_and_update_media,
-		MediaBuildOperation, MediaOperationOutput, MissingSeriesOutput,
+		repair_series_parent_links, safely_build_and_insert_media, safely_build_series,
+		safely_insert_series, visit_and_update_media, MediaBuildOperation,
+		MediaOperationOutput, MissingSeriesOutput,
 	},
 	walk_library, walk_series, ScanOptions, WalkedLibrary, WalkedSeries, WalkerCtx,
 };
@@ -169,6 +169,8 @@ impl JobLifecycle for LibraryScanJob {
 				"Library is missing configuration".to_string(),
 			))?;
 		let is_collection_based = config.is_collection_based();
+		// Series-priority and Nested both walk the full tree and link parents
+		let is_hierarchical = config.is_hierarchical();
 		let ignore_rules = config.ignore_rules().build()?;
 
 		self.config = Some(config);
@@ -218,6 +220,7 @@ impl JobLifecycle for LibraryScanJob {
 				db: ctx.apalis_state.conn.clone(),
 				ignore_rules,
 				max_depth: is_collection_based.then_some(1),
+				nested: is_hierarchical,
 				options: self.options,
 				// intentially empty here since walk_library only visits top-level dirs to discover series,
 				// so there is nothing to short-circuit
@@ -621,6 +624,40 @@ impl JobLifecycle for LibraryScanJob {
 				} else {
 					tracing::trace!("No series to create");
 				}
+
+				if self.config.as_ref().is_some_and(|c| c.is_hierarchical()) {
+					ctx.report_progress(JobProgress::msg(
+						"Linking nested series parents",
+					));
+					if let Err(error) =
+						repair_series_parent_links(&self.id, &self.path, ctx.conn()).await
+					{
+						tracing::error!(
+							?error,
+							"Failed to repair nested series parent links"
+						);
+						logs.push(JobExecuteLog::error(format!(
+							"Failed to repair nested series parent links: {error:?}"
+						)));
+					}
+				} else {
+					// Collection-priority: no hierarchy
+					if let Err(error) = series::Entity::update_many()
+						.col_expr(
+							series::Column::ParentSeriesId,
+							sea_orm::sea_query::Expr::value(Option::<String>::None),
+						)
+						.filter(series::Column::LibraryId.eq(self.id.clone()))
+						.filter(series::Column::ParentSeriesId.is_not_null())
+						.exec(ctx.conn())
+						.await
+					{
+						tracing::error!(
+							?error,
+							"Failed to clear nested series parent links"
+						);
+					}
+				}
 			},
 			LibraryScanTask::WalkSeries(path_buf) => {
 				tracing::debug!("Executing the walk series task for library scan");
@@ -635,7 +672,7 @@ impl JobLifecycle for LibraryScanJob {
 
 				// If the library is collection-priority, any child directories are 'ignored' and their
 				// files are part of / folded into the top-most folder (series).
-				// If the library is not collection-priority, each subdirectory is its own series.
+				// If the library is series-priority or nested, each subdirectory is its own series.
 				// Therefore, we only scan one level deep when walking a series whose library is not
 				// collection-priority to avoid scanning duplicates which are part of other series
 				let mut max_depth = self
@@ -678,6 +715,7 @@ impl JobLifecycle for LibraryScanJob {
 						db: ctx.apalis_state.conn.clone(),
 						ignore_rules,
 						max_depth,
+						nested: self.config.as_ref().is_some_and(|c| c.is_hierarchical()),
 						options: self.options,
 						dir_mtimes: (*self.dir_mtimes).clone(),
 						series_id: series_id.clone(),

@@ -3,6 +3,7 @@ import { usePrevious } from '@stump/components'
 import {
 	graphql,
 	InterfaceLayout,
+	LibraryPattern,
 	OrderDirection,
 	SeriesFilterInput,
 	SeriesModelOrdering,
@@ -52,6 +53,8 @@ const query = graphql(`
 				id
 				resolvedName
 				mediaCount
+				childCount
+				descendantMediaCount
 				percentageCompleted
 				status
 				# We fetch 2 and skip 1 because the first thumbnail _might_ be the same as the series thumbnail.
@@ -116,8 +119,12 @@ export const usePrefetchLibrarySeries = () => {
 		(
 			libraryId: string,
 			params: UsePrefetchLibrarySeriesParams = { filter: [], orderBy: DEFAULT_SERIES_ORDER_BY },
+			options?: { nested?: boolean },
 		) => {
 			const pageParams = { page: params.page || 1, pageSize: params.pageSize || pageSize }
+			const nestedRootFilter =
+				options?.nested && !search ? ([{ isRoot: true }] as SeriesFilterInput[]) : []
+			const filterAnd = [...(params.filter || []), ...nestedRootFilter]
 			return Promise.all([
 				client.prefetchQuery({
 					queryKey: getQueryKey(
@@ -126,14 +133,14 @@ export const usePrefetchLibrarySeries = () => {
 						pageParams.page,
 						pageParams.pageSize,
 						search,
-						params.filter,
+						filterAnd,
 						params.orderBy,
 					),
 					queryFn: async () => {
 						const response = await sdk.execute(query, {
 							filter: {
 								libraryId: { eq: libraryId },
-								_and: params.filter,
+								_and: filterAnd,
 								_or: searchFilter,
 							},
 							orderBy: params.orderBy,
@@ -186,8 +193,10 @@ function getQueryKey(
 
 export default function LibrarySeriesScene() {
 	const {
-		library: { id, name },
+		library: { id, name, config },
 	} = useLibraryContext()
+	// Series-priority and Nested both use a folder tree; Collection-priority is flat tops.
+	const isHierarchical = config.libraryPattern !== LibraryPattern.CollectionBased
 	const {
 		filters: seriesFilters,
 		ordering,
@@ -225,6 +234,7 @@ export default function LibrarySeriesScene() {
 	const resolvedFilters = useMemo(
 		() => [
 			filters,
+			...(isHierarchical && !search ? [{ isRoot: true }] : []),
 			...(startsWith
 				? [
 						{
@@ -238,28 +248,32 @@ export default function LibrarySeriesScene() {
 					]
 				: []),
 		],
-		[filters, startsWith],
+		[filters, startsWith, isHierarchical, search],
 	)
 	const prefetch = usePrefetchLibrarySeries()
 
 	const onPrefetchLetter = useCallback(
 		(letter: string) => {
-			prefetch(id, {
-				page: 1,
-				pageSize,
-				filter: [
-					filters,
-					{
-						_or: [
-							{ name: { startsWith: letter } },
-							{ metadata: { title: { startsWith: letter } } },
-						],
-					},
-				],
-				orderBy,
-			})
+			prefetch(
+				id,
+				{
+					page: 1,
+					pageSize,
+					filter: [
+						filters,
+						{
+							_or: [
+								{ name: { startsWith: letter } },
+								{ metadata: { title: { startsWith: letter } } },
+							],
+						},
+					],
+					orderBy,
+				},
+				{ nested: isHierarchical },
+			)
 		},
-		[prefetch, id, pageSize, orderBy, filters],
+		[prefetch, id, pageSize, orderBy, filters, isHierarchical],
 	)
 	const layoutKey = `library-${id}-series`
 

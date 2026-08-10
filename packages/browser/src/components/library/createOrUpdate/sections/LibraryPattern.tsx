@@ -4,25 +4,18 @@ import { useLocaleContext } from '@stump/i18n'
 import { useCallback } from 'react'
 import { useFormContext, useWatch } from 'react-hook-form'
 
-import { useLibraryContextSafe } from '@/scenes/library/context'
-
 export default function LibraryPatternRadioGroup() {
 	const form = useFormContext()
-	const ctx = useLibraryContextSafe()
 
 	const { t } = useLocaleContext()
 
 	const libraryPattern = useWatch({ control: form.control, name: 'libraryPattern' })
-	const isCollectionBasedSelected = libraryPattern === LibraryPattern.CollectionBased
-	const isCreating = !ctx?.library
 
 	const handleChange = useCallback(
 		(pattern: LibraryPattern) => {
-			if (isCreating) {
-				form.setValue('libraryPattern', pattern)
-			}
+			form.setValue('libraryPattern', pattern, { shouldDirty: true })
 		},
-		[form, isCreating],
+		[form],
 	)
 
 	// Note: if this section ever becomes more than library pattern, restore the section locale keys
@@ -41,42 +34,47 @@ export default function LibraryPatternRadioGroup() {
 				<RadioGroup
 					value={libraryPattern}
 					onValueChange={handleChange}
-					className="mt-1 sm:flex-row flex flex-col"
-					disabled={!isCreating}
-					title={isCreating ? undefined : t(getKey('section.disabled'))}
+					className="mt-1 sm:flex-row flex flex-col flex-wrap"
 					defaultValue="SERIES_BASED"
 				>
 					<RadioGroup.CardItem
 						label={t(getOptionKey('collectionPriority.label'))}
 						description={t(getOptionKey('collectionPriority.description'))}
 						innerContainerClassName="block sm:flex-col sm:items-start sm:gap-2"
-						isActive={isCollectionBasedSelected}
+						isActive={libraryPattern === LibraryPattern.CollectionBased}
 						value={LibraryPattern.CollectionBased}
-						className="md:w-1/2"
+						className="md:w-[calc(50%-0.5rem)]"
 					/>
 
 					<RadioGroup.CardItem
 						label={t(getOptionKey('seriesPriority.label'))}
 						description={t(getOptionKey('seriesPriority.description'))}
 						innerContainerClassName="block sm:flex-col sm:items-start sm:gap-2"
-						isActive={!isCollectionBasedSelected}
-						value="SERIES_BASED"
-						className="md:w-1/2"
+						isActive={libraryPattern === LibraryPattern.SeriesBased}
+						value={LibraryPattern.SeriesBased}
+						className="md:w-[calc(50%-0.5rem)]"
+					/>
+
+					<RadioGroup.CardItem
+						label={t(getOptionKey('nested.label'))}
+						description={t(getOptionKey('nested.description'))}
+						innerContainerClassName="block sm:flex-col sm:items-start sm:gap-2"
+						isActive={libraryPattern === LibraryPattern.Nested}
+						value={LibraryPattern.Nested}
+						className="md:w-[calc(50%-0.5rem)]"
 					/>
 				</RadioGroup>
 
-				{isCreating && (
-					<Text size="xs" variant="muted">
-						{t(getKey('section.docs.0'))}{' '}
-						<Link
-							target="_blank"
-							href="https://stumpapp.dev/docs/guides/fundamentals/libraries#supported-patterns"
-						>
-							{t(getKey('section.docs.1'))}
-						</Link>{' '}
-						{t(getKey('section.docs.2'))} {<b>{t(getKey('section.docs.3'))}</b>}
-					</Text>
-				)}
+				<Text size="xs" variant="muted">
+					{t(getKey('section.docs.0'))}{' '}
+					<Link
+						target="_blank"
+						href="https://stumpapp.dev/docs/guides/fundamentals/libraries#supported-patterns"
+					>
+						{t(getKey('section.docs.1'))}
+					</Link>{' '}
+					{t(getKey('section.docs.2'))} {t(getKey('section.rescanHint'))}
+				</Text>
 			</div>
 		</div>
 	)

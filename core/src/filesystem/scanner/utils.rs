@@ -515,6 +515,59 @@ pub(crate) async fn safely_build_series(
 	(created_series, logs)
 }
 
+/// Recompute `parent_series_id` for all series in a library from filesystem paths.
+/// Parent is the nearest ancestor path that is also a series (or null at library roots).
+pub(crate) async fn repair_series_parent_links(
+	library_id: &str,
+	library_path: &str,
+	conn: &DatabaseConnection,
+) -> Result<u64, JobError> {
+	let library_root = PathBuf::from(library_path);
+	let records = series::Entity::find()
+		.filter(series::Column::LibraryId.eq(library_id))
+		.filter(series::Column::DeletedAt.is_null())
+		.all(conn)
+		.await?;
+
+	let path_to_id: HashMap<String, String> = records
+		.iter()
+		.map(|s| (s.path.clone(), s.id.clone()))
+		.collect();
+
+	let mut updated = 0u64;
+	for record in records {
+		let series_path = PathBuf::from(&record.path);
+		let mut expected_parent: Option<String> = None;
+
+		let mut current = series_path;
+		while let Some(parent) = current.parent().map(Path::to_path_buf) {
+			if parent == library_root {
+				break;
+			}
+			if !parent.starts_with(&library_root) {
+				break;
+			}
+			let parent_str = parent.to_string_lossy().to_string();
+			if let Some(parent_id) = path_to_id.get(&parent_str) {
+				expected_parent = Some(parent_id.clone());
+				break;
+			}
+			current = parent;
+		}
+
+		if record.parent_series_id != expected_parent {
+			let mut active: series::ActiveModel = record.into();
+			active.parent_series_id = Set(expected_parent);
+			active.update(conn).await?;
+			updated += 1;
+		}
+	}
+
+	tracing::debug!(library_id, updated, "Repaired nested series parent links");
+
+	Ok(updated)
+}
+
 pub(crate) async fn safely_insert_series(
 	series: Vec<BuiltSeries>,
 	conn: &DatabaseConnection,

@@ -37,6 +37,16 @@ const LibrarySeriesCard = memo(function LibrarySeriesCard({ data }: Props) {
 	}, [])
 
 	const thumbnailData = [data.thumbnail, ...data.media.map((m) => m.thumbnail)]
+	const bookLabel = pluralizeStat(
+		'book',
+		data.descendantMediaCount != null && data.descendantMediaCount > data.mediaCount
+			? data.descendantMediaCount
+			: data.mediaCount,
+	)
+	const childLabel =
+		data.childCount != null && data.childCount > 0
+			? ` · ${pluralizeStat('series', data.childCount)}`
+			: ''
 
 	return (
 		<div ref={containerRef}>
@@ -44,7 +54,7 @@ const LibrarySeriesCard = memo(function LibrarySeriesCard({ data }: Props) {
 				<StackedSeriesCard
 					id={data.id}
 					name={data.resolvedName}
-					subtitle={pluralizeStat('book', data.mediaCount)}
+					subtitle={`${bookLabel}${childLabel}`}
 					isMissing={data.status === 'MISSING'}
 					width={width}
 					thumbnailData={thumbnailData}

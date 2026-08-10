@@ -150,7 +150,9 @@ impl TempLibrary {
 	) -> CoreResult<(library::Data, library_config::Data, TempLibrary)> {
 		let temp_library = match pattern {
 			LibraryPattern::CollectionBased => TempLibrary::collection_library()?,
-			LibraryPattern::SeriesBased => TempLibrary::series_library()?,
+			LibraryPattern::SeriesBased | LibraryPattern::Nested => {
+				TempLibrary::series_library()?
+			},
 		};
 
 		let (library, options) = temp_library.insert(client, scan_mode).await?;

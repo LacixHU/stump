@@ -14,7 +14,11 @@ export default function PatternDisplay() {
 	} = useFragment(LibrarySettingsConfig, library)
 
 	const localeKey =
-		libraryPattern === LibraryPattern.CollectionBased ? 'collectionPriority' : 'seriesPriority'
+		libraryPattern === LibraryPattern.CollectionBased
+			? 'collectionPriority'
+			: libraryPattern === LibraryPattern.Nested
+				? 'nested'
+				: 'seriesPriority'
 
 	return (
 		<div
