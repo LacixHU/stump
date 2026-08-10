@@ -804,7 +804,8 @@ mod tests {
 
 	#[test]
 	fn test_media_query() {
-		let user = get_default_user();
+		let mut user = get_default_user();
+		user.is_server_owner = false;
 		let query = media::ModelWithMetadata::find_for_user(&user);
 		let order_by = vec![
 			MediaOrderBy::Media(OrderByField {
@@ -825,7 +826,7 @@ mod tests {
 
 		assert_eq!(
 			query,
-			r#"SELECT  FROM "media" LEFT JOIN "media_metadata" ON "media"."id" = "media_metadata"."media_id" INNER JOIN "series" ON "media"."series_id" = "series"."id" LEFT JOIN "series_metadata" ON "series_metadata"."series_id" = "series"."id" WHERE "series"."library_id" NOT IN (SELECT "library_id" FROM "library_exclusions" WHERE "library_exclusions"."user_id" = '42') ORDER BY "media"."name" ASC, "media_metadata"."media_id" DESC"#
+			r#"SELECT  FROM "media" LEFT JOIN "media_metadata" ON "media"."id" = "media_metadata"."media_id" INNER JOIN "series" ON "media"."series_id" = "series"."id" LEFT JOIN "series_metadata" ON "series_metadata"."series_id" = "series"."id" WHERE "series"."library_id" IN (SELECT "library_id" FROM "library_inclusions" WHERE "library_inclusions"."user_id" = '42') ORDER BY "media"."name" ASC, "media_metadata"."media_id" DESC"#
 		);
 	}
 }

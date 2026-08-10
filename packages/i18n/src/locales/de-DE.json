@@ -759,13 +759,13 @@
 			"title": "Zugriffskontrolle",
 			"description": "Festlegen, wer Zugriff auf den Inhalt dieser Bibliothek erhält",
 			"sections": {
-				"libraryExclusions": {
-					"heading": "Benutzer ausschließen",
-					"description": "Verweigere bestimmte Benutzer den Zugriff auf diese Bibliothek oder deren Inhalte",
-					"noUsersTitle": "Keine Benutzer auszuschließen",
-					"noUsers": "Es gibt keine anderen registrierten Benutzer, die von dieser Bibliothek ausgeschlossen werden können",
-					"updated": "Ausgeschlossene Benutzer aktualisiert",
-					"failure": "Fehler beim Aktualisieren der ausgeschlossenen Benutzer"
+				"libraryInclusions": {
+					"heading": "Benutzer einschließen",
+					"description": "Wähle aus, welche Benutzer auf diese Bibliothek oder deren Inhalte zugreifen dürfen. Der Serverbesitzer hat immer Zugriff.",
+					"noUsersTitle": "Keine Benutzer einzuschließen",
+					"noUsers": "Es gibt keine anderen registrierten Benutzer, denen Zugriff auf diese Bibliothek gewährt werden kann",
+					"updated": "Eingeschlossene Benutzer aktualisiert",
+					"failure": "Fehler beim Aktualisieren der eingeschlossenen Benutzer"
 				}
 			}
 		},

@@ -759,7 +759,7 @@
 			"title": "Erişim Kontrolü",
 			"description": "Bu kütüphanedeki içeriğe kimlerin erişebileceğini kontrol edin",
 			"sections": {
-				"libraryExclusions": {
+				"libraryInclusions": {
 					"heading": "Kullanıcıları hariç tut",
 					"description": "Belirli kullanıcıların bu kütüphaneye veya içeriğine erişmesini engelle",
 					"noUsersTitle": "Hariç tutulacak kullanıcı yok",

@@ -1113,9 +1113,9 @@ export type Library = {
   createdAt: Scalars['DateTime']['output'];
   description?: Maybe<Scalars['String']['output']>;
   emoji?: Maybe<Scalars['String']['output']>;
-  excludedUsers: Array<User>;
   genres: Array<Scalars['String']['output']>;
   id: Scalars['String']['output'];
+  includedUsers: Array<User>;
   isFavorite: Scalars['Boolean']['output'];
   /** Get the details of the last scan job for this library, if any exists. */
   lastScan?: Maybe<LibraryScanRecord>;
@@ -2194,7 +2194,7 @@ export type Mutation = {
    * The server owner cannot be excluded from a library, nor can the user performing the action exclude
    * themselves.
    */
-  updateLibraryExcludedUsers: Library;
+  updateLibraryIncludedUsers: Library;
   /**
    * Update the thumbnail for a library. This will replace the existing thumbnail with the the one
    * associated with the provided input (book). If the book does not have a thumbnail, one
@@ -2855,7 +2855,7 @@ export type MutationUpdateLibraryEmojiArgs = {
 };
 
 
-export type MutationUpdateLibraryExcludedUsersArgs = {
+export type MutationUpdateLibraryIncludedUsersArgs = {
   id: Scalars['ID']['input'];
   userIds: Array<Scalars['String']['input']>;
 };
@@ -6260,25 +6260,25 @@ export type BasicSettingsSceneExistingLibrariesQueryVariables = Exact<{ [key: st
 
 export type BasicSettingsSceneExistingLibrariesQuery = { __typename?: 'Query', libraries: { __typename?: 'PaginatedLibraryResponse', nodes: Array<{ __typename?: 'Library', id: string, name: string, path: string }> } };
 
-export type LibraryExclusionsUsersQueryQueryVariables = Exact<{ [key: string]: never; }>;
+export type LibraryInclusionsUsersQueryQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type LibraryExclusionsUsersQueryQuery = { __typename?: 'Query', users: { __typename?: 'PaginatedUserResponse', nodes: Array<{ __typename?: 'User', id: string, username: string }> } };
+export type LibraryInclusionsUsersQueryQuery = { __typename?: 'Query', users: { __typename?: 'PaginatedUserResponse', nodes: Array<{ __typename?: 'User', id: string, username: string, isServerOwner: boolean }> } };
 
-export type LibraryExclusionsQueryQueryVariables = Exact<{
+export type LibraryInclusionsQueryQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
 
 
-export type LibraryExclusionsQueryQuery = { __typename?: 'Query', libraryById?: { __typename?: 'Library', excludedUsers: Array<{ __typename?: 'User', id: string, username: string }> } | null };
+export type LibraryInclusionsQueryQuery = { __typename?: 'Query', libraryById?: { __typename?: 'Library', includedUsers: Array<{ __typename?: 'User', id: string, username: string }> } | null };
 
-export type UpdateLibraryExclusionsMutationVariables = Exact<{
+export type UpdateLibraryInclusionsMutationVariables = Exact<{
   id: Scalars['ID']['input'];
   userIds: Array<Scalars['String']['input']> | Scalars['String']['input'];
 }>;
 
 
-export type UpdateLibraryExclusionsMutation = { __typename?: 'Mutation', updateLibraryExcludedUsers: { __typename?: 'Library', id: string, excludedUsers: Array<{ __typename?: 'User', id: string, username: string }> } };
+export type UpdateLibraryInclusionsMutation = { __typename?: 'Mutation', updateLibraryIncludedUsers: { __typename?: 'Library', id: string, includedUsers: Array<{ __typename?: 'User', id: string, username: string }> } };
 
 export type CleanLibraryMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -12240,37 +12240,38 @@ export const BasicSettingsSceneExistingLibrariesDocument = new TypedDocumentStri
   }
 }
     `) as unknown as TypedDocumentString<BasicSettingsSceneExistingLibrariesQuery, BasicSettingsSceneExistingLibrariesQueryVariables>;
-export const LibraryExclusionsUsersQueryDocument = new TypedDocumentString(`
-    query LibraryExclusionsUsersQuery {
+export const LibraryInclusionsUsersQueryDocument = new TypedDocumentString(`
+    query LibraryInclusionsUsersQuery {
   users(pagination: {none: {unpaginated: true}}) {
     nodes {
       id
       username
+      isServerOwner
     }
   }
 }
-    `) as unknown as TypedDocumentString<LibraryExclusionsUsersQueryQuery, LibraryExclusionsUsersQueryQueryVariables>;
-export const LibraryExclusionsQueryDocument = new TypedDocumentString(`
-    query LibraryExclusionsQuery($id: ID!) {
+    `) as unknown as TypedDocumentString<LibraryInclusionsUsersQueryQuery, LibraryInclusionsUsersQueryQueryVariables>;
+export const LibraryInclusionsQueryDocument = new TypedDocumentString(`
+    query LibraryInclusionsQuery($id: ID!) {
   libraryById(id: $id) {
-    excludedUsers {
+    includedUsers {
       id
       username
     }
   }
 }
-    `) as unknown as TypedDocumentString<LibraryExclusionsQueryQuery, LibraryExclusionsQueryQueryVariables>;
-export const UpdateLibraryExclusionsDocument = new TypedDocumentString(`
-    mutation UpdateLibraryExclusions($id: ID!, $userIds: [String!]!) {
-  updateLibraryExcludedUsers(id: $id, userIds: $userIds) {
+    `) as unknown as TypedDocumentString<LibraryInclusionsQueryQuery, LibraryInclusionsQueryQueryVariables>;
+export const UpdateLibraryInclusionsDocument = new TypedDocumentString(`
+    mutation UpdateLibraryInclusions($id: ID!, $userIds: [String!]!) {
+  updateLibraryIncludedUsers(id: $id, userIds: $userIds) {
     id
-    excludedUsers {
+    includedUsers {
       id
       username
     }
   }
 }
-    `) as unknown as TypedDocumentString<UpdateLibraryExclusionsMutation, UpdateLibraryExclusionsMutationVariables>;
+    `) as unknown as TypedDocumentString<UpdateLibraryInclusionsMutation, UpdateLibraryInclusionsMutationVariables>;
 export const CleanLibraryDocument = new TypedDocumentString(`
     mutation CleanLibrary($id: ID!) {
   cleanLibrary(id: $id) {

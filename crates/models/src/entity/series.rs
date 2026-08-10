@@ -2,8 +2,8 @@ use async_graphql::SimpleObject;
 use chrono::Utc;
 use filter_gen::Ordering;
 use sea_orm::{
-	entity::prelude::*, prelude::async_trait::async_trait, sea_query::Query, ActiveValue,
-	Condition, FromQueryResult, Linked, QueryOrder, QuerySelect, QueryTrait,
+	entity::prelude::*, prelude::async_trait::async_trait, ActiveValue, Condition,
+	FromQueryResult, Linked, QueryOrder, QuerySelect, QueryTrait,
 };
 
 use crate::{
@@ -15,7 +15,7 @@ use crate::{
 	},
 };
 
-use super::{library_exclusion, series_metadata, user::AuthUser};
+use super::{library_inclusion, series_metadata, user::AuthUser};
 
 // TODO: Properly support soft deletion
 
@@ -73,14 +73,11 @@ impl Entity {
 				)
 			});
 
-		Entity::find()
-			.filter(Column::DeletedAt.is_null())
-			.filter(Column::LibraryId.not_in_subquery(
-				library_exclusion::Entity::library_hidden_to_user_query(user),
-			))
-			.apply_if(age_restriction_filter, |query, filter| {
-				query.left_join(series_metadata::Entity).filter(filter)
-			})
+		let select = Entity::find().filter(Column::DeletedAt.is_null());
+		let select = apply_library_access_filter(user, select);
+		select.apply_if(age_restriction_filter, |query, filter| {
+			query.left_join(series_metadata::Entity).filter(filter)
+		})
 	}
 
 	pub fn find_series_ident_for_user_and_id(
@@ -175,30 +172,26 @@ impl ModelWithMetadata {
 
 	pub fn find_for_user(user: &AuthUser) -> Select<Entity> {
 		let select = ModelWithMetadata::find();
-		apply_age_restriction_filter(user, apply_hidden_library_filter(user, select))
+		apply_age_restriction_filter(user, apply_library_access_filter(user, select))
 	}
 
 	pub fn find_by_id_for_user(id: String, user: &AuthUser) -> Select<Entity> {
 		let select = ModelWithMetadata::find_by_id(id);
-		apply_age_restriction_filter(user, apply_hidden_library_filter(user, select))
+		apply_age_restriction_filter(user, apply_library_access_filter(user, select))
 	}
 }
 
-fn apply_hidden_library_filter(
+fn apply_library_access_filter(
 	user: &AuthUser,
 	select: Select<Entity>,
 ) -> Select<Entity> {
-	select
-		.filter(
-			Column::LibraryId.not_in_subquery(
-				Query::select()
-					.column(library_exclusion::Column::LibraryId)
-					.from(library_exclusion::Entity)
-					.and_where(library_exclusion::Column::UserId.eq(user.id.clone()))
-					.to_owned(),
-			),
-		)
-		.to_owned()
+	if user.is_server_owner {
+		select
+	} else {
+		select.filter(Column::LibraryId.in_subquery(
+			library_inclusion::Entity::libraries_accessible_to_user_query(user),
+		))
+	}
 }
 
 fn apply_age_restriction_filter(
@@ -308,18 +301,20 @@ mod tests {
 
 	#[test]
 	fn find_for_user_no_age_restriction() {
-		let user = get_default_user();
+		let mut user = get_default_user();
+		user.is_server_owner = false;
 		let select = Entity::find_for_user(&user);
 		let stmt_str = select_no_cols_to_string(select);
 		assert_eq!(
 			stmt_str,
-			r#"SELECT  FROM "series" WHERE "series"."deleted_at" IS NULL AND "series"."library_id" NOT IN (SELECT "library_id" FROM "library_exclusions" WHERE "library_exclusions"."user_id" = '42')"#
+			r#"SELECT  FROM "series" WHERE "series"."deleted_at" IS NULL AND "series"."library_id" IN (SELECT "library_id" FROM "library_inclusions" WHERE "library_inclusions"."user_id" = '42')"#
 		);
 	}
 
 	#[test]
 	fn find_for_user_age_restriction() {
 		let mut user = get_default_user();
+		user.is_server_owner = false;
 		user.age_restriction = Some(age_restriction::Model {
 			id: 1,
 			age: 18,
@@ -331,7 +326,7 @@ mod tests {
 		let stmt_str = select_no_cols_to_string(select);
 		assert_eq!(
 			stmt_str,
-			r#"SELECT  FROM "series" LEFT JOIN "series_metadata" ON "series"."id" = "series_metadata"."series_id" WHERE "series"."deleted_at" IS NULL AND "series"."library_id" NOT IN (SELECT "library_id" FROM "library_exclusions" WHERE "library_exclusions"."user_id" = '42') AND "series_metadata"."age_rating" IS NOT NULL AND "series_metadata"."age_rating" <= 18"#
+			r#"SELECT  FROM "series" LEFT JOIN "series_metadata" ON "series"."id" = "series_metadata"."series_id" WHERE "series"."deleted_at" IS NULL AND "series"."library_id" IN (SELECT "library_id" FROM "library_inclusions" WHERE "library_inclusions"."user_id" = '42') AND "series_metadata"."age_rating" IS NOT NULL AND "series_metadata"."age_rating" <= 18"#
 		);
 	}
 
@@ -352,35 +347,38 @@ mod tests {
 
 	#[test]
 	fn test_find_series_ident_for_user_and_id() {
-		let user = get_default_user();
+		let mut user = get_default_user();
+		user.is_server_owner = false;
 
 		let select = Entity::find_series_ident_for_user_and_id(&user, "123".to_string());
 		let stmt_str = select_no_cols_to_string(select);
 		assert_eq!(
 			stmt_str,
-			r#"SELECT  FROM "series" WHERE "series"."deleted_at" IS NULL AND "series"."library_id" NOT IN (SELECT "library_id" FROM "library_exclusions" WHERE "library_exclusions"."user_id" = '42') AND "series"."id" = '123'"#.to_string()
+			r#"SELECT  FROM "series" WHERE "series"."deleted_at" IS NULL AND "series"."library_id" IN (SELECT "library_id" FROM "library_inclusions" WHERE "library_inclusions"."user_id" = '42') AND "series"."id" = '123'"#.to_string()
 		);
 	}
 
 	#[test]
 	fn test_find_media_with_metadata() {
-		let user = get_default_user();
+		let mut user = get_default_user();
+		user.is_server_owner = false;
 		let select = ModelWithMetadata::find_for_user(&user);
 		let stmt_str = select_no_cols_to_string(select);
 		assert_eq!(
 			stmt_str,
-			r#"SELECT  FROM "series" LEFT JOIN "series_metadata" ON "series"."id" = "series_metadata"."series_id" WHERE "series"."library_id" NOT IN (SELECT "library_id" FROM "library_exclusions" WHERE "library_exclusions"."user_id" = '42')"#
+			r#"SELECT  FROM "series" LEFT JOIN "series_metadata" ON "series"."id" = "series_metadata"."series_id" WHERE "series"."library_id" IN (SELECT "library_id" FROM "library_inclusions" WHERE "library_inclusions"."user_id" = '42')"#
 		);
 	}
 
 	#[test]
 	fn test_find_media_with_metadata_for_id() {
-		let user = get_default_user();
+		let mut user = get_default_user();
+		user.is_server_owner = false;
 		let select = ModelWithMetadata::find_by_id_for_user("123".to_string(), &user);
 		let stmt_str = select_no_cols_to_string(select);
 		assert_eq!(
             stmt_str,
-            r#"SELECT  FROM "series" LEFT JOIN "series_metadata" ON "series"."id" = "series_metadata"."series_id" WHERE "series"."id" = '123' AND "series"."library_id" NOT IN (SELECT "library_id" FROM "library_exclusions" WHERE "library_exclusions"."user_id" = '42')"#.to_string()
+            r#"SELECT  FROM "series" LEFT JOIN "series_metadata" ON "series"."id" = "series_metadata"."series_id" WHERE "series"."id" = '123' AND "series"."library_id" IN (SELECT "library_id" FROM "library_inclusions" WHERE "library_inclusions"."user_id" = '42')"#.to_string()
         );
 	}
 }

@@ -759,10 +759,10 @@
 			"title": "Správa přístupu",
 			"description": "Kontrolujte, kdo má přístup k obsahu v této knihovně",
 			"sections": {
-				"libraryExclusions": {
+				"libraryInclusions": {
 					"heading": "Vyloučení uživatelé",
 					"description": "Zabránit některým uživatelům v přístupu k této knihovně nebo k jejímu obsahu",
-					"noUsersTitle": "No users to exclude",
+					"noUsersTitle": "No users to include",
 					"noUsers": "Neexistují žádní další registrovaní uživatelé k vyloučení přístupu k této knihovně",
 					"updated": "Vyloučení aktualizována",
 					"failure": "Aktualizace vyloučení se nezdařila"

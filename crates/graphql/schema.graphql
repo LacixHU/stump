@@ -1052,7 +1052,7 @@ type Library {
 	lastScannedAt: DateTime
 	authors: [Author!]!
 	config: LibraryConfig!
-	excludedUsers: [User!]!
+	includedUsers: [User!]!
 	isFavorite: Boolean!
 	"Get the details of the last scan job for this library, if any exists."
 	lastScan: LibraryScanRecord
@@ -1951,7 +1951,7 @@ type Mutation {
 	The server owner cannot be excluded from a library, nor can the user performing the action exclude
 	themselves.
 	"""
-	updateLibraryExcludedUsers(id: ID!, userIds: [String!]!): Library!
+	updateLibraryIncludedUsers(id: ID!, userIds: [String!]!): Library!
 	deleteLibraryScanHistory(id: ID!): Library!
 	"""
 	Delete a library, including all associated media and series via cascading deletes. This

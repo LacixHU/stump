@@ -759,13 +759,13 @@
 			"title": "访问控制",
 			"description": "控制谁可以访问该书库中的内容",
 			"sections": {
-				"libraryExclusions": {
-					"heading": "排除用户",
-					"description": "阻止特定用户访问该书库或其内容",
-					"noUsersTitle": "没有用户可删除",
-					"noUsers": "没有其他注册用户可从此库中排除",
-					"updated": "排除列表已更新",
-					"failure": "更新排除列表失败"
+				"libraryInclusions": {
+					"heading": "包含用户",
+					"description": "选择可以访问此资料库或其内容的用户。服务器所有者始终拥有访问权限。",
+					"noUsersTitle": "没有可包含的用户",
+					"noUsers": "没有其他已注册用户可授予此资料库的访问权限",
+					"updated": "已更新包含用户",
+					"failure": "更新包含用户失败"
 				}
 			}
 		},

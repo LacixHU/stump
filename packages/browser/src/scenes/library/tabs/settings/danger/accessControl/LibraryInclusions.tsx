@@ -20,20 +20,21 @@ import { useAppContext } from '@/context'
 import { useLibraryContext } from '../../../../context'
 
 const usersQuery = graphql(`
-	query LibraryExclusionsUsersQuery {
+	query LibraryInclusionsUsersQuery {
 		users(pagination: { none: { unpaginated: true } }) {
 			nodes {
 				id
 				username
+				isServerOwner
 			}
 		}
 	}
 `)
 
-const excludedUsersQuery = graphql(`
-	query LibraryExclusionsQuery($id: ID!) {
+const includedUsersQuery = graphql(`
+	query LibraryInclusionsQuery($id: ID!) {
 		libraryById(id: $id) {
-			excludedUsers {
+			includedUsers {
 				id
 				username
 			}
@@ -42,10 +43,10 @@ const excludedUsersQuery = graphql(`
 `)
 
 const mutation = graphql(`
-	mutation UpdateLibraryExclusions($id: ID!, $userIds: [String!]!) {
-		updateLibraryExcludedUsers(id: $id, userIds: $userIds) {
+	mutation UpdateLibraryInclusions($id: ID!, $userIds: [String!]!) {
+		updateLibraryIncludedUsers(id: $id, userIds: $userIds) {
 			id
-			excludedUsers {
+			includedUsers {
 				id
 				username
 			}
@@ -53,7 +54,7 @@ const mutation = graphql(`
 	}
 `)
 
-export default function LibraryExclusions() {
+export default function LibraryInclusions() {
 	const { library } = useLibraryContext()
 	const { user } = useAppContext()
 	const { t } = useLocaleContext()
@@ -73,61 +74,67 @@ export default function LibraryExclusions() {
 			queryKey: ['users'],
 		},
 		{
-			document: excludedUsersQuery,
-			queryKey: ['libraryExclusions', library.id],
+			document: includedUsersQuery,
+			queryKey: ['libraryInclusions', library.id],
 			// @ts-expect-error: Need to fix this type error with useSuspenseGraphQLQueries
 			variables: { id: library.id },
 		},
 	])
-	const excludedUsers = useMemo(() => libraryById?.excludedUsers || [], [libraryById])
+	const includedUsers = useMemo(() => libraryById?.includedUsers || [], [libraryById])
 
 	const client = useQueryClient()
 
 	const { mutate } = useGraphQLMutation(mutation, {
-		onSuccess: ({ updateLibraryExcludedUsers: { excludedUsers } }) => {
+		onSuccess: ({ updateLibraryIncludedUsers: { includedUsers } }) => {
 			// Update without refetching to reduce network
-			client.setQueryData(['libraryExclusions', library.id], {
+			client.setQueryData(['libraryInclusions', library.id], {
 				libraryById: {
 					...libraryById,
-					excludedUsers,
+					includedUsers,
 				},
 			})
 		},
 	})
 
-	const updateExclusions = useCallback(
+	const updateInclusions = useCallback(
 		(ids: string[]) => {
 			mutate({ id: library.id, userIds: ids })
 		},
 		[mutate, library],
 	)
 
-	const [excludedUserIds, setExcludedUserIds] = useState<string[] | undefined>(() =>
-		excludedUsers?.map((user) => user.id),
+	const [includedUserIds, setIncludedUserIds] = useState<string[] | undefined>(() =>
+		includedUsers?.map((user) => user.id),
 	)
-	const [debouncedUserIds] = useDebouncedValue(excludedUserIds, 500)
+	const [debouncedUserIds] = useDebouncedValue(includedUserIds, 500)
 
 	useEffect(() => {
-		setExcludedUserIds(excludedUsers?.map((user) => user.id) || [])
-	}, [excludedUsers])
+		setIncludedUserIds(includedUsers?.map((user) => user.id) || [])
+	}, [includedUsers])
 
 	const previousLibrary = usePrevious(library)
 	const isSameLibrary = previousLibrary?.id === library.id
-	const variablesLoaded = !!debouncedUserIds && !!excludedUsers
+	const variablesLoaded = !!debouncedUserIds && !!includedUsers
 	const shouldCall =
-		variablesLoaded && debouncedUserIds.length !== excludedUsers.length && isSameLibrary
+		variablesLoaded && debouncedUserIds.length !== includedUsers.length && isSameLibrary
 
 	useEffect(() => {
 		if (shouldCall) {
-			updateExclusions(debouncedUserIds)
+			updateInclusions(debouncedUserIds)
 		}
-	}, [debouncedUserIds, updateExclusions, shouldCall])
+	}, [debouncedUserIds, updateInclusions, shouldCall])
 
 	const userOptions = useMemo(
 		() =>
-			(allUsers?.map((user) => ({ label: user.username, value: user.id })) || []).filter(
-				(option) => option.value !== user.id,
-			),
+			(
+				allUsers?.map((u) => ({
+					label: u.username,
+					value: u.id,
+					isServerOwner: u.isServerOwner,
+				})) || []
+			)
+				.filter((option) => option.value !== user.id && !option.isServerOwner)
+				.map(({ label, value }) => ({ label, value })),
 		[allUsers, user],
 	)
 
@@ -141,7 +148,7 @@ export default function LibraryExclusions() {
 				</Text>
 			</div>
 
-			{allUsers?.length === 1 && (
+			{userOptions.length === 0 && (
 				<Alert variant="info">
 					<Info />
 					<AlertTitle>{t(getKey('noUsersTitle'))}</AlertTitle>
@@ -150,17 +157,17 @@ export default function LibraryExclusions() {
 			)}
 
 			<ComboBox
-				disabled={allUsers?.length === 1}
+				disabled={userOptions.length === 0}
 				options={userOptions}
-				value={excludedUserIds}
+				value={includedUserIds}
 				isMultiSelect
 				onChange={(userIds) => {
-					setExcludedUserIds(userIds || [])
+					setIncludedUserIds(userIds || [])
 				}}
 			/>
 		</div>
 	)
 }
 
-const LOCALE_KEY = 'librarySettingsScene.danger-zone/access-control.sections.libraryExclusions'
+const LOCALE_KEY = 'librarySettingsScene.danger-zone/access-control.sections.libraryInclusions'
 const getKey = (key: string) => `${LOCALE_KEY}.${key}`

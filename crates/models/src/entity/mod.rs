@@ -23,7 +23,7 @@ pub mod kobo_sync_session;
 pub mod last_library_visit;
 pub mod library;
 pub mod library_config;
-pub mod library_exclusion;
+pub mod library_inclusion;
 pub mod library_scan_record;
 pub mod library_tag;
 pub mod log;

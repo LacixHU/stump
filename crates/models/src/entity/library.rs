@@ -12,7 +12,7 @@ use crate::shared::{
 	ordering::{OrderBy, OrderDirection},
 };
 
-use super::{library_exclusion, user::AuthUser};
+use super::{library_inclusion, user::AuthUser};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, SimpleObject, Ordering)]
 #[graphql(name = "LibraryModel")]
@@ -45,9 +45,13 @@ pub struct Model {
 
 impl Entity {
 	pub fn find_for_user(user: &AuthUser) -> Select<Entity> {
-		Entity::find().filter(Column::Id.not_in_subquery(
-			library_exclusion::Entity::library_hidden_to_user_query(user),
-		))
+		if user.is_server_owner {
+			Entity::find()
+		} else {
+			Entity::find().filter(Column::Id.in_subquery(
+				library_inclusion::Entity::libraries_accessible_to_user_query(user),
+			))
+		}
 	}
 }
 
@@ -96,8 +100,8 @@ pub struct LibraryNameCmpSelect {
 pub enum Relation {
 	#[sea_orm(has_many = "super::last_library_visit::Entity")]
 	LastLibraryVisit,
-	#[sea_orm(has_many = "super::library_exclusion::Entity")]
-	HiddenFromUsers,
+	#[sea_orm(has_many = "super::library_inclusion::Entity")]
+	AccessibleToUsers,
 	#[sea_orm(
 		belongs_to = "super::library_config::Entity",
 		from = "Column::ConfigId",
@@ -118,9 +122,9 @@ impl Related<super::last_library_visit::Entity> for Entity {
 	}
 }
 
-impl Related<super::library_exclusion::Entity> for Entity {
+impl Related<super::library_inclusion::Entity> for Entity {
 	fn to() -> RelationDef {
-		Relation::HiddenFromUsers.def()
+		Relation::AccessibleToUsers.def()
 	}
 }
 
@@ -174,13 +178,22 @@ mod tests {
 	use pretty_assertions::assert_eq;
 
 	#[test]
-	fn find_for_user() {
+	fn find_for_user_server_owner() {
 		let user = get_default_user();
+		let select = Entity::find_for_user(&user);
+		let stmt_str = select_no_cols_to_string(select);
+		assert_eq!(stmt_str, r#"SELECT  FROM "libraries""#);
+	}
+
+	#[test]
+	fn find_for_user_non_owner() {
+		let mut user = get_default_user();
+		user.is_server_owner = false;
 		let select = Entity::find_for_user(&user);
 		let stmt_str = select_no_cols_to_string(select);
 		assert_eq!(
 			stmt_str,
-			r#"SELECT  FROM "libraries" WHERE "libraries"."id" NOT IN (SELECT "library_id" FROM "library_exclusions" WHERE "library_exclusions"."user_id" = '42')"#
+			r#"SELECT  FROM "libraries" WHERE "libraries"."id" IN (SELECT "library_id" FROM "library_inclusions" WHERE "library_inclusions"."user_id" = '42')"#
 		);
 	}
 }

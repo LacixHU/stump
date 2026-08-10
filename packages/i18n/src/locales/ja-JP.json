@@ -759,13 +759,13 @@
 			"title": "アクセス管理",
 			"description": "このライブラリ内のコンテンツにアクセスできるユーザーを制御します",
 			"sections": {
-				"libraryExclusions": {
-					"heading": "除外するユーザー",
-					"description": "特定のユーザーがこのライブラリまたはそのコンテンツにアクセスできないようにします",
-					"noUsersTitle": "No users to exclude",
-					"noUsers": "このライブラリから除外する他の登録ユーザーはいません",
-					"updated": "除外を更新しました",
-					"failure": "除外の更新に失敗しました"
+				"libraryInclusions": {
+					"heading": "ユーザーを含める",
+					"description": "このライブラリやそのコンテンツにアクセスできるユーザーを選択します。サーバー所有者は常にアクセスできます。",
+					"noUsersTitle": "含めるユーザーがいません",
+					"noUsers": "このライブラリへのアクセスを付与できる他の登録ユーザーがいません",
+					"updated": "含めるユーザーを更新しました",
+					"failure": "含めるユーザーの更新に失敗しました"
 				}
 			}
 		},

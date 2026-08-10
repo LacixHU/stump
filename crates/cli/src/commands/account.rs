@@ -4,7 +4,7 @@ use clap::Subcommand;
 use dialoguer::{theme::ColorfulTheme, Confirm, Input, Password};
 use models::entity::{
 	api_key, book_club_member, bookmark, favorite_library, favorite_media,
-	favorite_series, last_library_visit, library_exclusion, media_annotation,
+	favorite_series, last_library_visit, library_inclusion, media_annotation,
 	reading_session, refresh_token, review, session, user, user_login_activity,
 	user_preferences,
 };
@@ -443,13 +443,13 @@ where
 		.exec(&txn)
 		.await?;
 
-	post_message("Transferring library exclusions...");
-	library_exclusion::Entity::update_many()
+	post_message("Transferring library inclusions...");
+	library_inclusion::Entity::update_many()
 		.col_expr(
-			library_exclusion::Column::UserId,
+			library_inclusion::Column::UserId,
 			sea_orm::sea_query::Expr::value(oidc_user.id.clone()),
 		)
-		.filter(library_exclusion::Column::UserId.eq(local_user.id.clone()))
+		.filter(library_inclusion::Column::UserId.eq(local_user.id.clone()))
 		.exec(&txn)
 		.await?;
 
@@ -610,7 +610,7 @@ mod tests {
 	use models::{
 		entity::{
 			api_key, bookmark, favorite_library, favorite_media, favorite_series,
-			last_library_visit, library, library_config, library_exclusion, media,
+			last_library_visit, library, library_config, library_inclusion, media,
 			media_annotation, reading_session, refresh_token, review, series, session,
 			user, user_login_activity, user_preferences,
 		},
@@ -881,14 +881,14 @@ mod tests {
 		.await
 		.expect("could not insert last library visit");
 
-		library_exclusion::ActiveModel {
+		library_inclusion::ActiveModel {
 			user_id: Set(local_user.id.clone()),
 			library_id: Set(excluded_from_local_user_library.id.clone()),
 			..Default::default()
 		}
 		.insert(db)
 		.await
-		.expect("could not insert library exclusion for local user");
+		.expect("could not insert library inclusion for local user");
 
 		api_key::ActiveModel {
 			user_id: Set(local_user.id.clone()),
@@ -1088,15 +1088,15 @@ mod tests {
 			"Should have 1 favorite series transferred"
 		);
 
-		let exclusions = library_exclusion::Entity::find()
-			.filter(library_exclusion::Column::UserId.eq(&oidc_user.id))
+		let inclusions = library_inclusion::Entity::find()
+			.filter(library_inclusion::Column::UserId.eq(&oidc_user.id))
 			.all(&db)
 			.await
-			.expect("Failed to query library exclusions");
+			.expect("Failed to query library inclusions");
 		assert_eq!(
-			exclusions.len(),
+			inclusions.len(),
 			1,
-			"Should have 1 library exclusion transferred"
+			"Should have 1 library inclusion transferred"
 		);
 
 		let visits = last_library_visit::Entity::find()

@@ -1,6 +1,6 @@
 use models::{
 	entity::{
-		library_exclusion,
+		library_inclusion,
 		media::{self, get_age_restriction_filter},
 		media_analysis, media_metadata, reading_device, reading_session, series,
 		series_metadata,
@@ -57,16 +57,21 @@ impl OPDSPublicationEntity {
 			.map(|res| get_age_restriction_filter(res.age, res.restrict_on_unset));
 
 		let for_user_id = user.id.clone();
-		Prefixer::new(media::Entity::find().select_only())
+		let mut select = Prefixer::new(media::Entity::find().select_only())
 			.add_columns(media::Entity)
 			.add_columns(media_metadata::Entity)
 			.add_columns(series::Entity)
 			.add_columns(series_metadata::Entity)
 			.add_columns(reading_session::Entity)
-			.selector
-			.filter(series::Column::LibraryId.not_in_subquery(
-				library_exclusion::Entity::library_hidden_to_user_query(user),
-			))
+			.selector;
+
+		if !user.is_server_owner {
+			select = select.filter(series::Column::LibraryId.in_subquery(
+				library_inclusion::Entity::libraries_accessible_to_user_query(user),
+			));
+		}
+
+		select
 			.filter(Condition::all().add_option(age_restriction_filter))
 			.left_join(media_metadata::Entity)
 			.inner_join(series::Entity)

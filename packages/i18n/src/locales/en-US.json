@@ -764,13 +764,13 @@
 			"title": "Access Control",
 			"description": "Control who can access the content in this library",
 			"sections": {
-				"libraryExclusions": {
-					"heading": "Exclude users",
-					"description": "Prevent certain users from accessing this library or its contents",
-					"noUsersTitle": "No users to exclude",
-					"noUsers": "There are no other registered users to exclude from this library",
-					"updated": "Exclusions updated",
-					"failure": "Failed to update exclusions"
+				"libraryInclusions": {
+					"heading": "Include users",
+					"description": "Choose which users may access this library or its contents. The server owner always has access.",
+					"noUsersTitle": "No users to include",
+					"noUsers": "There are no other registered users to grant access to this library",
+					"updated": "Inclusions updated",
+					"failure": "Failed to update inclusions"
 				}
 			}
 		},

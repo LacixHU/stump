@@ -759,13 +759,13 @@
 			"title": "Controllo accessi",
 			"description": "Controlla chi può accedere ai contenuti di questa libreria",
 			"sections": {
-				"libraryExclusions": {
-					"heading": "Escludi utenti",
-					"description": "Impedisci ad alcuni utenti di accedere a questa libreria o ai suoi contenuti",
-					"noUsersTitle": "Nessun utente da escludere",
-					"noUsers": "Non ci sono altri utenti registrati da escludere da questa libreria",
-					"updated": "Esclusioni aggiornate",
-					"failure": "Impossibile aggiornare le esclusioni"
+				"libraryInclusions": {
+					"heading": "Includi utenti",
+					"description": "Scegli quali utenti possono accedere a questa libreria o ai suoi contenuti. Il proprietario del server ha sempre accesso.",
+					"noUsersTitle": "Nessun utente da includere",
+					"noUsers": "Non ci sono altri utenti registrati a cui concedere l'accesso a questa libreria",
+					"updated": "Inclusioni aggiornate",
+					"failure": "Impossibile aggiornare le inclusioni"
 				}
 			}
 		},

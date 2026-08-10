@@ -6,7 +6,7 @@ use models::{
 	entity::{
 		last_library_visit,
 		library::{self, LibraryIdentSelect},
-		library_config, library_exclusion, library_scan_record, library_tag, media,
+		library_config, library_inclusion, library_scan_record, library_tag, media,
 		media_metadata, metadata_provider_config, series, series_metadata, tag, user,
 	},
 	shared::enums::{FileStatus, MetadataResetImpact, UserPermission},
@@ -576,16 +576,15 @@ impl LibraryMutation {
 		Ok(library.into())
 	}
 
-	/// Exclude users from a library, preventing them from seeing the library in the UI. This operates as a
-	/// full replacement of the excluded users list, so any users not included in the provided list will be
-	/// removed from the exclusion list if they were previously excluded.
+	/// Grant users access to a library. This operates as a full replacement of the included users
+	/// list, so any users not present in the provided list will lose access if they previously had it.
 	///
-	/// The server owner cannot be excluded from a library, nor can the user performing the action exclude
-	/// themselves.
+	/// The server owner always has access to every library and does not need to be (and cannot be)
+	/// added to this list.
 	#[graphql(
 		guard = "PermissionGuard::new(&[UserPermission::ManageLibrary, UserPermission::ReadUsers])"
 	)]
-	async fn update_library_excluded_users(
+	async fn update_library_included_users(
 		&self,
 		ctx: &Context<'_>,
 		id: ID,
@@ -593,10 +592,6 @@ impl LibraryMutation {
 	) -> Result<Library> {
 		let AuthContext { user, .. } = ctx.data::<AuthContext>()?;
 		let core = ctx.data::<CoreContext>()?;
-
-		if user_ids.contains(&user.id) {
-			return Err("Cannot exclude self from library".into());
-		}
 
 		let server_owner_id = if user.is_server_owner {
 			user.id.clone()
@@ -613,8 +608,13 @@ impl LibraryMutation {
 		};
 
 		if user_ids.contains(&server_owner_id) {
-			tracing::error!(?user, library = ?id, "Attempted to exclude server owner from library");
+			tracing::error!(?user, library = ?id, "Attempted to add server owner to library inclusions");
 			return Err(error_message::FORBIDDEN_ACTION.into());
+		}
+
+		// Non-owners must keep themselves included or they lose access to manage the library.
+		if !user.is_server_owner && !user_ids.contains(&user.id) {
+			return Err("Cannot remove yourself from library access".into());
 		}
 
 		let library = library::Entity::find_for_user(user)
@@ -623,48 +623,48 @@ impl LibraryMutation {
 			.await?
 			.ok_or("Library not found")?;
 
-		let existing_exclusions = library_exclusion::Entity::find()
-			.filter(library_exclusion::Column::LibraryId.eq(library.id.clone()))
+		let existing_inclusions = library_inclusion::Entity::find()
+			.filter(library_inclusion::Column::LibraryId.eq(library.id.clone()))
 			.all(core.conn.as_ref())
 			.await?;
 
 		let to_add = user_ids
 			.iter()
 			.filter(|id| {
-				!existing_exclusions
+				!existing_inclusions
 					.iter()
-					.any(|exclusion| exclusion.user_id == **id)
+					.any(|inclusion| inclusion.user_id == **id)
 			})
-			.map(|id| library_exclusion::ActiveModel {
+			.map(|id| library_inclusion::ActiveModel {
 				library_id: Set(library.id.clone()),
 				user_id: Set(id.clone()),
 				..Default::default()
 			})
 			.collect::<Vec<_>>();
 
-		let to_remove = existing_exclusions
+		let to_remove = existing_inclusions
 			.iter()
-			.filter(|exclusion| !user_ids.contains(&exclusion.user_id))
-			.map(|exclusion| exclusion.id)
+			.filter(|inclusion| !user_ids.contains(&inclusion.user_id))
+			.map(|inclusion| inclusion.id)
 			.collect::<Vec<_>>();
 
 		if to_add.is_empty() && to_remove.is_empty() {
-			tracing::warn!("No changes to library exclusions");
+			tracing::warn!("No changes to library inclusions");
 			return Ok(Library::from(library));
 		}
 
 		let txn = core.conn.as_ref().begin().await?;
 
 		if !to_add.is_empty() {
-			library_exclusion::Entity::insert_many(to_add)
+			library_inclusion::Entity::insert_many(to_add)
 				.on_conflict_do_nothing()
 				.exec(&txn)
 				.await?;
 		}
 
 		if !to_remove.is_empty() {
-			library_exclusion::Entity::delete_many()
-				.filter(library_exclusion::Column::Id.is_in(to_remove))
+			library_inclusion::Entity::delete_many()
+				.filter(library_inclusion::Column::Id.is_in(to_remove))
 				.exec(&txn)
 				.await?;
 		}

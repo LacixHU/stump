@@ -16,7 +16,7 @@ use crate::{
 	},
 };
 
-use super::{library_exclusion, media_metadata, series, series_metadata, user::AuthUser};
+use super::{library_inclusion, media_metadata, series, series_metadata, user::AuthUser};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, SimpleObject, Ordering)]
 #[graphql(name = "MediaModel")]
@@ -158,24 +158,28 @@ fn apply_series_metadata_join(query: Select<Entity>) -> Select<Entity> {
 	)
 }
 
-fn apply_library_hidden_filter(query: Select<Entity>, user: &AuthUser) -> Select<Entity> {
-	query.filter(series::Column::LibraryId.not_in_subquery(
-		library_exclusion::Entity::library_hidden_to_user_query(user),
-	))
+fn apply_library_access_filter(query: Select<Entity>, user: &AuthUser) -> Select<Entity> {
+	if user.is_server_owner {
+		query
+	} else {
+		query.filter(series::Column::LibraryId.in_subquery(
+			library_inclusion::Entity::libraries_accessible_to_user_query(user),
+		))
+	}
 }
 
 impl Entity {
 	pub fn find_for_user(user: &AuthUser) -> Select<Entity> {
 		let select = Entity::find().left_join(media_metadata::Entity);
 		let select = apply_series_metadata_join(select);
-		let select = apply_library_hidden_filter(select, user);
+		let select = apply_library_access_filter(select, user);
 		apply_age_restriction_filter(select, user.age_restriction.clone())
 	}
 
 	pub fn apply_for_user(user: &AuthUser, select: Select<Entity>) -> Select<Entity> {
 		let select = select.left_join(media_metadata::Entity);
 		let select = apply_series_metadata_join(select);
-		let select = apply_library_hidden_filter(select, user);
+		let select = apply_library_access_filter(select, user);
 		apply_age_restriction_filter(select, user.age_restriction.clone())
 	}
 
@@ -232,14 +236,14 @@ impl ModelWithMetadata {
 	pub fn find_for_user(user: &AuthUser) -> Select<Entity> {
 		let select = ModelWithMetadata::find();
 		let select = apply_series_metadata_join(select);
-		let select = apply_library_hidden_filter(select, user);
+		let select = apply_library_access_filter(select, user);
 		apply_age_restriction_filter(select, user.age_restriction.clone())
 	}
 
 	pub fn find_by_id_for_user(id: String, user: &AuthUser) -> Select<Entity> {
 		let select = ModelWithMetadata::find_by_id(id);
 		let select = apply_series_metadata_join(select);
-		let select = apply_library_hidden_filter(select, user);
+		let select = apply_library_access_filter(select, user);
 		apply_age_restriction_filter(select, user.age_restriction.clone())
 	}
 }
@@ -482,19 +486,21 @@ mod tests {
 
 	#[test]
 	fn test_find_for_user() {
-		let user = get_default_user();
+		let mut user = get_default_user();
+		user.is_server_owner = false;
 		let select = Entity::find_for_user(&user);
 		let stmt_str = select_no_cols_to_string(select);
 		assert_eq!(
             stmt_str,
             r#"SELECT  FROM "media" LEFT JOIN "media_metadata" ON "media"."id" = "media_metadata"."media_id" INNER JOIN "series" ON "media"."series_id" = "series"."id" LEFT JOIN "series_metadata" ON "series_metadata"."series_id" = "series"."id" "#.to_string() +
-            r#"WHERE "series"."library_id" NOT IN (SELECT "library_id" FROM "library_exclusions" WHERE "library_exclusions"."user_id" = '42')"#
+            r#"WHERE "series"."library_id" IN (SELECT "library_id" FROM "library_inclusions" WHERE "library_inclusions"."user_id" = '42')"#
         );
 	}
 
 	#[test]
 	fn test_find_for_user_age_restrict() {
 		let mut user = get_default_user();
+		user.is_server_owner = false;
 		user.age_restriction = Some(age_restriction::Model {
 			id: 1,
 			age: 18,
@@ -506,62 +512,67 @@ mod tests {
 		assert_eq!(
             stmt_str,
             r#"SELECT  FROM "media" LEFT JOIN "media_metadata" ON "media"."id" = "media_metadata"."media_id" INNER JOIN "series" ON "media"."series_id" = "series"."id" LEFT JOIN "series_metadata" ON "series_metadata"."series_id" = "series"."id" "#.to_string() +
-            r#"WHERE "series"."library_id" NOT IN (SELECT "library_id" FROM "library_exclusions" WHERE "library_exclusions"."user_id" = '42')"# +
+            r#"WHERE "series"."library_id" IN (SELECT "library_id" FROM "library_inclusions" WHERE "library_inclusions"."user_id" = '42')"# +
             r#" AND (("media_metadata"."age_rating" IS NULL AND "series_metadata"."age_rating" IS NOT NULL AND "series_metadata"."age_rating" <= 18) OR ("media_metadata"."age_rating" IS NOT NULL AND "media_metadata"."age_rating" <= 18))"#
         );
 	}
 
 	#[test]
 	fn test_find_media_ids_for_user() {
-		let user = get_default_user();
+		let mut user = get_default_user();
+		user.is_server_owner = false;
 		let select = Entity::find_media_ids_for_user("123".to_string(), &user);
 		let stmt_str = select_no_cols_to_string(select);
 		assert_eq!(
             stmt_str,
             r#"SELECT  FROM "media" LEFT JOIN "media_metadata" ON "media"."id" = "media_metadata"."media_id" INNER JOIN "series" ON "media"."series_id" = "series"."id" LEFT JOIN "series_metadata" ON "series_metadata"."series_id" = "series"."id" "#.to_string() +
-            r#"WHERE "series"."library_id" NOT IN (SELECT "library_id" FROM "library_exclusions" WHERE "library_exclusions"."user_id" = '42') AND "media"."id" = '123'"#
+            r#"WHERE "series"."library_id" IN (SELECT "library_id" FROM "library_inclusions" WHERE "library_inclusions"."user_id" = '42') AND "media"."id" = '123'"#
         );
 	}
 
 	#[test]
 	fn test_find_for_series_id() {
-		let user = get_default_user();
+		let mut user = get_default_user();
+		user.is_server_owner = false;
 		let select = Entity::find_for_series_id(&user, "123".to_string());
 		let stmt_str = select_no_cols_to_string(select);
 		assert_eq!(
 			stmt_str,
 			r#"SELECT  FROM "media" LEFT JOIN "media_metadata" ON "media"."id" = "media_metadata"."media_id" INNER JOIN "series" ON "media"."series_id" = "series"."id" LEFT JOIN "series_metadata" ON "series_metadata"."series_id" = "series"."id" "#.to_string() +
-			r#"WHERE "series"."library_id" NOT IN (SELECT "library_id" FROM "library_exclusions" WHERE "library_exclusions"."user_id" = '42') AND "series"."id" = '123'"#
+			r#"WHERE "series"."library_id" IN (SELECT "library_id" FROM "library_inclusions" WHERE "library_inclusions"."user_id" = '42') AND "series"."id" = '123'"#
 		);
 	}
 
 	#[test]
 	fn test_metadata_find_for_user() {
-		let user = get_default_user();
+		let mut user = get_default_user();
+		user.is_server_owner = false;
 		let select = ModelWithMetadata::find_for_user(&user);
 		let stmt_str = select_no_cols_to_string(select);
 		assert_eq!(
             stmt_str,
             r#"SELECT  FROM "media" LEFT JOIN "media_metadata" ON "media"."id" = "media_metadata"."media_id" INNER JOIN "series" ON "media"."series_id" = "series"."id" LEFT JOIN "series_metadata" ON "series_metadata"."series_id" = "series"."id" "#.to_string() +
-            r#"WHERE "series"."library_id" NOT IN (SELECT "library_id" FROM "library_exclusions" WHERE "library_exclusions"."user_id" = '42')"#
+            r#"WHERE "series"."library_id" IN (SELECT "library_id" FROM "library_inclusions" WHERE "library_inclusions"."user_id" = '42')"#
             );
 	}
 
 	#[test]
 	fn test_metadata_by_id_find_for_users() {
-		let user = get_default_user();
+		let mut user = get_default_user();
+		user.is_server_owner = false;
 		let select = ModelWithMetadata::find_by_id_for_user("123".to_string(), &user);
 		let stmt_str = select_no_cols_to_string(select);
 		assert_eq!(
             stmt_str,
             r#"SELECT  FROM "media" LEFT JOIN "media_metadata" ON "media"."id" = "media_metadata"."media_id" INNER JOIN "series" ON "media"."series_id" = "series"."id" LEFT JOIN "series_metadata" ON "series_metadata"."series_id" = "series"."id" "#.to_string() +
-            r#"WHERE "media"."id" = '123' AND "series"."library_id" NOT IN (SELECT "library_id" FROM "library_exclusions" WHERE "library_exclusions"."user_id" = '42')"#
+            r#"WHERE "media"."id" = '123' AND "series"."library_id" IN (SELECT "library_id" FROM "library_inclusions" WHERE "library_inclusions"."user_id" = '42')"#
             );
 	}
 
 	#[test]
 	fn test_apply_for_user_age_restrict() {
 		let mut user = get_default_user();
+		user.is_server_owner = false;
 		user.age_restriction = Some(age_restriction::Model {
 			id: 1,
 			age: 18,
@@ -573,7 +584,7 @@ mod tests {
 		assert_eq!(
             stmt_str,
             r#"SELECT  FROM "media" LEFT JOIN "media_metadata" ON "media"."id" = "media_metadata"."media_id" INNER JOIN "series" ON "media"."series_id" = "series"."id" LEFT JOIN "series_metadata" ON "series_metadata"."series_id" = "series"."id" "#.to_string() +
-            r#"WHERE "series"."library_id" NOT IN (SELECT "library_id" FROM "library_exclusions" WHERE "library_exclusions"."user_id" = '42')"# +
+            r#"WHERE "series"."library_id" IN (SELECT "library_id" FROM "library_inclusions" WHERE "library_inclusions"."user_id" = '42')"# +
             r#" AND (("media_metadata"."age_rating" IS NULL AND "series_metadata"."age_rating" IS NOT NULL AND "series_metadata"."age_rating" <= 18) OR ("media_metadata"."age_rating" IS NOT NULL AND "media_metadata"."age_rating" <= 18))"#
         );
 	}

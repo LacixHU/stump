@@ -759,7 +759,7 @@
 			"title": "Åtkomstkontroll",
 			"description": "Styr vem som har åtkomst till innehållet i detta bibliotek",
 			"sections": {
-				"libraryExclusions": {
+				"libraryInclusions": {
 					"heading": "Uteslut användare",
 					"description": "Förhindra vissa användare från att komma åt detta bibliotek eller dess innehåll",
 					"noUsersTitle": "Inga användare att exkludera",

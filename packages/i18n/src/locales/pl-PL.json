@@ -759,7 +759,7 @@
 			"title": "Kontrola dostępu",
 			"description": "Kontrola dostępu użytkowników do zawartości tej biblioteki",
 			"sections": {
-				"libraryExclusions": {
+				"libraryInclusions": {
 					"heading": "Wyklucz użytkowników",
 					"description": "Zabroń niektórym użytkownikom dostępu do tej biblioteki lub jej zawartości",
 					"noUsersTitle": "Brak użytkowników do wykluczenia",
