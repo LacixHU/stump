@@ -168,8 +168,10 @@ impl UploadMutation {
 	// TODO(graphql): There is a LOT of duplication here, and only subtle differences wrt the queries.
 	// I think we can refactor this into some utility function(s) that take the model type and the ID as parameters
 
+	// Thumbnail image uploads are gated by permissions only — `enable_upload` is for
+	// library book/series file uploads, not cover images (see base64 variants below).
 	#[graphql(
-		guard = "OptionalFeatureGuard::new(OptionalFeature::Upload).and(PermissionGuard::new(&[UserPermission::UploadFile, UserPermission::EditLibrary, UserPermission::EditThumbnails]))"
+		guard = "PermissionGuard::new(&[UserPermission::UploadFile, UserPermission::EditLibrary, UserPermission::EditThumbnails])"
 	)]
 	async fn upload_library_thumbnail(
 		&self,
@@ -267,7 +269,7 @@ impl UploadMutation {
 	}
 
 	#[graphql(
-		guard = "OptionalFeatureGuard::new(OptionalFeature::Upload).and(PermissionGuard::new(&[UserPermission::UploadFile, UserPermission::EditThumbnails]))"
+		guard = "PermissionGuard::new(&[UserPermission::UploadFile, UserPermission::EditThumbnails])"
 	)]
 	async fn upload_series_thumbnail(
 		&self,
@@ -374,7 +376,7 @@ impl UploadMutation {
 	}
 
 	#[graphql(
-		guard = "OptionalFeatureGuard::new(OptionalFeature::Upload).and(PermissionGuard::new(&[UserPermission::UploadFile, UserPermission::EditThumbnails]))"
+		guard = "PermissionGuard::new(&[UserPermission::UploadFile, UserPermission::EditThumbnails])"
 	)]
 	async fn upload_media_thumbnail(
 		&self,
@@ -704,20 +706,32 @@ fn enforce_max_size(value: &UploadValue, max_size: usize) -> Result<()> {
 }
 
 fn enforce_valid_content_type(value: &UploadValue) -> Result<()> {
-	let content_type = value
-		.content_type
-		.clone()
-		.as_deref()
-		.map(ContentType::from)
-		.ok_or("Could not verify content of file".to_string())?;
-
-	if !content_type.is_image() {
-		return Err("Uploaded file is not an image".into());
+	// Prefer the multipart Content-Type when present and recognized.
+	if let Some(raw) = value.content_type.as_deref().filter(|s| !s.is_empty()) {
+		let content_type = ContentType::from(raw);
+		if content_type.is_image() {
+			tracing::trace!(?content_type, "Verified content type of uploaded file");
+			return Ok(());
+		}
 	}
 
-	tracing::trace!(?content_type, "Verified content type of uploaded file");
+	// Browsers sometimes omit or send a useless MIME type; fall back to extension.
+	if let Some(ext) = Path::new(&value.filename)
+		.extension()
+		.and_then(|e| e.to_str())
+	{
+		let content_type = ContentType::from_extension(ext);
+		if content_type.is_image() {
+			tracing::trace!(
+				?content_type,
+				filename = %value.filename,
+				"Verified uploaded image via filename extension"
+			);
+			return Ok(());
+		}
+	}
 
-	Ok(())
+	Err("Uploaded file is not an image".into())
 }
 
 /// Decode a base64-encoded image string and detect its file extension using magic bytes.

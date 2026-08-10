@@ -1,4 +1,9 @@
-import { useGraphQLMutation, useGraphQLUploadMutation, useSDK } from '@stump/client'
+import {
+	invalidateQueries,
+	queryClient,
+	useGraphQLMutation,
+	useGraphQLUploadMutation,
+} from '@stump/client'
 import { Button, Dialog, Label, PickSelect, Text } from '@stump/components'
 import { graphql, LibraryThumbnailSelectorUpdateMutation } from '@stump/graphql'
 import { Suspense, useCallback, useEffect, useState } from 'react'
@@ -38,7 +43,6 @@ const uploadMutation = graphql(`
 type OnSuccessData = PickSelect<LibraryThumbnailSelectorUpdateMutation, 'updateLibraryThumbnail'>
 
 export default function LibraryThumbnailSelector() {
-	const { sdk } = useSDK()
 	const [selectedSeries, setSelectedSeries] = useState<SelectedSeries>()
 	const [selectedBook, setSelectedBook] = useState<SelectedBook>()
 	const [page, setPage] = useState<number>()
@@ -47,17 +51,16 @@ export default function LibraryThumbnailSelector() {
 
 	const { library } = useLibraryManagement()
 
-	const onSuccess = useCallback(
-		({ thumbnail }: OnSuccessData) =>
-			sdk.axios.get(thumbnail.url, {
-				headers: {
-					'Cache-Control': 'no-cache',
-					Pragma: 'no-cache',
-					Expires: '0',
-				},
-			}),
-		[sdk],
-	)
+	const onSuccess = useCallback(async ({ thumbnail }: OnSuccessData) => {
+		const baseUrl = thumbnail.url.split('?')[0] ?? thumbnail.url
+		await queryClient.removeQueries({
+			predicate: ({ queryKey }) =>
+				queryKey[0] === 'AuthImage.fetchImage' &&
+				typeof queryKey[1] === 'string' &&
+				queryKey[1].startsWith(baseUrl),
+		})
+		await invalidateQueries({ keys: ['libraryById'] })
+	}, [])
 
 	const { mutateAsync: patchThumbnail, isPending: isPatchingThumbnail } = useGraphQLMutation(
 		updateMutation,
@@ -91,7 +94,8 @@ export default function LibraryThumbnailSelector() {
 				setIsOpen(false)
 			} catch (error) {
 				console.error(error)
-				toast.error('Failed to upload image')
+				const message = error instanceof Error ? error.message : 'Failed to upload image'
+				toast.error(message)
 			}
 		},
 		[library.id, uploadThumbnail],

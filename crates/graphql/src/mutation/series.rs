@@ -129,7 +129,7 @@ impl SeriesMutation {
 					Query::select()
 						.column(series::Column::LibraryId)
 						.from(series::Entity)
-						.and_where(series::Column::Id.eq(series_id))
+						.and_where(series::Column::Id.eq(series_id.clone()))
 						.to_owned(),
 				),
 			)
@@ -163,11 +163,22 @@ impl SeriesMutation {
 				image_options,
 				core_config: core.config.as_ref().clone(),
 				force_regen: true,
-				filename: Some(id.to_string()),
+				filename: Some(series_id.clone()),
 			},
 		)
 		.await?;
 		tracing::debug!(path = ?path_buf, "Generated series thumbnail");
+
+		series::Entity::update_many()
+			.col_expr(
+				series::Column::ThumbnailPath,
+				sea_orm::sea_query::Expr::value(Some(
+					path_buf.to_string_lossy().to_string(),
+				)),
+			)
+			.filter(series::Column::Id.eq(series_id))
+			.exec(core.conn.as_ref())
+			.await?;
 
 		Ok(series.into())
 	}

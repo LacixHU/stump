@@ -179,6 +179,12 @@ pub async fn generate_book_thumbnail(
 	let (thumbnail, thumbnail_path, did_generate) = generate_result;
 	fs::write(&thumbnail_path, &thumbnail).await?;
 
+	// When a custom filename is used (e.g. series/library id for cover selection),
+	// the output is not this book's thumbnail — skip updating the media row.
+	if file_name != book.id {
+		return Ok((thumbnail, thumbnail_path, did_generate));
+	}
+
 	let thumbnail_metadata =
 		match generate_image_metadata_from_bytes(thumbnail.clone()).await {
 			Ok(metadata) => Some(metadata),

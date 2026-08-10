@@ -1,4 +1,10 @@
-import { useGraphQLMutation, useGraphQLUploadMutation, useSDK } from '@stump/client'
+import {
+	invalidateQueries,
+	queryClient,
+	useGraphQLMutation,
+	useGraphQLUploadMutation,
+	useSDK,
+} from '@stump/client'
 import { Button, Dialog, PickSelect } from '@stump/components'
 import {
 	FragmentType,
@@ -6,7 +12,7 @@ import {
 	SeriesThumbnailSelectorUpdateMutation,
 	useFragment,
 } from '@stump/graphql'
-import { Suspense, useCallback, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { EntityCard } from '@/components/entity'
@@ -67,18 +73,19 @@ export default function SeriesThumbnailSelector({ fragment }: Props) {
 	const [selectedBook, setSelectedBook] = useState<SelectedBook>()
 	const [page, setPage] = useState<number>()
 	const [isOpen, setIsOpen] = useState(false)
+	const [cacheBust, setCacheBust] = useState<number>()
 
-	const onSuccess = useCallback(
-		({ thumbnail: { url } }: OnSuccessData) =>
-			sdk.axios.get(url, {
-				headers: {
-					'Cache-Control': 'no-cache',
-					Pragma: 'no-cache',
-					Expires: '0',
-				},
-			}),
-		[sdk],
-	)
+	const onSuccess = useCallback(async ({ thumbnail: { url } }: OnSuccessData) => {
+		const baseUrl = url.split('?')[0] ?? url
+		await queryClient.removeQueries({
+			predicate: ({ queryKey }) =>
+				queryKey[0] === 'AuthImage.fetchImage' &&
+				typeof queryKey[1] === 'string' &&
+				queryKey[1].startsWith(baseUrl),
+		})
+		await invalidateQueries({ keys: ['seriesById'] })
+		setCacheBust(Date.now())
+	}, [])
 
 	const { mutateAsync: patchThumbnail, isPending: isPatchingThumbnail } = useGraphQLMutation(
 		updateMutation,
@@ -91,6 +98,16 @@ export default function SeriesThumbnailSelector({ fragment }: Props) {
 		useGraphQLUploadMutation(uploadMutation, {
 			onSuccess: (data) => onSuccess(data.uploadSeriesThumbnail),
 		})
+
+	const imageUrl = useMemo(() => {
+		const base =
+			selectedBook && page ? sdk.media.bookPageURL(selectedBook.id, page) : series.thumbnail.url
+		if (!cacheBust || (selectedBook && page)) {
+			return base
+		}
+		const separator = base.includes('?') ? '&' : '?'
+		return `${base}${separator}t=${cacheBust}`
+	}, [cacheBust, page, sdk.media, selectedBook, series.thumbnail.url])
 
 	const handleOpenChange = (nowOpen: boolean) => {
 		if (!nowOpen) {
@@ -112,7 +129,8 @@ export default function SeriesThumbnailSelector({ fragment }: Props) {
 				setIsOpen(false)
 			} catch (error) {
 				console.error(error)
-				toast.error('Failed to upload image')
+				const message = error instanceof Error ? error.message : 'Failed to upload image'
+				toast.error(message)
 			}
 		},
 		[series.id, uploadThumbnail],
@@ -155,9 +173,7 @@ export default function SeriesThumbnailSelector({ fragment }: Props) {
 	return (
 		<div className="relative">
 			<EntityCard
-				imageUrl={
-					selectedBook && page ? sdk.media.bookPageURL(selectedBook.id, page) : series.thumbnail.url
-				}
+				imageUrl={imageUrl}
 				isCover
 				className="flex-auto shrink-0"
 				fullWidth={(imageFailed) => !imageFailed}

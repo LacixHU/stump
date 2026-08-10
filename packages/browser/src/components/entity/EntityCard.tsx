@@ -1,6 +1,6 @@
 import { cn, ProgressBar, Text } from '@stump/components'
 import { Book } from 'lucide-react'
-import { type ComponentPropsWithoutRef, useState } from 'react'
+import { type ComponentPropsWithoutRef, useEffect, useState } from 'react'
 import { To } from 'react-router-dom'
 
 import { Link } from '@/context'
@@ -66,6 +66,10 @@ export default function EntityCard({
 	const {
 		preferences: { thumbnailRatio },
 	} = usePreferences()
+
+	useEffect(() => {
+		setIsImageFailed(false)
+	}, [imageUrl])
 
 	const Container = href ? Link : Div
 	const containerProps = {

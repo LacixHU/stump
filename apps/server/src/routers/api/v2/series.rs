@@ -86,12 +86,37 @@ async fn get_series_thumbnail_handler(
 		}
 	}
 
-	let first_book = media::Entity::find_for_user(&user)
+	// Prefer a direct book; for nested parent series fall back to the first book
+	// under this series path (self + descendants).
+	let mut first_book = media::Entity::find_for_user(&user)
 		.filter(media::Column::SeriesId.eq(series.id.clone()))
 		.order_by_asc(media::Column::Name)
 		.into_model::<media::MediaThumbSelect>()
 		.one(ctx.conn.as_ref())
 		.await?;
+
+	if first_book.is_none() {
+		let path_prefix = format!("{}{}", series.path, std::path::MAIN_SEPARATOR);
+		first_book = media::Entity::find_for_user(&user)
+			.filter(
+				media::Column::SeriesId.in_subquery(
+					Query::select()
+						.column(series::Column::Id)
+						.from(series::Entity)
+						.and_where(
+							series::Column::Id
+								.eq(series.id.clone())
+								.or(series::Column::Path.starts_with(path_prefix)),
+						)
+						.and_where(series::Column::DeletedAt.is_null())
+						.to_owned(),
+				),
+			)
+			.order_by_asc(media::Column::Name)
+			.into_model::<media::MediaThumbSelect>()
+			.one(ctx.conn.as_ref())
+			.await?;
+	}
 
 	let library_config = library_config::Entity::find()
 		.filter(

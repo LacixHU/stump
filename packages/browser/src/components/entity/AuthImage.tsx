@@ -28,15 +28,27 @@ export const AuthImage = forwardRef<HTMLImageElement, Props>(({ token, src, ...p
 				queryFn: async () => doFetch(url),
 			})
 
-			const imageURL = URL.createObjectURL(data)
-			setImageURL(imageURL)
+			const nextURL = URL.createObjectURL(data)
+			setImageURL((prev) => {
+				if (prev) {
+					URL.revokeObjectURL(prev)
+				}
+				return nextURL
+			})
 		},
 		[doFetch],
 	)
 
 	useEffect(() => {
 		if (token && src) {
-			fetchImage(src)
+			void fetchImage(src)
+		} else {
+			setImageURL((prev) => {
+				if (prev) {
+					URL.revokeObjectURL(prev)
+				}
+				return null
+			})
 		}
 	}, [token, src, fetchImage])
 

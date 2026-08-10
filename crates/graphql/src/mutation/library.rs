@@ -548,6 +548,7 @@ impl LibraryMutation {
 			.unwrap_or_default()
 			.with_page(page);
 
+		let library_id = library.id.clone();
 		let (_, path_buf, _) = generate_book_thumbnail(
 			&book.into(),
 			core.conn.as_ref(),
@@ -555,11 +556,22 @@ impl LibraryMutation {
 				image_options,
 				core_config: core.config.as_ref().clone(),
 				force_regen: true,
-				filename: Some(id.to_string()),
+				filename: Some(library_id.clone()),
 			},
 		)
 		.await?;
 		tracing::debug!(path = ?path_buf, "Generated library thumbnail");
+
+		library::Entity::update_many()
+			.col_expr(
+				library::Column::ThumbnailPath,
+				sea_orm::sea_query::Expr::value(Some(
+					path_buf.to_string_lossy().to_string(),
+				)),
+			)
+			.filter(library::Column::Id.eq(library_id))
+			.exec(core.conn.as_ref())
+			.await?;
 
 		Ok(library.into())
 	}
