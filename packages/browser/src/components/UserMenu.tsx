@@ -8,7 +8,6 @@ import { useAppContext } from '@/context/index.ts'
 import { usePaths } from '@/paths'
 import { useAppStore } from '@/stores'
 
-
 type Props = {
 	variant?: 'sidebar' | 'topbar'
 }

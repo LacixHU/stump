@@ -54,7 +54,7 @@ export function Stepper({
 
 	return (
 		<View
-			className={cn('flex-row items-center justify-between gap-2', className)}
+			className={cn('gap-2 flex-row items-center justify-between', className)}
 			accessibilityLabel={accessibilityLabel}
 			accessibilityRole="adjustable"
 			accessibilityValue={{

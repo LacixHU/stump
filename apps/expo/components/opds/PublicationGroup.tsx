@@ -88,7 +88,7 @@ export default function PublicationGroup({
 				>
 					{({ pressed }) => (
 						<View
-							className={cn('flex items-start px-1 tablet:px-2', {
+							className={cn('px-1 tablet:px-2 flex items-start', {
 								'opacity-80': pressed,
 							})}
 						>
@@ -124,7 +124,7 @@ export default function PublicationGroup({
 	// card list sections
 	return (
 		<View>
-			<View className="flex flex-row items-center justify-between px-4 pb-3">
+			<View className="px-4 pb-3 flex flex-row items-center justify-between">
 				<ListLabel className="ios:px-4 px-2">{metadata.title || 'Publications'}</ListLabel>
 
 				{selfURL && <FeedSelfURL url={selfURL} />}

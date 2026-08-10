@@ -17,7 +17,7 @@ export function HeaderButton({
 
 	return (
 		<Button
-			className="squircle h-[unset] w-[unset] rounded-full border p-1 tablet:p-2"
+			className="squircle p-1 tablet:p-2 h-[unset] w-[unset] rounded-full border"
 			variant={android.variant === 'prominent' ? 'brand' : 'outline'}
 			size="icon"
 			style={style}

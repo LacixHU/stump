@@ -38,7 +38,7 @@ export default function Navigation({ navigation, renderEmpty }: Props) {
 					>
 						{({ pressed }) => (
 							<Card.Row label={link.title} style={pressed && { opacity: 0.6 }}>
-								<Icon as={ChevronRight} className="h-5 w-5 shrink-0 text-foreground-muted" />
+								<Icon as={ChevronRight} className="h-5 w-5 text-foreground-muted shrink-0" />
 							</Card.Row>
 						)}
 					</Pressable>

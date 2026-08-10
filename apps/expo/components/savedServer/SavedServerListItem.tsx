@@ -127,10 +127,10 @@ export default function SavedServerListItem({ server, onEdit, onDelete, forceOPD
 					},
 				]}
 			>
-				<View className="bg-background-muted squircle rounded-3xl px-4 py-3 w-full items-start border border-edge bg-background-surface">
+				<View className="bg-background-muted squircle px-4 py-3 border-edge bg-background-surface w-full items-start rounded-3xl border">
 					<View className="gap-1 flex-1 items-start justify-center">
 						<Text className="text-lg">{server.name}</Text>
-						<Text className="flex-1 text-foreground-muted">{formatURL(server.url)}</Text>
+						<Text className="text-foreground-muted flex-1">{formatURL(server.url)}</Text>
 					</View>
 				</View>
 			</ContextMenu>

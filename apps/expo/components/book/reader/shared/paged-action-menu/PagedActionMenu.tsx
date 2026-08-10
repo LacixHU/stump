@@ -153,7 +153,7 @@ export function PagedActionMenu({
 					<Icon
 						as={readingDirection === ReadingDirection.Ltr ? SquareArrowRight : SquareArrowLeft}
 						size={20}
-						className="ml-auto text-foreground-muted"
+						className="text-foreground-muted ml-auto"
 					/>
 				</DropdownMenuItem>
 				<DropdownMenuSeparator />
@@ -198,7 +198,7 @@ export function PagedActionMenu({
 
 						<DropdownMenuItem className="text-foreground" onPress={onShowSettings}>
 							<Text className="text-lg">{t('readerSettings.allSettings')}</Text>
-							<Icon as={Settings2} size={20} className="ml-auto text-foreground-muted" />
+							<Icon as={Settings2} size={20} className="text-foreground-muted ml-auto" />
 						</DropdownMenuItem>
 					</>
 				)}

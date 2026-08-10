@@ -68,7 +68,7 @@ export default function LibrarySearchItem({ library }: Props) {
 				width: width * 0.75,
 			}}
 		>
-			<View className="flex-row items-start gap-4 px-6 py-2 tablet:px-10">
+			<View className="gap-4 px-6 py-2 tablet:px-10 flex-row items-start">
 				<ThumbnailImage
 					source={{
 						uri,

@@ -1676,7 +1676,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 		>
 			<div className="relative h-full w-full">
 				{isReadAloudActive && readAloudCurrentSentence && (
-					<div className="top-4 rounded-2xl px-4 py-2 shadow-lg backdrop-blur-md pointer-events-none absolute left-1/2 z-50 w-[min(48rem,calc(100%-2rem))] -translate-x-1/2 border border-edge-subtle/80 bg-background/95">
+					<div className="top-4 px-4 py-2 shadow-lg backdrop-blur-md border-edge-subtle/80 pointer-events-none absolute left-1/2 z-50 w-[min(48rem,calc(100%-2rem))] -translate-x-1/2 rounded-2xl border bg-background/95">
 						<div className="text-sm leading-relaxed font-medium text-center text-foreground">
 							{isReadAloudPaused ? 'Paused: ' : ''}
 							{readAloudCurrentSentence}

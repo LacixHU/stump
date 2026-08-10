@@ -37,7 +37,7 @@ export function SearchHistoryAndFavorites({ onSelect }: Props) {
 	if (!hasFavorites && !hasHistory) {
 		return (
 			<View className="px-4 pt-20 flex-1 items-center justify-center">
-				<Text size="lg" className="text-center text-foreground-muted">
+				<Text size="lg" className="text-foreground-muted text-center">
 					Your favorites and recent searches will appear here
 				</Text>
 			</View>

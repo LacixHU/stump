@@ -75,7 +75,7 @@ export function PastBookGridItem({ data }: Props) {
 			}
 		>
 			{({ pressed }) => (
-				<View className={cn('flex-1 items-center gap-2 pb-4', { 'opacity-80': pressed })}>
+				<View className={cn('gap-2 pb-4 flex-1 items-center', { 'opacity-80': pressed })}>
 					<ThumbnailImage
 						source={{
 							uri: thumbnailUrl || '',

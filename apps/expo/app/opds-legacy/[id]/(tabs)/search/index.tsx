@@ -79,7 +79,7 @@ export default function Screen() {
 						Search the feed
 					</Text>
 
-					<Text size="lg" className="text-center text-foreground-muted">
+					<Text size="lg" className="text-foreground-muted text-center">
 						Enter a search query to find content in this OPDS feed
 					</Text>
 				</View>
