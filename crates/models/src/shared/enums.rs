@@ -727,6 +727,8 @@ pub enum UserPermission {
 	AccessKoreaderSync,
 	/// Grant access to the kobo sync feature
 	AccessKoboSync,
+	/// Grant access to server-side text-to-speech (e.g. Piper read aloud)
+	AccessServerTts,
 	///TODO: Expand permissions for bookclub + smartlist
 	/// Grant access to the book club feature
 	AccessBookClub,

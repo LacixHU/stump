@@ -1,0 +1,64 @@
+---
+title: Server TTS (Piper)
+description: Optional server-side text-to-speech for EPUB read aloud, limited to selected users
+---
+
+Server TTS uses [Piper](https://github.com/rhasspy/piper) on the Stump host to synthesize speech for the EPUB **Read aloud** feature. Browser/OS voices remain the default for everyone else.
+
+## Requirements
+
+1. Install the Piper binary on the server host and ensure it is on `PATH`, or set an absolute path via config.
+2. Download one or more Piper voice models (`.onnx` + matching `.onnx.json`) into the voices directory.
+3. Enable the feature and grant the **Server TTS** permission only to users who should use it.
+
+## Configuration
+
+| Setting                | Env                          | Default                   | Description                           |
+| ---------------------- | ---------------------------- | ------------------------- | ------------------------------------- |
+| `enable_server_tts`    | `STUMP_ENABLE_SERVER_TTS`    | `false`                   | Master switch for server TTS          |
+| `piper_path`           | `STUMP_PIPER_PATH`           | `piper` (PATH)            | Path to the Piper executable          |
+| `piper_voices_dir`     | `STUMP_PIPER_VOICES_DIR`     | `{config_dir}/tts/voices` | Directory of `.onnx` voice models     |
+| `piper_default_voice`  | `STUMP_PIPER_DEFAULT_VOICE`  | first voice found         | Voice id (filename without `.onnx`)   |
+| `server_tts_max_chars` | `STUMP_SERVER_TTS_MAX_CHARS` | `2000`                    | Max characters per synthesize request |
+
+Example `Stump.toml`:
+
+```toml
+enable_server_tts = true
+# piper_path = "/usr/local/bin/piper"
+# piper_voices_dir = "/var/lib/stump/tts/voices"
+# piper_default_voice = "en_US-lessac-medium"
+```
+
+Place models like:
+
+```text
+{config_dir}/tts/voices/en_US-lessac-medium.onnx
+{config_dir}/tts/voices/en_US-lessac-medium.onnx.json
+```
+
+## Permissions
+
+Server TTS is available only when:
+
+1. `enable_server_tts` is `true`
+2. At least one valid voice model is present
+3. The user has the **Server TTS** permission (`ACCESS_SERVER_TTS`), or is the server owner
+
+Assign the permission under **Settings → Users**. Users without it only see browser read aloud.
+
+## Using it
+
+In the EPUB reader, open read aloud settings. If server TTS is available for your account, an **Engine** selector appears:
+
+- **Browser** — device/OS voices (Web Speech API)
+- **Server (Piper)** — neural synthesis on the Stump host
+
+Speech is generated per sentence and streamed as WAV audio. Concurrent jobs are limited on the server to protect CPU.
+
+## API
+
+Authenticated endpoints (permission required):
+
+- `GET /api/v2/tts` — status, default voice, available voices
+- `POST /api/v2/tts/speak` — `{ "text": "...", "voice": "optional-id", "rate": 1.0 }` → `audio/wav`

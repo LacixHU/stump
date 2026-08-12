@@ -2747,6 +2747,10 @@
 			"label": "Kobo sync",
 			"description": "Allows the user to access the Kobo sync integration"
 		},
+		"ACCESS_SERVER_TTS": {
+			"label": "Server TTS",
+			"description": "Allows the user to use server-side Piper text-to-speech for read aloud"
+		},
 		"ACCESS_SMART_LIST": {
 			"label": "Smart Lists",
 			"description": "Allows the user to access smart list features, including creating and managing smart lists"

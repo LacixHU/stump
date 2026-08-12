@@ -13,6 +13,7 @@ import {
 	OPDSV2API,
 	SeriesAPI,
 	ServerAPI,
+	TtsAPI,
 } from './controllers'
 import {
 	attemptWebsocketConnect,
@@ -521,5 +522,12 @@ export class Api {
 	 */
 	get server(): ServerAPI {
 		return new ServerAPI(this)
+	}
+
+	/**
+	 * Get an instance for the TtsAPI (server-side Piper TTS)
+	 */
+	get tts(): TtsAPI {
+		return new TtsAPI(this)
 	}
 }

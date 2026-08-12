@@ -18,7 +18,7 @@ export default function ThemeControls() {
 				</ControlButton>
 			</Dialog.Trigger>
 
-			<Dialog.Content size="md" className="gap-4 bg-background-surface z-101 flex flex-col">
+			<Dialog.Content size="md" className="gap-4 z-101 flex flex-col bg-dialog">
 				<Dialog.Header className="flex items-center justify-between">
 					<Heading size="md">Appearance</Heading>
 					<Dialog.Close />

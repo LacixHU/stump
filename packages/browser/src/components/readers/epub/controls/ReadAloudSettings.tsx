@@ -13,16 +13,27 @@ export default function ReadAloudSettings() {
 		isReadAloudPaused,
 		onPauseReadAloud,
 		onResumeReadAloud,
+		onSetReadAloudEngine,
 		onSetReadAloudPitch,
 		onSetReadAloudRate,
 		onSetReadAloudVoiceUri,
 		readAloudCurrentSentence,
+		readAloudEngine,
 		readAloudPitch,
 		readAloudRate,
+		readAloudServerAvailable,
 		readAloudSupported,
 		readAloudVoiceUri,
 		readAloudVoices,
 	} = useEpubReaderControls()
+
+	const engineOptions = useMemo(() => {
+		const options = [{ label: 'Browser', value: 'browser' }]
+		if (readAloudServerAvailable) {
+			options.push({ label: 'Server (Piper)', value: 'server' })
+		}
+		return options
+	}, [readAloudServerAvailable])
 
 	const voiceOptions = useMemo(
 		() => [{ label: 'Default voice', value: '' }, ...readAloudVoices],
@@ -43,6 +54,21 @@ export default function ReadAloudSettings() {
 	return (
 		<div className="gap-y-3 py-1.5 flex flex-col">
 			<Label>Read aloud</Label>
+
+			{readAloudServerAvailable && (
+				<div className="space-y-1">
+					<Label htmlFor="read-aloud-engine">Engine</Label>
+					<NativeSelect
+						id="read-aloud-engine"
+						size="sm"
+						options={engineOptions}
+						value={readAloudEngine}
+						onChange={(e) =>
+							onSetReadAloudEngine(e.target.value === 'server' ? 'server' : 'browser')
+						}
+					/>
+				</div>
+			)}
 
 			<div className="space-y-1">
 				<Label htmlFor="read-aloud-voice">Voice</Label>
@@ -78,28 +104,30 @@ export default function ReadAloudSettings() {
 				</div>
 			</div>
 
-			<div className="gap-y-2 flex flex-col">
-				<Label>Pitch</Label>
-				<div className="gap-x-2 flex items-center">
-					<IconButton
-						variant="ghost"
-						size="xs"
-						onClick={() => onSetReadAloudPitch(clampPitch(readAloudPitch - 0.1))}
-					>
-						<Minus className="h-4 w-4" />
-					</IconButton>
-					<Text size="sm" className="min-w-10 text-center">
-						{readAloudPitch.toFixed(1)}
-					</Text>
-					<IconButton
-						variant="ghost"
-						size="xs"
-						onClick={() => onSetReadAloudPitch(clampPitch(readAloudPitch + 0.1))}
-					>
-						<Plus className="h-4 w-4" />
-					</IconButton>
+			{readAloudEngine === 'browser' && (
+				<div className="gap-y-2 flex flex-col">
+					<Label>Pitch</Label>
+					<div className="gap-x-2 flex items-center">
+						<IconButton
+							variant="ghost"
+							size="xs"
+							onClick={() => onSetReadAloudPitch(clampPitch(readAloudPitch - 0.1))}
+						>
+							<Minus className="h-4 w-4" />
+						</IconButton>
+						<Text size="sm" className="min-w-10 text-center">
+							{readAloudPitch.toFixed(1)}
+						</Text>
+						<IconButton
+							variant="ghost"
+							size="xs"
+							onClick={() => onSetReadAloudPitch(clampPitch(readAloudPitch + 0.1))}
+						>
+							<Plus className="h-4 w-4" />
+						</IconButton>
+					</div>
 				</div>
-			</div>
+			)}
 
 			<div className="gap-x-2 flex items-center">
 				<Button

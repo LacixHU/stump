@@ -55,6 +55,11 @@ pub mod env_keys {
 	pub const MAX_IMAGE_UPLOAD_SIZE_KEY: &str = "STUMP_MAX_IMAGE_UPLOAD_SIZE";
 	pub const ENABLE_UPLOAD_KEY: &str = "STUMP_ENABLE_UPLOAD";
 	pub const MAX_FILE_UPLOAD_SIZE_KEY: &str = "STUMP_MAX_FILE_UPLOAD_SIZE";
+	pub const ENABLE_SERVER_TTS_KEY: &str = "STUMP_ENABLE_SERVER_TTS";
+	pub const PIPER_PATH_KEY: &str = "STUMP_PIPER_PATH";
+	pub const PIPER_VOICES_DIR_KEY: &str = "STUMP_PIPER_VOICES_DIR";
+	pub const PIPER_DEFAULT_VOICE_KEY: &str = "STUMP_PIPER_DEFAULT_VOICE";
+	pub const SERVER_TTS_MAX_CHARS_KEY: &str = "STUMP_SERVER_TTS_MAX_CHARS";
 	pub const PDF_RENDER_DPI_KEY: &str = "STUMP_PDF_RENDER_DPI";
 	pub const PDF_MAX_DIMENSION_KEY: &str = "STUMP_PDF_MAX_DIMENSION";
 	pub const PDF_RENDER_FORMAT_KEY: &str = "STUMP_PDF_RENDER_FORMAT";
@@ -84,6 +89,8 @@ pub mod defaults {
 	pub const DEFAULT_MAX_IMAGE_UPLOAD_SIZE: usize = 20 * 1024 * 1024; // 20 MB
 	pub const DEFAULT_ENABLE_UPLOAD: bool = false;
 	pub const DEFAULT_MAX_FILE_UPLOAD_SIZE: usize = 20 * 1024 * 1024; // 20 MB
+	pub const DEFAULT_ENABLE_SERVER_TTS: bool = false;
+	pub const DEFAULT_SERVER_TTS_MAX_CHARS: usize = 2_000;
 	pub const DEFAULT_PDF_RENDER_DPI: u32 = 150; // Good balance of quality and performance
 	pub const DEFAULT_PDF_MAX_DIMENSION: u32 = 1200; // Optimized for faster rendering while maintaining quality
 	pub const DEFAULT_PDF_RENDER_FORMAT: &str = "webp"; // Default to WebP for better compression
@@ -278,6 +285,31 @@ pub struct StumpConfig {
 	#[env_key(MAX_FILE_UPLOAD_SIZE_KEY)]
 	pub max_file_upload_size: usize,
 
+	/// Whether server-side TTS (Piper) is enabled for users with AccessServerTts.
+	#[default_value(DEFAULT_ENABLE_SERVER_TTS)]
+	#[env_key(ENABLE_SERVER_TTS_KEY)]
+	pub enable_server_tts: bool,
+
+	/// Path to the Piper binary. Defaults to looking up `piper` on PATH when unset.
+	#[default_value(None)]
+	#[env_key(PIPER_PATH_KEY)]
+	pub piper_path: Option<String>,
+
+	/// Directory containing Piper voice models (`.onnx` + matching `.onnx.json`).
+	#[default_value(None)]
+	#[env_key(PIPER_VOICES_DIR_KEY)]
+	pub piper_voices_dir: Option<String>,
+
+	/// Default Piper voice id (filename stem without `.onnx`).
+	#[default_value(None)]
+	#[env_key(PIPER_DEFAULT_VOICE_KEY)]
+	pub piper_default_voice: Option<String>,
+
+	/// Maximum characters accepted per server TTS request.
+	#[default_value(DEFAULT_SERVER_TTS_MAX_CHARS)]
+	#[env_key(SERVER_TTS_MAX_CHARS_KEY)]
+	pub server_tts_max_chars: usize,
+
 	/// The DPI (dots per inch) to use when rendering PDF pages as images.
 	#[default_value(DEFAULT_PDF_RENDER_DPI)]
 	#[env_key(PDF_RENDER_DPI_KEY)]
@@ -433,6 +465,22 @@ impl StumpConfig {
 		PathBuf::from(&self.config_dir).join("emojis")
 	}
 
+	/// Directory used for Piper voice models. Falls back to `{config_dir}/tts/voices`.
+	pub fn get_piper_voices_dir(&self) -> PathBuf {
+		self.piper_voices_dir
+			.as_ref()
+			.map(PathBuf::from)
+			.unwrap_or_else(|| self.get_config_dir().join("tts").join("voices"))
+	}
+
+	/// Resolved Piper binary path, or `"piper"` when unset (PATH lookup).
+	pub fn get_piper_path(&self) -> PathBuf {
+		self.piper_path
+			.as_ref()
+			.map(PathBuf::from)
+			.unwrap_or_else(|| PathBuf::from("piper"))
+	}
+
 	/// Returns a `PathBuf` to the PDF page cache directory
 	pub fn get_pdf_cache_dir(&self) -> PathBuf {
 		self.get_cache_dir().join("pdf_pages")
@@ -555,6 +603,11 @@ mod tests {
 				max_image_upload_size: Some(DEFAULT_MAX_IMAGE_UPLOAD_SIZE),
 				enable_upload: Some(DEFAULT_ENABLE_UPLOAD),
 				max_file_upload_size: Some(DEFAULT_MAX_FILE_UPLOAD_SIZE),
+				enable_server_tts: Some(DEFAULT_ENABLE_SERVER_TTS),
+				piper_path: None,
+				piper_voices_dir: None,
+				piper_default_voice: None,
+				server_tts_max_chars: Some(DEFAULT_SERVER_TTS_MAX_CHARS),
 				pdf_render_dpi: Some(DEFAULT_PDF_RENDER_DPI),
 				pdf_max_dimension: Some(DEFAULT_PDF_MAX_DIMENSION),
 				pdf_render_format: Some(DEFAULT_PDF_RENDER_FORMAT.to_string()),
@@ -626,6 +679,11 @@ mod tests {
 						max_image_upload_size: DEFAULT_MAX_IMAGE_UPLOAD_SIZE,
 						enable_upload: DEFAULT_ENABLE_UPLOAD,
 						max_file_upload_size: DEFAULT_MAX_FILE_UPLOAD_SIZE,
+						enable_server_tts: DEFAULT_ENABLE_SERVER_TTS,
+						piper_path: None,
+						piper_voices_dir: None,
+						piper_default_voice: None,
+						server_tts_max_chars: DEFAULT_SERVER_TTS_MAX_CHARS,
 						pdf_render_dpi: DEFAULT_PDF_RENDER_DPI,
 						pdf_max_dimension: DEFAULT_PDF_MAX_DIMENSION,
 						pdf_render_format: DEFAULT_PDF_RENDER_FORMAT.to_string(),

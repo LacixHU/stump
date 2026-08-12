@@ -7,6 +7,7 @@ import {
 	ReadingDirection,
 	ReadingMode,
 	SupportedFont,
+	UserPermission,
 } from '@stump/graphql'
 import { useQueryClient } from '@tanstack/react-query'
 import { Book, Contents, Rendition } from 'epubjs'
@@ -16,11 +17,12 @@ import AutoSizer from 'react-virtualized-auto-sizer'
 import { toast } from 'sonner'
 
 import Spinner from '@/components/Spinner'
+import { useAppContext } from '@/context'
 import { useTheme } from '@/hooks'
 import { useBookPreferences } from '@/scenes/book/reader/useBookPreferences'
 import { useBookTimer } from '@/stores/reader'
 
-import { EpubContent } from './context'
+import { EpubContent, ReadAloudEngine } from './context'
 import EpubReaderContainer from './EpubReaderContainer'
 import { darkVariantText, toFamilyName } from './themes'
 
@@ -36,6 +38,7 @@ const READ_ALOUD_PREFS_KEY = 'stump:epubjs-read-aloud-preferences'
 const READ_ALOUD_RESUME_KEY = 'stump:epubjs-read-aloud-resume'
 
 type ReadAloudPreferences = {
+	engine: ReadAloudEngine
 	rate: number
 	pitch: number
 	voiceUri: string | null
@@ -47,6 +50,7 @@ type ReadAloudResume = {
 }
 
 const defaultReadAloudPreferences: ReadAloudPreferences = {
+	engine: 'browser',
 	rate: 1,
 	pitch: 1,
 	voiceUri: null,
@@ -65,6 +69,7 @@ const loadReadAloudPreferences = (): ReadAloudPreferences => {
 	try {
 		const parsed = JSON.parse(raw) as Partial<ReadAloudPreferences>
 		return {
+			engine: parsed.engine === 'server' ? 'server' : defaultReadAloudPreferences.engine,
 			rate: typeof parsed.rate === 'number' ? parsed.rate : defaultReadAloudPreferences.rate,
 			pitch: typeof parsed.pitch === 'number' ? parsed.pitch : defaultReadAloudPreferences.pitch,
 			voiceUri:
@@ -291,7 +296,9 @@ const injectFontStylesheet = (rendition: Rendition) => {
  */
 export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 	const { sdk } = useSDK()
+	const { checkPermission } = useAppContext()
 	const { isDarkVariant } = useTheme()
+	const canUseServerTts = checkPermission(UserPermission.AccessServerTts)
 
 	const {
 		data: { epubById: ebook },
@@ -307,11 +314,20 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 	const [isReadAloudActive, setIsReadAloudActive] = useState(false)
 	const [isReadAloudPaused, setIsReadAloudPaused] = useState(false)
 	const [readAloudCurrentSentence, setReadAloudCurrentSentence] = useState<string | null>(null)
-	const [readAloudVoices, setReadAloudVoices] = useState<Array<{ label: string; value: string }>>(
-		[],
-	)
+	const [readAloudServerAvailable, setReadAloudServerAvailable] = useState(false)
+	const [browserReadAloudVoices, setBrowserReadAloudVoices] = useState<
+		Array<{ label: string; value: string }>
+	>([])
+	const [serverReadAloudVoices, setServerReadAloudVoices] = useState<
+		Array<{ label: string; value: string }>
+	>([])
 	const [
-		{ pitch: readAloudPitch, rate: readAloudRate, voiceUri: readAloudVoiceUri },
+		{
+			engine: readAloudEngine,
+			pitch: readAloudPitch,
+			rate: readAloudRate,
+			voiceUri: readAloudVoiceUri,
+		},
 		setReadAloudPreferences,
 	] = useState<ReadAloudPreferences>(() => loadReadAloudPreferences())
 
@@ -324,6 +340,11 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 	const currentLocationRef = useRef<EpubLocationState>()
 	const readAloudCurrentCfiRef = useRef<string | null>(null)
 	const readAloudResumeRef = useRef<ReadAloudResume>(loadReadAloudResume(id))
+	const readAloudAudioRef = useRef<HTMLAudioElement | null>(null)
+	const readAloudObjectUrlRef = useRef<string | null>(null)
+	const playSentenceQueueRef = useRef<((requestId: number, sentenceIndex: number) => void) | null>(
+		null,
+	)
 	const speakCurrentLocationRef = useRef<
 		| ((opts?: {
 				suppressToast?: boolean
@@ -352,7 +373,25 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 	const lastSyncedElapsedRef = useRef(ebook.media?.readProgress?.elapsedSeconds ?? 0)
 
 	const client = useQueryClient()
-	const readAloudSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
+	const browserSpeechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
+	const effectiveReadAloudEngine: ReadAloudEngine =
+		readAloudEngine === 'server' && readAloudServerAvailable ? 'server' : 'browser'
+	const readAloudSupported =
+		browserSpeechSupported || (readAloudServerAvailable && typeof Audio !== 'undefined')
+	const readAloudVoices =
+		effectiveReadAloudEngine === 'server' ? serverReadAloudVoices : browserReadAloudVoices
+
+	const clearServerAudio = useCallback(() => {
+		if (readAloudAudioRef.current) {
+			readAloudAudioRef.current.pause()
+			readAloudAudioRef.current.src = ''
+			readAloudAudioRef.current = null
+		}
+		if (readAloudObjectUrlRef.current) {
+			URL.revokeObjectURL(readAloudObjectUrlRef.current)
+			readAloudObjectUrlRef.current = null
+		}
+	}, [])
 
 	const persistReadAloudResume = useCallback(
 		(resume: ReadAloudResume) => {
@@ -368,22 +407,23 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 	)
 
 	useEffect(() => {
-		if (!readAloudSupported) {
+		if (typeof window === 'undefined') {
 			return
 		}
 
 		window.localStorage.setItem(
 			READ_ALOUD_PREFS_KEY,
 			JSON.stringify({
+				engine: readAloudEngine,
 				rate: readAloudRate,
 				pitch: readAloudPitch,
 				voiceUri: readAloudVoiceUri,
 			}),
 		)
-	}, [readAloudPitch, readAloudRate, readAloudSupported, readAloudVoiceUri])
+	}, [readAloudEngine, readAloudPitch, readAloudRate, readAloudVoiceUri])
 
 	useEffect(() => {
-		if (!readAloudSupported) {
+		if (!browserSpeechSupported) {
 			return
 		}
 
@@ -396,7 +436,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				}))
 				.sort((a, b) => a.label.localeCompare(b.label))
 
-			setReadAloudVoices(voices)
+			setBrowserReadAloudVoices(voices)
 
 			// Log voice availability for debugging, especially on Android
 			if (voices.length === 0) {
@@ -422,7 +462,65 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			clearTimeout(timeout)
 			window.speechSynthesis.removeEventListener('voiceschanged', updateVoices)
 		}
-	}, [readAloudSupported])
+	}, [browserSpeechSupported])
+
+	useEffect(() => {
+		if (!canUseServerTts) {
+			setReadAloudServerAvailable(false)
+			setServerReadAloudVoices([])
+			setReadAloudPreferences((prev) =>
+				prev.engine === 'server' ? { ...prev, engine: 'browser' } : prev,
+			)
+			return
+		}
+
+		let cancelled = false
+
+		sdk.tts
+			.status()
+			.then((status) => {
+				if (cancelled) {
+					return
+				}
+
+				const available = status.enabled && status.voices.length > 0
+				setReadAloudServerAvailable(available)
+				setServerReadAloudVoices(
+					status.voices.map((voice) => ({
+						label: voice.label,
+						value: voice.id,
+					})),
+				)
+
+				if (!available) {
+					setReadAloudPreferences((prev) =>
+						prev.engine === 'server' ? { ...prev, engine: 'browser' } : prev,
+					)
+					return
+				}
+
+				setReadAloudPreferences((prev) => {
+					if (prev.engine !== 'server' || prev.voiceUri || !status.defaultVoice) {
+						return prev
+					}
+					return { ...prev, voiceUri: status.defaultVoice }
+				})
+			})
+			.catch(() => {
+				if (cancelled) {
+					return
+				}
+				setReadAloudServerAvailable(false)
+				setServerReadAloudVoices([])
+				setReadAloudPreferences((prev) =>
+					prev.engine === 'server' ? { ...prev, engine: 'browser' } : prev,
+				)
+			})
+
+		return () => {
+			cancelled = true
+		}
+	}, [canUseServerTts, sdk])
 
 	const extractVisibleText = useCallback(() => {
 		if (!rendition) {
@@ -523,7 +621,10 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			return
 		}
 
-		window.speechSynthesis.cancel()
+		if (browserSpeechSupported) {
+			window.speechSynthesis.cancel()
+		}
+		clearServerAudio()
 		readAloudRequestRef.current += 1
 		readAloudSentenceQueueRef.current = []
 		persistReadAloudResume({
@@ -534,7 +635,201 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 		setIsReadAloudPaused(false)
 		setReadAloudCurrentSentence(null)
 		readAloudAutoTurnInProgressRef.current = false
-	}, [persistReadAloudResume, readAloudSupported])
+	}, [browserSpeechSupported, clearServerAudio, persistReadAloudResume, readAloudSupported])
+
+	const playBrowserSentence = useCallback(
+		(requestId: number, sentenceIndex: number, sentence: string) => {
+			const utterance = new SpeechSynthesisUtterance(sentence)
+
+			// Set rate and pitch with bounds for Android compatibility
+			// Android's Web Speech API can be finicky with certain values
+			try {
+				utterance.rate = Math.max(0.1, Math.min(10, readAloudRate))
+				utterance.pitch = Math.max(0, Math.min(2, readAloudPitch))
+			} catch (e) {
+				// Fallback to defaults if setting fails
+				utterance.rate = 1
+				utterance.pitch = 1
+				console.warn('Failed to set utterance rate/pitch, using defaults', e)
+			}
+
+			// Try to find the selected voice, fallback to first available voice
+			let voiceWasSet = false
+			if (readAloudVoiceUri) {
+				const voice = window.speechSynthesis
+					.getVoices()
+					.find((candidate) => candidate.voiceURI === readAloudVoiceUri)
+				if (voice) {
+					try {
+						utterance.voice = voice
+						voiceWasSet = true
+					} catch (e) {
+						console.warn(
+							`Failed to set selected voice "${readAloudVoiceUri}": ${e instanceof Error ? e.message : String(e)}`,
+						)
+					}
+				} else {
+					console.warn(
+						`Selected voice URI "${readAloudVoiceUri}" not found. Available voices: ${window.speechSynthesis
+							.getVoices()
+							.map((v) => v.voiceURI)
+							.join(', ')}`,
+					)
+				}
+			}
+
+			// If no voice was explicitly set, try to use the first available voice
+			if (!voiceWasSet) {
+				const fallbackVoice = window.speechSynthesis.getVoices()[0]
+				if (fallbackVoice) {
+					try {
+						utterance.voice = fallbackVoice
+						voiceWasSet = true
+						if (readAloudVoiceUri) {
+							console.warn(
+								`Using fallback voice "${fallbackVoice.name}" (${fallbackVoice.lang}) because selected voice is unavailable`,
+							)
+						}
+					} catch (e) {
+						console.warn(
+							`Failed to set fallback voice "${fallbackVoice.name}": ${e instanceof Error ? e.message : String(e)}`,
+						)
+					}
+				}
+			}
+
+			utterance.onend = () => {
+				if (readAloudRequestRef.current === requestId) {
+					playSentenceQueueRef.current?.(requestId, sentenceIndex + 1)
+				}
+			}
+			utterance.onerror = (event: SpeechSynthesisErrorEvent) => {
+				if (readAloudRequestRef.current === requestId) {
+					const errorDetails = event.error || 'unknown error'
+					const voiceInfo = utterance.voice
+						? `(voice: ${utterance.voice.name}, lang: ${utterance.voice.lang})`
+						: '(no voice set)'
+					console.error(
+						`Speech synthesis error: ${errorDetails} ${voiceInfo}. Available voices: ${window.speechSynthesis.getVoices().length}. Text length: ${sentence.length}`,
+					)
+
+					// Try recovery: create a new utterance without voice selection
+					if (voiceWasSet && window.speechSynthesis.getVoices().length > 0) {
+						console.warn('Attempting recovery: retrying without explicitly set voice...')
+						try {
+							const recoveryUtterance = new SpeechSynthesisUtterance(sentence)
+							recoveryUtterance.rate = utterance.rate
+							recoveryUtterance.pitch = utterance.pitch
+							recoveryUtterance.onend = utterance.onend
+							recoveryUtterance.onerror = () => {
+								// Second failure: give up
+								if (readAloudRequestRef.current === requestId) {
+									setIsReadAloudActive(false)
+									setIsReadAloudPaused(false)
+									setReadAloudCurrentSentence(null)
+									toast.error('Failed to read aloud this page')
+								}
+							}
+							window.speechSynthesis.speak(recoveryUtterance)
+						} catch (recoveryError) {
+							console.error(
+								`Recovery attempt failed: ${recoveryError instanceof Error ? recoveryError.message : String(recoveryError)}`,
+							)
+							setIsReadAloudActive(false)
+							setIsReadAloudPaused(false)
+							setReadAloudCurrentSentence(null)
+							toast.error('Failed to read aloud this page')
+						}
+					} else {
+						setIsReadAloudActive(false)
+						setIsReadAloudPaused(false)
+						setReadAloudCurrentSentence(null)
+						toast.error('Failed to read aloud this page')
+					}
+				}
+			}
+
+			// Attempt to speak with error handling
+			try {
+				window.speechSynthesis.speak(utterance)
+			} catch (e) {
+				if (readAloudRequestRef.current === requestId) {
+					setIsReadAloudActive(false)
+					setIsReadAloudPaused(false)
+					setReadAloudCurrentSentence(null)
+					console.error(`Failed to call speak(): ${e instanceof Error ? e.message : String(e)}`)
+					toast.error('Failed to read aloud this page')
+				}
+			}
+		},
+		[readAloudPitch, readAloudRate, readAloudVoiceUri],
+	)
+
+	const playServerSentence = useCallback(
+		async (requestId: number, sentenceIndex: number, sentence: string) => {
+			clearServerAudio()
+
+			try {
+				const blob = await sdk.tts.speak({
+					rate: readAloudRate,
+					text: sentence,
+					voice: readAloudVoiceUri,
+				})
+
+				if (readAloudRequestRef.current !== requestId) {
+					return
+				}
+
+				// Keep playbackRate at 1 — speed is already applied server-side via Piper length_scale.
+				// Stacking both causes chipmunk/distorted audio.
+				const objectUrl = URL.createObjectURL(new Blob([blob], { type: 'audio/wav' }))
+				readAloudObjectUrlRef.current = objectUrl
+				const audio = new Audio(objectUrl)
+				readAloudAudioRef.current = audio
+				audio.playbackRate = 1
+
+				audio.onended = () => {
+					if (readAloudObjectUrlRef.current === objectUrl) {
+						URL.revokeObjectURL(objectUrl)
+						readAloudObjectUrlRef.current = null
+					}
+					if (readAloudAudioRef.current === audio) {
+						readAloudAudioRef.current = null
+					}
+					if (readAloudRequestRef.current === requestId) {
+						playSentenceQueueRef.current?.(requestId, sentenceIndex + 1)
+					}
+				}
+
+				audio.onerror = () => {
+					if (readAloudObjectUrlRef.current === objectUrl) {
+						URL.revokeObjectURL(objectUrl)
+						readAloudObjectUrlRef.current = null
+					}
+					if (readAloudAudioRef.current === audio) {
+						readAloudAudioRef.current = null
+					}
+					if (readAloudRequestRef.current === requestId) {
+						setIsReadAloudActive(false)
+						setIsReadAloudPaused(false)
+						setReadAloudCurrentSentence(null)
+						toast.error('Failed to read aloud this page')
+					}
+				}
+
+				await audio.play()
+			} catch (error) {
+				if (readAloudRequestRef.current === requestId) {
+					console.error('Server TTS failed', error)
+					setIsReadAloudActive(false)
+					setIsReadAloudPaused(false)
+					setReadAloudCurrentSentence(null)
+					toast.error('Failed to read aloud this page')
+				}
+			}
+		},
+		[clearServerAudio, readAloudRate, readAloudVoiceUri, sdk],
+	)
 
 	const playSentenceQueue = useCallback(
 		(requestId: number, sentenceIndex: number) => {
@@ -610,138 +905,44 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			})
 			setReadAloudCurrentSentence(sentence)
 
-			const utterance = new SpeechSynthesisUtterance(sentence)
-
-			// Set rate and pitch with bounds for Android compatibility
-			// Android's Web Speech API can be finicky with certain values
-			try {
-				utterance.rate = Math.max(0.1, Math.min(10, readAloudRate))
-				utterance.pitch = Math.max(0, Math.min(2, readAloudPitch))
-			} catch (e) {
-				// Fallback to defaults if setting fails
-				utterance.rate = 1
-				utterance.pitch = 1
-				console.warn('Failed to set utterance rate/pitch, using defaults', e)
+			if (effectiveReadAloudEngine === 'server') {
+				void playServerSentence(requestId, sentenceIndex, sentence)
+				return
 			}
 
-			// Try to find the selected voice, fallback to first available voice
-			let voiceWasSet = false
-			if (readAloudVoiceUri) {
-				const voice = window.speechSynthesis
-					.getVoices()
-					.find((candidate) => candidate.voiceURI === readAloudVoiceUri)
-				if (voice) {
-					try {
-						utterance.voice = voice
-						voiceWasSet = true
-					} catch (e) {
-						console.warn(
-							`Failed to set selected voice "${readAloudVoiceUri}": ${e instanceof Error ? e.message : String(e)}`,
-						)
-					}
-				} else {
-					console.warn(
-						`Selected voice URI "${readAloudVoiceUri}" not found. Available voices: ${window.speechSynthesis
-							.getVoices()
-							.map((v) => v.voiceURI)
-							.join(', ')}`,
-					)
-				}
+			if (!browserSpeechSupported) {
+				setIsReadAloudActive(false)
+				setIsReadAloudPaused(false)
+				setReadAloudCurrentSentence(null)
+				toast.error('Read aloud is not supported in this browser')
+				return
 			}
 
-			// If no voice was explicitly set, try to use the first available voice
-			if (!voiceWasSet) {
-				const fallbackVoice = window.speechSynthesis.getVoices()[0]
-				if (fallbackVoice) {
-					try {
-						utterance.voice = fallbackVoice
-						voiceWasSet = true
-						if (readAloudVoiceUri) {
-							console.warn(
-								`Using fallback voice "${fallbackVoice.name}" (${fallbackVoice.lang}) because selected voice is unavailable`,
-							)
-						}
-					} catch (e) {
-						console.warn(
-							`Failed to set fallback voice "${fallbackVoice.name}": ${e instanceof Error ? e.message : String(e)}`,
-						)
-					}
-				}
-			}
-
-			utterance.onend = () => {
-				if (readAloudRequestRef.current === requestId) {
-					playSentenceQueue(requestId, sentenceIndex + 1)
-				}
-			}
-			utterance.onerror = (event: SpeechSynthesisErrorEvent) => {
-				if (readAloudRequestRef.current === requestId) {
-					const errorDetails = event.error || 'unknown error'
-					const voiceInfo = utterance.voice
-						? `(voice: ${utterance.voice.name}, lang: ${utterance.voice.lang})`
-						: '(no voice set)'
-					console.error(
-						`Speech synthesis error: ${errorDetails} ${voiceInfo}. Available voices: ${window.speechSynthesis.getVoices().length}. Text length: ${sentence.length}`,
-					)
-
-					// Try recovery: create a new utterance without voice selection
-					if (voiceWasSet && window.speechSynthesis.getVoices().length > 0) {
-						console.warn('Attempting recovery: retrying without explicitly set voice...')
-						try {
-							const recoveryUtterance = new SpeechSynthesisUtterance(sentence)
-							recoveryUtterance.rate = utterance.rate
-							recoveryUtterance.pitch = utterance.pitch
-							recoveryUtterance.onend = utterance.onend
-							recoveryUtterance.onerror = () => {
-								// Second failure: give up
-								if (readAloudRequestRef.current === requestId) {
-									setIsReadAloudActive(false)
-									setIsReadAloudPaused(false)
-									setReadAloudCurrentSentence(null)
-									toast.error('Failed to read aloud this page')
-								}
-							}
-							window.speechSynthesis.speak(recoveryUtterance)
-						} catch (recoveryError) {
-							console.error(
-								`Recovery attempt failed: ${recoveryError instanceof Error ? recoveryError.message : String(recoveryError)}`,
-							)
-							setIsReadAloudActive(false)
-							setIsReadAloudPaused(false)
-							setReadAloudCurrentSentence(null)
-							toast.error('Failed to read aloud this page')
-						}
-					} else {
-						setIsReadAloudActive(false)
-						setIsReadAloudPaused(false)
-						setReadAloudCurrentSentence(null)
-						toast.error('Failed to read aloud this page')
-					}
-				}
-			}
-
-			// Attempt to speak with error handling
-			try {
-				window.speechSynthesis.speak(utterance)
-			} catch (e) {
-				if (readAloudRequestRef.current === requestId) {
-					setIsReadAloudActive(false)
-					setIsReadAloudPaused(false)
-					setReadAloudCurrentSentence(null)
-					console.error(`Failed to call speak(): ${e instanceof Error ? e.message : String(e)}`)
-					toast.error('Failed to read aloud this page')
-				}
-			}
+			playBrowserSentence(requestId, sentenceIndex, sentence)
 		},
 		[
+			browserSpeechSupported,
+			effectiveReadAloudEngine,
 			persistReadAloudResume,
-			readAloudPitch,
-			readAloudRate,
+			playBrowserSentence,
+			playServerSentence,
 			readAloudSupported,
-			readAloudVoiceUri,
 			rendition,
 		],
 	)
+
+	useEffect(() => {
+		playSentenceQueueRef.current = playSentenceQueue
+	}, [playSentenceQueue])
+
+	useEffect(() => {
+		return () => {
+			if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+				window.speechSynthesis.cancel()
+			}
+			clearServerAudio()
+		}
+	}, [clearServerAudio])
 
 	const speakCurrentLocation = useCallback(
 		async (
@@ -758,22 +959,24 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				return false
 			}
 
-			// Check if TTS voices are available
-			const availableVoices = window.speechSynthesis.getVoices()
-			if (availableVoices.length === 0) {
-				// On Android, getVoices() can be empty even when default TTS still works.
-				console.warn(
-					'No TTS voices returned by getVoices(); continuing with system default voice fallback.',
-				)
-			}
-
-			// Log diagnostic info if trying to use a saved voice that's no longer available
-			if (readAloudVoiceUri) {
-				const savedVoiceExists = availableVoices.some((v) => v.voiceURI === readAloudVoiceUri)
-				if (!savedVoiceExists) {
+			if (effectiveReadAloudEngine === 'browser' && browserSpeechSupported) {
+				// Check if TTS voices are available
+				const availableVoices = window.speechSynthesis.getVoices()
+				if (availableVoices.length === 0) {
+					// On Android, getVoices() can be empty even when default TTS still works.
 					console.warn(
-						`Saved voice URI "${readAloudVoiceUri}" is no longer available. Will use fallback voice. Available: ${availableVoices.map((v) => v.voiceURI).join(', ')}`,
+						'No TTS voices returned by getVoices(); continuing with system default voice fallback.',
 					)
+				}
+
+				// Log diagnostic info if trying to use a saved voice that's no longer available
+				if (readAloudVoiceUri) {
+					const savedVoiceExists = availableVoices.some((v) => v.voiceURI === readAloudVoiceUri)
+					if (!savedVoiceExists) {
+						console.warn(
+							`Saved voice URI "${readAloudVoiceUri}" is no longer available. Will use fallback voice. Available: ${availableVoices.map((v) => v.voiceURI).join(', ')}`,
+						)
+					}
 				}
 			}
 
@@ -872,7 +1075,10 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				return false
 			}
 
-			window.speechSynthesis.cancel()
+			if (browserSpeechSupported) {
+				window.speechSynthesis.cancel()
+			}
+			clearServerAudio()
 			setIsReadAloudActive(true)
 			setIsReadAloudPaused(false)
 
@@ -885,6 +1091,9 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			return true
 		},
 		[
+			browserSpeechSupported,
+			clearServerAudio,
+			effectiveReadAloudEngine,
 			extractTextFromCurrentLocation,
 			extractVisibleText,
 			getSelectedVisibleText,
@@ -913,18 +1122,57 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			return
 		}
 
-		window.speechSynthesis.pause()
+		if (effectiveReadAloudEngine === 'server') {
+			readAloudAudioRef.current?.pause()
+		} else if (browserSpeechSupported) {
+			window.speechSynthesis.pause()
+		}
 		setIsReadAloudPaused(true)
-	}, [isReadAloudActive, isReadAloudPaused, readAloudSupported])
+	}, [
+		browserSpeechSupported,
+		effectiveReadAloudEngine,
+		isReadAloudActive,
+		isReadAloudPaused,
+		readAloudSupported,
+	])
 
 	const onResumeReadAloud = useCallback(() => {
 		if (!readAloudSupported || !isReadAloudActive || !isReadAloudPaused) {
 			return
 		}
 
-		window.speechSynthesis.resume()
+		if (effectiveReadAloudEngine === 'server') {
+			void readAloudAudioRef.current?.play().catch(() => {
+				toast.error('Failed to resume read aloud')
+			})
+		} else if (browserSpeechSupported) {
+			window.speechSynthesis.resume()
+		}
 		setIsReadAloudPaused(false)
-	}, [isReadAloudActive, isReadAloudPaused, readAloudSupported])
+	}, [
+		browserSpeechSupported,
+		effectiveReadAloudEngine,
+		isReadAloudActive,
+		isReadAloudPaused,
+		readAloudSupported,
+	])
+
+	const onSetReadAloudEngine = useCallback(
+		(engine: ReadAloudEngine) => {
+			if (engine === 'server' && !readAloudServerAvailable) {
+				return
+			}
+
+			stopReadAloud()
+			setReadAloudPreferences((prev) => ({
+				...prev,
+				engine,
+				// Voices are not shared between engines.
+				voiceUri: null,
+			}))
+		},
+		[readAloudServerAvailable, stopReadAloud],
+	)
 
 	const onSetReadAloudRate = useCallback((rate: number) => {
 		const clamped = Math.min(10, Math.max(0.1, Math.round(rate * 10) / 10))
@@ -1658,6 +1906,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				onLinkClick,
 				onPauseReadAloud,
 				onResumeReadAloud,
+				onSetReadAloudEngine,
 				onSetReadAloudPitch,
 				onSetReadAloudRate,
 				onSetReadAloudVoiceUri,
@@ -1666,7 +1915,9 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				onPaginateForward,
 				jumpToSection,
 				readAloudCurrentSentence,
+				readAloudEngine: effectiveReadAloudEngine,
 				readAloudPitch,
+				readAloudServerAvailable,
 				readAloudSupported,
 				readAloudRate,
 				readAloudVoiceUri,

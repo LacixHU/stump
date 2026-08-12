@@ -5,6 +5,7 @@ pub(crate) mod library;
 pub(crate) mod media;
 mod oidc;
 mod series;
+pub(crate) mod tts;
 mod user;
 
 use axum::{
@@ -31,6 +32,7 @@ pub(crate) fn mount(app_state: AppState) -> Router<AppState> {
 		.merge(epub::mount(app_state.clone()))
 		.merge(series::mount(app_state.clone()))
 		.merge(library::mount(app_state.clone()))
+		.merge(tts::mount(app_state.clone()))
 		.merge(user::mount(app_state))
 		.route("/claim", get(claim))
 		.route("/ping", get(ping))

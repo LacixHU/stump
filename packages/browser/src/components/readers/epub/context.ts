@@ -45,12 +45,16 @@ export type EpubReaderMeta = {
 	progress: number | null
 }
 
+export type ReadAloudEngine = 'browser' | 'server'
+
 export type EpubReaderControls = {
 	visible: boolean
 	fullscreen: boolean
 	readAloudSupported: boolean
 	isReadAloudActive: boolean
 	isReadAloudPaused: boolean
+	readAloudEngine: ReadAloudEngine
+	readAloudServerAvailable: boolean
 	readAloudRate: number
 	readAloudPitch: number
 	readAloudVoiceUri: string | null
@@ -63,6 +67,7 @@ export type EpubReaderControls = {
 	onToggleReadAloud: () => void
 	onPauseReadAloud: () => void
 	onResumeReadAloud: () => void
+	onSetReadAloudEngine: (engine: ReadAloudEngine) => void
 	onSetReadAloudRate: (rate: number) => void
 	onSetReadAloudPitch: (pitch: number) => void
 	onSetReadAloudVoiceUri: (voiceUri: string | null) => void
@@ -104,13 +109,16 @@ export const EpubReaderContext = createContext<EpubReaderContextProps>({
 		onPaginateForward: noop,
 		onPauseReadAloud: noop,
 		onResumeReadAloud: noop,
+		onSetReadAloudEngine: noop,
 		onSetReadAloudPitch: noop,
 		onSetReadAloudRate: noop,
 		onSetReadAloudVoiceUri: noop,
 		onToggleReadAloud: noop,
 		jumpToSection: noop,
 		readAloudCurrentSentence: null,
+		readAloudEngine: 'browser',
 		readAloudPitch: 1,
+		readAloudServerAvailable: false,
 		readAloudSupported: false,
 		readAloudRate: 1,
 		readAloudVoiceUri: null,

@@ -98,6 +98,7 @@ impl Guard for PermissionGuard {
 pub enum OptionalFeature {
 	Upload,
 	KoReader,
+	ServerTts,
 }
 
 /// Guard that checks if an optional feature is enabled in the server configuration.
@@ -119,6 +120,7 @@ impl Guard for OptionalFeatureGuard {
 		let permitted = match self.feature {
 			OptionalFeature::Upload => core.config.enable_upload,
 			OptionalFeature::KoReader => core.config.enable_koreader_sync,
+			OptionalFeature::ServerTts => core.config.enable_server_tts,
 		};
 
 		if permitted {
