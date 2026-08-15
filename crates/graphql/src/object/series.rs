@@ -434,8 +434,11 @@ impl Series {
 			.map(|dim| (dim.width, dim.height));
 
 		Ok(ImageRef {
-			url: service
-				.format_url(format!("/api/v2/series/{}/thumbnail", self.model.id)),
+			url: crate::utils::versioned_thumbnail_url(
+				service,
+				format!("/api/v2/series/{}/thumbnail", self.model.id),
+				self.model.updated_at,
+			),
 			height: dimensions.as_ref().map(|dim| dim.1),
 			width: dimensions.as_ref().map(|dim| dim.0),
 			metadata: self.model.thumbnail_meta.clone(),

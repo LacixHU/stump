@@ -80,7 +80,19 @@ export default function BookThumbnailSelector({ fragment }: Props) {
 				typeof queryKey[1] === 'string' &&
 				queryKey[1].startsWith(baseUrl),
 		})
-		await invalidateQueries({ keys: ['mediaById', 'bookById'] })
+		await invalidateQueries({
+			keys: [
+				'mediaById',
+				'bookOverview',
+				'bookOverviewHeader',
+				'seriesBooks',
+				'libraryBooks',
+				'continueReading',
+				'onDeck',
+				'recentlyAddedMedia',
+				'media',
+			],
+		})
 		setCacheBust(Date.now())
 	}, [])
 

@@ -569,6 +569,10 @@ impl LibraryMutation {
 					path_buf.to_string_lossy().to_string(),
 				)),
 			)
+			.col_expr(
+				library::Column::UpdatedAt,
+				sea_orm::sea_query::Expr::value(Utc::now()),
+			)
 			.filter(library::Column::Id.eq(library_id))
 			.exec(core.conn.as_ref())
 			.await?;

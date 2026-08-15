@@ -7,6 +7,7 @@ use async_graphql::{
 	Context, Error, InputObject, Object, Result, Upload, UploadValue, ID,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use chrono::Utc;
 use models::{
 	entity::{library, library_config, media, series},
 	shared::enums::UserPermission,
@@ -229,6 +230,7 @@ impl UploadMutation {
 				library::Column::ThumbnailPath,
 				Expr::value(Some(path_buf.to_string_lossy().to_string())),
 			)
+			.col_expr(library::Column::UpdatedAt, Expr::value(Utc::now()))
 			.filter(library::Column::Id.eq(library.id.clone()))
 			.exec(core.conn.as_ref())
 			.await?;
@@ -329,6 +331,7 @@ impl UploadMutation {
 				series::Column::ThumbnailPath,
 				Expr::value(Some(path_buf.to_string_lossy().to_string())),
 			)
+			.col_expr(series::Column::UpdatedAt, Expr::value(Utc::now()))
 			.filter(series::Column::Id.eq(series.series.id.clone()))
 			.exec(core.conn.as_ref())
 			.await?;
@@ -439,6 +442,7 @@ impl UploadMutation {
 				media::Column::ThumbnailPath,
 				Expr::value(Some(path_buf.to_string_lossy().to_string())),
 			)
+			.col_expr(media::Column::UpdatedAt, Expr::value(Utc::now()))
 			.filter(media::Column::Id.eq(book.media.id.clone()))
 			.exec(core.conn.as_ref())
 			.await?;
@@ -540,6 +544,7 @@ impl UploadMutation {
 				series::Column::ThumbnailPath,
 				Expr::value(Some(path_buf.to_string_lossy().to_string())),
 			)
+			.col_expr(series::Column::UpdatedAt, Expr::value(Utc::now()))
 			.filter(series::Column::Id.eq(series.series.id.clone()))
 			.exec(core.conn.as_ref())
 			.await?;
@@ -634,6 +639,7 @@ impl UploadMutation {
 				media::Column::ThumbnailPath,
 				Expr::value(Some(path_buf.to_string_lossy().to_string())),
 			)
+			.col_expr(media::Column::UpdatedAt, Expr::value(Utc::now()))
 			.filter(media::Column::Id.eq(book.media.id.clone()))
 			.exec(core.conn.as_ref())
 			.await?;

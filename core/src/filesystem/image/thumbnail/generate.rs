@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use chrono::Utc;
 use futures::{stream::FuturesUnordered, StreamExt};
 use models::{
 	entity::{library, media, series},
@@ -204,6 +205,7 @@ pub async fn generate_book_thumbnail(
 			media::Column::ThumbnailMeta,
 			Expr::value(thumbnail_metadata),
 		)
+		.col_expr(media::Column::UpdatedAt, Expr::value(Utc::now()))
 		.exec(conn)
 		.await;
 
@@ -355,6 +357,7 @@ async fn generate_series_thumbnail(
 					series::Column::ThumbnailMeta,
 					Expr::value(thumbnail_metadata),
 				)
+				.col_expr(series::Column::UpdatedAt, Expr::value(Utc::now()))
 		},
 	)
 	.await
@@ -421,6 +424,7 @@ async fn generate_library_thumbnail(
 					library::Column::ThumbnailMeta,
 					Expr::value(thumbnail_metadata),
 				)
+				.col_expr(library::Column::UpdatedAt, Expr::value(Utc::now()))
 		},
 	)
 	.await

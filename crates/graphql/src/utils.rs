@@ -1,6 +1,10 @@
 use models::entity::user::AuthUser;
-use sea_orm::{ConnectionTrait, DatabaseConnection, Statement, Value};
+use sea_orm::{
+	prelude::DateTimeWithTimeZone, ConnectionTrait, DatabaseConnection, Statement, Value,
+};
 use tower_sessions::Session;
+
+use crate::data::ServiceContext;
 
 pub async fn save_user_session(session: &Session, user: AuthUser) {
 	if let Err(error) = session.insert("user", user).await {
@@ -17,4 +21,18 @@ pub fn db_statement(
 	values: impl IntoIterator<Item = Value>,
 ) -> Statement {
 	Statement::from_sql_and_values(conn.get_database_backend(), sql, values)
+}
+
+/// Build a thumbnail URL that changes when the entity's `updated_at` changes so
+/// browsers and AuthImage caches do not keep serving a replaced image at a stable path.
+pub fn versioned_thumbnail_url(
+	service: &ServiceContext,
+	path: impl AsRef<str>,
+	updated_at: Option<DateTimeWithTimeZone>,
+) -> String {
+	let base = service.format_url(path);
+	match updated_at {
+		Some(ts) => format!("{base}?v={}", ts.timestamp_millis()),
+		None => base,
+	}
 }

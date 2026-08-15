@@ -83,7 +83,16 @@ export default function SeriesThumbnailSelector({ fragment }: Props) {
 				typeof queryKey[1] === 'string' &&
 				queryKey[1].startsWith(baseUrl),
 		})
-		await invalidateQueries({ keys: ['seriesById'] })
+		await invalidateQueries({
+			keys: [
+				'seriesById',
+				'series',
+				'seriesBooks',
+				'librarySeries',
+				'recentlyAddedSeries',
+				'sidebar',
+			],
+		})
 		setCacheBust(Date.now())
 	}, [])
 

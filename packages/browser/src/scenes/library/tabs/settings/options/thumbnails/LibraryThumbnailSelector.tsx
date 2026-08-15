@@ -59,7 +59,9 @@ export default function LibraryThumbnailSelector() {
 				typeof queryKey[1] === 'string' &&
 				queryKey[1].startsWith(baseUrl),
 		})
-		await invalidateQueries({ keys: ['libraryById'] })
+		await invalidateQueries({
+			keys: ['libraryById', 'libraryOverview', 'libraries', 'lastVisitedLibrary', 'sidebar'],
+		})
 	}, [])
 
 	const { mutateAsync: patchThumbnail, isPending: isPatchingThumbnail } = useGraphQLMutation(
