@@ -25,11 +25,27 @@ Stump is a free and open source comics, manga, and digital book server with OPDS
 <img alt="Screenshot of Stump" src="./docs/public/images/landing-dark.png" style="width: 90%" />
 </p>
 
+## Fork features
+
+This is a fork of [stumpapp/stump](https://github.com/stumpapp/stump). Extra features beyond `upstream/nightly`:
+
+- **Text-to-speech** — server-side Piper TTS, plus client rate/pitch controls
+- **Opt-in library access** — users only see libraries they have been granted
+- **Nested libraries** — hierarchical series via a nested library pattern
+- **Versioned thumbnails** — cache-safe URLs and more reliable upload/loading
+- **EPUB reader** — better TOC navigation, alignment fixes, appearance dialog close
+- **Image reader** — pinch/pan zoom, 2× max zoom, slip-tolerant tap advance, 20% side tap zones, Android centering, Auto scale default
+- **Server** — TLS, Apalis job worker with graceful shutdown, safer PDF routing
+- **UI polish** — settings cleanup, Go Home error-boundary fix, image error fallback, dialog close buttons
+
+See [Fork features.md](./Fork%20features.md) for the full list.
+
 <!-- prettier-ignore: I hate you sometimes prettier -->
 <details>
   <summary><b>Table of Contents</b></summary>
   <p>
 
+- [Fork features](#fork-features)
 - [Disclaimer](#disclaimer)
 - [Features](#features)
 - [Roadmap](#roadmap)
