@@ -910,7 +910,9 @@
 		},
 		"addFields": {
 			"description": "Add each addition on its own line"
-		}
+		},
+		"missing": "Missing",
+		"noMetadata": "No Metadata"
 	},
 	"metadataMatching": {
 		"section": {
@@ -991,6 +993,15 @@
 		"tabs": {
 			"books": "Books",
 			"files": "Files"
+		},
+		"subSeries": {
+			"heading": "Sub-series",
+			"nestedCount": "{{count}} nested series",
+			"booksInTree": "{{count}} books in tree",
+			"bookCount": "{{count}} books",
+			"childCount": "{{count}} sub-series",
+			"hide": "Hide",
+			"show": "Show"
 		},
 		"actions": {
 			"markAsRead": "Mark series as read",
@@ -2777,7 +2788,14 @@
 		"format": "Format",
 		"year": "Year",
 		"progress": "Progress",
-		"thisCannotBeUndone": "This cannot be undone"
+		"thisCannotBeUndone": "This cannot be undone",
+		"fileMissing": "File Missing",
+		"seriesMissing": "Series Missing",
+		"completed": "Completed",
+		"pagesLeft": "{{count}} pages left",
+		"readStatus": "Read Status",
+		"reading": "Reading",
+		"unread": "Unread"
 	},
 	"reader": {
 		"sections": {
@@ -3181,7 +3199,9 @@
 			"details": "Details",
 			"delete": "Delete",
 			"dismiss": "Dismiss",
-			"download": "Download",
+		"download": "Download",
+		"read": "Read",
+		"readAgain": "Read again",
 			"downloaded": "Downloaded",
 			"downloads": "Downloads",
 			"done": "Done",

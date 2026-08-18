@@ -2,7 +2,7 @@ import { getThumbnailTintColor } from '@stump/client'
 import { formatBytes } from '@stump/client'
 import { cn, ProgressBar, Text } from '@stump/components'
 import { FragmentType, graphql, useFragment } from '@stump/graphql'
-import pluralize from 'pluralize'
+import { useLocaleContext } from '@stump/i18n'
 import { memo, useCallback, useMemo } from 'react'
 
 import { Link } from '@/context'
@@ -67,6 +67,7 @@ const BookCard = memo(function BookCard({
 }: Props) {
 	const data = useFragment(BookCardFragment, fragment)
 	const paths = usePaths()
+	const { t } = useLocaleContext()
 
 	const {
 		preferences: { thumbnailRatio },
@@ -133,7 +134,7 @@ const BookCard = memo(function BookCard({
 		if (isMissing) {
 			return (
 				<Text size="xs" className="text-warning uppercase">
-					File Missing
+					{t('common.fileMissing')}
 				</Text>
 			)
 		}
@@ -146,7 +147,7 @@ const BookCard = memo(function BookCard({
 					</Text>
 					{!isEbookProgress && (
 						<Text size="xs" variant="muted">
-							{pagesLeft} {pluralize('page', pagesLeft)} left
+							{t('common.pagesLeft', { count: pagesLeft })}
 						</Text>
 					)}
 				</div>
@@ -154,7 +155,7 @@ const BookCard = memo(function BookCard({
 		} else if (progressPercent === 100) {
 			return (
 				<Text size="xs" variant="muted">
-					Completed
+					{t('common.completed')}
 				</Text>
 			)
 		}

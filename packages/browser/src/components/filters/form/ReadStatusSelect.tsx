@@ -1,21 +1,25 @@
+import { useLocaleContext } from '@stump/i18n'
+
 import GenericFilterMultiselect from './GenericFilterMultiselect'
 
 export default function ReadStatusSelect() {
+	const { t } = useLocaleContext()
+
 	return (
 		<GenericFilterMultiselect
 			name="read_status"
-			label="Read Status"
+			label={t('common.readStatus')}
 			options={[
 				{
-					label: 'Completed',
+					label: t('common.completed'),
 					value: 'finished',
 				},
 				{
-					label: 'Reading',
+					label: t('common.reading'),
 					value: 'reading',
 				},
 				{
-					label: 'Unread',
+					label: t('common.unread'),
 					value: 'not_started',
 				},
 			]}

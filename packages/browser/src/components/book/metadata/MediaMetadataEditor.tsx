@@ -132,7 +132,7 @@ export default function MediaMetadataEditor({ mediaId, data }: Props) {
 								onClick={() => setShowMissing((prev) => !prev)}
 							/>
 
-							<span className="ml-2">Missing</span>
+							<span className="ml-2">{t('metadataEditor.missing')}</span>
 						</Label>
 					</div>
 				),

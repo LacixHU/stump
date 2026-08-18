@@ -910,7 +910,9 @@
 		},
 		"addFields": {
 			"description": "Minden új elemet külön sorba írj"
-		}
+		},
+		"missing": "Hiányzó",
+		"noMetadata": "Nincs metaadat"
 	},
 	"metadataMatching": {
 		"section": {
@@ -991,6 +993,15 @@
 		"tabs": {
 			"books": "Könyvek",
 			"files": "Fájlok"
+		},
+		"subSeries": {
+			"heading": "Alsorozatok",
+			"nestedCount": "{{count}} beágyazott sorozat",
+			"booksInTree": "{{count}} könyv a fában",
+			"bookCount": "{{count}} könyv",
+			"childCount": "{{count}} alsorozat",
+			"hide": "Elrejtés",
+			"show": "Mutatás"
 		},
 		"actions": {
 			"markAsRead": "Sorozat megjelölése olvasottként",
@@ -2777,7 +2788,14 @@
 		"format": "Formátum",
 		"year": "Év",
 		"progress": "Előrehaladás",
-		"thisCannotBeUndone": "Ezt nem lehet visszavonni"
+		"thisCannotBeUndone": "Ezt nem lehet visszavonni",
+		"fileMissing": "Hiányzó fájl",
+		"seriesMissing": "Hiányzó sorozat",
+		"completed": "Befejezve",
+		"pagesLeft": "{{count}} oldal van hátra",
+		"readStatus": "Olvasási állapot",
+		"reading": "Olvasás",
+		"unread": "Olvasatlan"
 	},
 	"reader": {
 		"sections": {
@@ -3181,7 +3199,9 @@
 			"details": "Részletek",
 			"delete": "Törlés",
 			"dismiss": "Bezárás",
-			"download": "Letöltés",
+		"download": "Letöltés",
+		"read": "Olvasás",
+		"readAgain": "Újraolvasás",
 			"downloaded": "Letöltve",
 			"downloads": "Letöltések",
 			"done": "Kész",

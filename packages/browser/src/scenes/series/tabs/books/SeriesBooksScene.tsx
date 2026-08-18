@@ -34,6 +34,7 @@ import { usePreferences } from '@/hooks/usePreferences'
 import { useBooksLayout } from '@/stores/layout'
 
 import { useSeriesContext } from '../../context'
+import SeriesSubSeries from '../../SeriesSubSeries'
 
 const query = graphql(`
 	query SeriesBooksScene(
@@ -405,6 +406,8 @@ function SeriesBooksScene() {
 					filterControls={<URLFilterDrawer entity="media" />}
 					navOffset
 				/>
+
+				<SeriesSubSeries />
 
 				{enableAlphabetSelect && (
 					<SeriesBooksAlphabet

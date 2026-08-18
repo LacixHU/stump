@@ -1,6 +1,7 @@
 import { useGraphQLMutation, useSDK } from '@stump/client'
 import { DropdownMenu, IconButton } from '@stump/components'
 import { graphql } from '@stump/graphql'
+import { useLocaleContext } from '@stump/i18n'
 import { useQueryClient } from '@tanstack/react-query'
 import { Database, Lock, MoreVertical, Pencil, Search, Trash, Unlock } from 'lucide-react'
 import { useCallback, useMemo } from 'react'
@@ -36,6 +37,7 @@ type Props = {
 export default function UserActionMenu({ user, onSelectForInspect, onSelectForDeletion }: Props) {
 	const { sdk } = useSDK()
 	const { isServerOwner, user: byUser } = useAppContext()
+	const { t } = useLocaleContext()
 
 	const client = useQueryClient()
 
@@ -78,7 +80,7 @@ export default function UserActionMenu({ user, onSelectForInspect, onSelectForDe
 			{
 				items: [
 					{
-						label: 'Inspect',
+						label: t('common.inspect'),
 						leftIcon: <Search className="mr-2 h-4 w-4" />,
 						onClick: () => onSelectForInspect(user),
 					},
@@ -94,14 +96,14 @@ export default function UserActionMenu({ user, onSelectForInspect, onSelectForDe
 			{
 				items: [
 					{
-						label: 'Edit',
+						label: t('common.edit'),
 						disabled: isSelf,
 						leftIcon: <Pencil className="mr-2 h-4 w-4" />,
 						onClick: () => navigate(paths.updateUser(user.id)),
 					},
 					{
 						disabled: isSelf,
-						label: 'Delete',
+						label: t('common.delete'),
 						isDestructive: true,
 						leftIcon: <Trash className="mr-2 h-4 w-4" />,
 						onClick: () => onSelectForDeletion(user),
@@ -128,6 +130,7 @@ export default function UserActionMenu({ user, onSelectForInspect, onSelectForDe
 			handleClearUserSessions,
 			handleSetLockStatus,
 			onSelectForDeletion,
+			t,
 		],
 	)
 
