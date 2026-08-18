@@ -983,6 +983,11 @@
 			"nothingToReview": "Nincs áttekintendő függő metaadat-találat"
 		}
 	},
+	"librarySeriesScene": {
+		"searchBooks": {
+			"count": "{{count}} találat"
+		}
+	},
 	"seriesOverviewScene": {
 		"buttons": {
 			"continueReading": "Olvasás folytatása",

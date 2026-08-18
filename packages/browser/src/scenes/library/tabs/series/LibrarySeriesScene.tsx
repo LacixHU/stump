@@ -41,6 +41,7 @@ import { usePreferences } from '@/hooks/usePreferences'
 import { useSeriesLayout } from '@/stores/layout'
 
 import { useLibraryContext } from '../../context'
+import LibrarySearchBooks from './LibrarySearchBooks'
 
 const query = graphql(`
 	query LibrarySeries(
@@ -441,13 +442,15 @@ export default function LibrarySeriesScene() {
 					navOffset
 				/>
 
-				{enableAlphabetSelect && (
+				{enableAlphabetSelect && !search && (
 					<LibrarySeriesAlphabet
 						startsWith={startsWith}
 						onSelectLetter={onSelectLetter}
 						onPrefetchLetter={onPrefetchLetter}
 					/>
 				)}
+
+				{search && <LibrarySearchBooks libraryId={id} search={search} />}
 
 				{renderContent()}
 			</div>

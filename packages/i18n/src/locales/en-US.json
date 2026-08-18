@@ -983,6 +983,11 @@
 			"nothingToReview": "No pending metadata matches to review"
 		}
 	},
+	"librarySeriesScene": {
+		"searchBooks": {
+			"count": "{{count}} matching books"
+		}
+	},
 	"seriesOverviewScene": {
 		"buttons": {
 			"continueReading": "Continue Reading",
