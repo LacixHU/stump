@@ -1,30 +1,13 @@
-import { useGraphQL, useSDK } from '@stump/client'
+﻿import { useGraphQL, useSDK } from '@stump/client'
 import { Heading, Text } from '@stump/components'
-import { graphql } from '@stump/graphql'
 import { useLocaleContext } from '@stump/i18n'
 
 import { BookCard } from '@/components/book'
 import { DynamicCardGrid } from '@/components/container'
-import { useSearchMediaFilter } from '@/components/filters/useFilterScene'
+import { DEFAULT_MEDIA_ORDER_BY, useSearchMediaFilter } from '@/components/filters/useFilterScene'
 import { Link } from '@/context'
 import { usePaths } from '@/paths'
-
-const query = graphql(`
-	query LibrarySeriesSearchBooks($filter: MediaFilterInput!, $pagination: Pagination!) {
-		media(filter: $filter, pagination: $pagination) {
-			nodes {
-				id
-				...BookCard
-			}
-			pageInfo {
-				__typename
-				... on OffsetPaginationInfo {
-					totalItems
-				}
-			}
-		}
-	}
-`)
+import { libraryBooksQuery } from '@/scenes/library/tabs/books/LibraryBooksScene'
 
 type Props = {
 	libraryId: string
@@ -38,7 +21,7 @@ export default function LibrarySearchBooks({ libraryId, search }: Props) {
 	const searchFilter = useSearchMediaFilter(search)
 
 	const { data } = useGraphQL(
-		query,
+		libraryBooksQuery,
 		['librarySeriesSearchBooks', libraryId, search],
 		{
 			filter: {
@@ -47,6 +30,7 @@ export default function LibrarySearchBooks({ libraryId, search }: Props) {
 				},
 				_or: searchFilter,
 			},
+			orderBy: DEFAULT_MEDIA_ORDER_BY,
 			pagination: {
 				offset: {
 					page: 1,
@@ -58,11 +42,6 @@ export default function LibrarySearchBooks({ libraryId, search }: Props) {
 	)
 
 	const books = data?.media.nodes ?? []
-	const totalItems =
-		data?.media.pageInfo.__typename === 'OffsetPaginationInfo'
-			? data.media.pageInfo.totalItems
-			: books.length
-
 	if (!search || books.length === 0) return null
 
 	const booksHref = `${paths.libraryBooks(libraryId)}?search=${encodeURIComponent(search)}`
@@ -73,10 +52,10 @@ export default function LibrarySearchBooks({ libraryId, search }: Props) {
 				<div>
 					<Heading size="sm">{t('seriesHeader.tabs.books')}</Heading>
 					<Text size="sm" variant="muted">
-						{t('librarySeriesScene.searchBooks.count', { count: totalItems })}
+						{t('librarySeriesScene.searchBooks.count', { count: books.length })}
 					</Text>
 				</div>
-				{totalItems > books.length && (
+				{books.length >= 20 && (
 					<Link to={booksHref} className="text-sm text-muted-foreground hover:text-foreground">
 						{t('navigation.seeAll')}
 					</Link>

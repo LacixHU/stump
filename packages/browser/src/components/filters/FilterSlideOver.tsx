@@ -61,8 +61,8 @@ export default function FilterSlideOver({ prompt, formVariant }: Props) {
 			open={isOpen}
 			onClose={onClose}
 			onOpen={onOpen}
-			title="Filter options"
-			description={prompt || 'Use the options below to narrow your search'}
+			title={t('filters.slideOver.title')}
+			description={prompt || t('filters.slideOver.description')}
 			trigger={
 				<Button variant="ghost" className="gap-1.5 flex h-full items-center">
 					<Filter className="h-4 w-4" />
@@ -74,11 +74,11 @@ export default function FilterSlideOver({ prompt, formVariant }: Props) {
 			footer={
 				<div className="gap-4 py-2 flex items-center">
 					<Button type="button" variant="destructive" onClick={handleClearFilters}>
-						Clear filters
+						{t('filters.drawer.clear')}
 					</Button>
 
 					<Button type="submit" form="filter-form">
-						Apply filters
+						{t('filters.drawer.apply')}
 					</Button>
 				</div>
 			}

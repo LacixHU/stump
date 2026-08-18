@@ -217,7 +217,7 @@ export default function MediaFilterForm() {
 		>
 			{!!seriesContext && (
 				<CheckBox
-					label="Only show options available from series"
+					label={t('filters.onlyFromSeries')}
 					checked={onlyFromSeries}
 					onClick={() => setOnlyFromSeries((prev) => !prev)}
 				/>

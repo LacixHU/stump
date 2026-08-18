@@ -1,11 +1,20 @@
-import { LibrarySeriesQuery } from '@stump/graphql'
+import { FileStatus, ImageRef } from '@stump/graphql'
 import { memo, useEffect, useRef, useState } from 'react'
 
-import { StackedSeriesCard } from '@/components/series'
+import { StackedSeriesCard } from './StackedSeriesCard'
 
 import pluralizeStat from '../../utils/pluralize'
 
-export type LibrarySeriesCardData = LibrarySeriesQuery['series']['nodes'][number]
+export type LibrarySeriesCardData = {
+	id: string
+	resolvedName: string
+	mediaCount: number
+	childCount?: number | null
+	descendantMediaCount?: number | null
+	status: FileStatus | string
+	thumbnail: ImageRef
+	media: Array<{ thumbnail: ImageRef }>
+}
 
 type Props = {
 	data: LibrarySeriesCardData
@@ -15,11 +24,6 @@ const LibrarySeriesCard = memo(function LibrarySeriesCard({ data }: Props) {
 	const containerRef = useRef<HTMLDivElement>(null)
 	const [width, setWidth] = useState<number | null>(null)
 
-	// The cards in the traversal bits of the web app are resizable (to an extent), and so providing
-	// a width to the stacked thumb component is a bit annoying. This should DEFINITELY be rethought, though,
-	// because a resize observer for every card is probably not great for performance. Part of the problem
-	// is that I mostly just copy/pasted the stacked series layouts but should maybe try positioning them with
-	// css and percentages instead
 	useEffect(() => {
 		if (!containerRef.current) return
 

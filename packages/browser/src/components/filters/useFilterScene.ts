@@ -5,6 +5,7 @@ import {
 	MediaOrderBy,
 	OrderDirection,
 	SeriesFilterInput,
+	SeriesMetadataModelOrdering,
 	SeriesModelOrdering,
 	SeriesOrderBy,
 } from '@stump/graphql'
@@ -18,10 +19,12 @@ import { FilterInput, IFilterContext, Ordering, OrderingField } from './context'
 type Return = IFilterContext
 
 export const DEFAULT_SERIES_ORDER_BY: SeriesOrderBy[] = [
+	{ metadata: { field: SeriesMetadataModelOrdering.Title, direction: OrderDirection.Asc } },
 	{ series: { field: SeriesModelOrdering.Name, direction: OrderDirection.Asc } },
 ] as SeriesOrderBy[]
 
 export const DEFAULT_MEDIA_ORDER_BY: MediaOrderBy[] = [
+	{ metadata: { field: MediaMetadataModelOrdering.Title, direction: OrderDirection.Asc } },
 	{ media: { field: MediaModelOrdering.Name, direction: OrderDirection.Asc } },
 ] as MediaOrderBy[]
 
@@ -281,6 +284,23 @@ export function useMediaURLOrderBy(ordering: Ordering): MediaOrderBy[] {
 				{
 					metadata: {
 						field: ordering.orderBy as MediaMetadataModelOrdering,
+						direction: ordering.direction as OrderDirection,
+					},
+				},
+			] as MediaOrderBy[]
+		}
+
+		if (ordering.orderBy === MediaModelOrdering.Name) {
+			return [
+				{
+					metadata: {
+						field: MediaMetadataModelOrdering.Title,
+						direction: ordering.direction as OrderDirection,
+					},
+				},
+				{
+					media: {
+						field: MediaModelOrdering.Name,
 						direction: ordering.direction as OrderDirection,
 					},
 				},

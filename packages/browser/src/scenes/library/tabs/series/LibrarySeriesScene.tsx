@@ -43,7 +43,7 @@ import { useSeriesLayout } from '@/stores/layout'
 import { useLibraryContext } from '../../context'
 import LibrarySearchBooks from './LibrarySearchBooks'
 
-const query = graphql(`
+export const librarySeriesQuery = graphql(`
 	query LibrarySeries(
 		$filter: SeriesFilterInput!
 		$orderBy: [SeriesOrderBy!]!
@@ -138,7 +138,7 @@ export const usePrefetchLibrarySeries = () => {
 						params.orderBy,
 					),
 					queryFn: async () => {
-						const response = await sdk.execute(query, {
+						const response = await sdk.execute(librarySeriesQuery, {
 							filter: {
 								libraryId: { eq: libraryId },
 								_and: filterAnd,
@@ -290,7 +290,7 @@ export default function LibrarySeriesScene() {
 
 	const { sdk } = useSDK()
 	const { data, isLoading } = useGraphQL(
-		query,
+		librarySeriesQuery,
 		getQueryKey(sdk.cacheKeys.librarySeries, id, page, pageSize, search, resolvedFilters, orderBy),
 		{
 			filter: {

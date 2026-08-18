@@ -135,7 +135,7 @@ export default function SeriesLayout() {
 
 	return (
 		<SeriesContext.Provider value={{ series }}>
-			{/* key forces a full refresh when navigating parent → child series */}
+			{/* key forces a full refresh when navigating parent â†’ child series */}
 			<div key={series.id} className="relative flex flex-1 flex-col">
 				{breadcrumbs.length > 1 && (
 					<div className="px-4 pt-3 md:px-6">

@@ -2886,6 +2886,8 @@
 		"manage": "Kezelés",
 		"email": "E-mail",
 		"download": "Letöltés",
+		"read": "Olvasás",
+		"readAgain": "Újraolvasás",
 		"toasts": {
 			"failedCompletion": "Nem sikerült frissíteni a könyv befejezési állapotát",
 			"failedDeleteSession": "Nem sikerült törölni a jelenlegi munkamenetet",
@@ -3204,9 +3206,9 @@
 			"details": "Részletek",
 			"delete": "Törlés",
 			"dismiss": "Bezárás",
-		"download": "Letöltés",
-		"read": "Olvasás",
-		"readAgain": "Újraolvasás",
+			"download": "Letöltés",
+			"read": "Olvasás",
+			"readAgain": "Újraolvasás",
 			"downloaded": "Letöltve",
 			"downloads": "Letöltések",
 			"done": "Kész",
@@ -3229,8 +3231,6 @@
 			"password": "Jelszó",
 			"progress": "Előrehaladás",
 			"publication": "Megjelenés",
-			"read": "Olvasás",
-			"readAgain": "Újraolvasás",
 			"readTime": "Olvasási idő",
 			"readthrough": "Átolvasás",
 			"readMore": "Tovább",
@@ -3764,5 +3764,51 @@
 				"nothingInProgress": "Nincs folyamatban lévő"
 			}
 		}
+	},
+	"filters": {
+		"orderBy": {
+			"label": "Rendezés",
+			"configure": "Rendezés beállítása",
+			"selectOption": "Válassz egy lehetőséget",
+			"ascending": "Növekvő",
+			"descending": "Csökkenő",
+			"fields": {
+				"NAME": "Név",
+				"STATUS": "Állapot",
+				"CREATED_AT": "Létrehozva",
+				"PATH": "Elérési út",
+				"SIZE": "Méret",
+				"EXTENSION": "Kiterjesztés",
+				"PAGES": "Oldalak",
+				"SERIES_ID": "Sorozat",
+				"MODIFIED_AT": "Módosítva",
+				"NUMBER": "Szám",
+				"VOLUME": "Kötet",
+				"DESCRIPTION": "Leírás",
+				"LIBRARY_ID": "Könyvtár"
+			}
+		},
+		"drawer": {
+			"title": "Szűrők",
+			"description": "A nézetre alkalmazott szűrők beállítása",
+			"tooltip": "Szűrők beállítása",
+			"clear": "Szűrők törlése",
+			"apply": "Szűrők alkalmazása"
+		},
+		"slideOver": {
+			"title": "Szűrési lehetőségek",
+			"description": "A lenti beállításokkal szűkítheted a keresést"
+		},
+		"extension": "Kiterjesztés",
+		"extensionAny": "Bármely",
+		"ageRating": "Korhatár",
+		"ageAny": "Bármely korhatár",
+		"ageAnyDescription": "Nem lesz korhatár-szűrő alkalmazva",
+		"ageNAndUp": "N korhatárig",
+		"ageNAndUpDescription": "Csak azok a(z) {{variant}} jelennek meg, amelyek korhatára N vagy alacsonyabb",
+		"onlyFromSeries": "Csak a sorozatban elérhető lehetőségek",
+		"status": "Állapot",
+		"statusContinuing": "Folyamatban",
+		"statusEnded": "Befejezett"
 	}
 }

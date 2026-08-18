@@ -35,7 +35,7 @@ import { useBooksLayout } from '@/stores/layout'
 
 import { useLibraryContext } from '../../context'
 
-const query = graphql(`
+export const libraryBooksQuery = graphql(`
 	query LibraryBooksScene(
 		$filter: MediaFilterInput!
 		$orderBy: [MediaOrderBy!]!
@@ -95,7 +95,7 @@ export const usePrefetchLibraryBooks = () => {
 						params.orderBy,
 					),
 					queryFn: async () => {
-						const response = await sdk.execute(query, {
+						const response = await sdk.execute(libraryBooksQuery, {
 							filter: {
 								series: {
 									libraryId: { eq: id },
@@ -235,7 +235,7 @@ function LibraryBooksScene() {
 
 	const { sdk } = useSDK()
 	const { data, isLoading } = useGraphQL(
-		query,
+		libraryBooksQuery,
 		getQueryKey(
 			sdk.cacheKeys.libraryBooks,
 			library.id,

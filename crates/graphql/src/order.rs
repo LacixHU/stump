@@ -6,7 +6,7 @@ use models::{
 	entity::{media, media_metadata, series, series_metadata},
 	shared::ordering::{OrderBy, OrderDirection},
 };
-use sea_orm::QueryOrder;
+use sea_orm::{sea_query::Expr, QueryOrder};
 
 #[derive(InputObject, Clone)]
 #[graphql(concrete(name = "MediaOrderByField", params(media::MediaModelOrdering)))]
@@ -65,10 +65,19 @@ impl OrderBy<media::Entity, MediaOrderBy> for MediaOrderBy {
 			match order {
 				MediaOrderBy::Media(order_by) => {
 					let order = sea_orm::Order::from(order_by.direction);
-					let field = media::Column::from_str(
-						&order_by.field.to_string().to_snake_case(),
-					)?;
-					query = query.order_by(field, order)
+					if order_by.field == media::MediaModelOrdering::Name {
+						query = query.order_by(
+							Expr::cust(
+								"COALESCE(NULLIF(TRIM(media_metadata.title), ''), media.name)",
+							),
+							order,
+						);
+					} else {
+						let field = media::Column::from_str(
+							&order_by.field.to_string().to_snake_case(),
+						)?;
+						query = query.order_by(field, order)
+					}
 				},
 				MediaOrderBy::Metadata(order_by) => {
 					let order = sea_orm::Order::from(order_by.direction);
@@ -100,10 +109,17 @@ impl OrderBy<series::Entity, SeriesOrderBy> for SeriesOrderBy {
 			match order {
 				SeriesOrderBy::Series(order_by) => {
 					let order = sea_orm::Order::from(order_by.direction);
-					let field = series::Column::from_str(
-						&order_by.field.to_string().to_snake_case(),
-					)?;
-					query = query.order_by(field, order)
+					if order_by.field == series::SeriesModelOrdering::Name {
+						query = query.order_by(
+							Expr::cust("COALESCE(series_metadata.title, series.name)"),
+							order,
+						);
+					} else {
+						let field = series::Column::from_str(
+							&order_by.field.to_string().to_snake_case(),
+						)?;
+						query = query.order_by(field, order)
+					}
 				},
 				SeriesOrderBy::Metadata(order_by) => {
 					let order = sea_orm::Order::from(order_by.direction);

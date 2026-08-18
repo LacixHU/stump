@@ -494,7 +494,7 @@
 					},
 					"seriesPriority": {
 						"label": "Series priority",
-						"description": "Folder tree becomes a series hierarchy (e.g. Kockás → Régi → books)"
+						"description": "Folder tree becomes a series hierarchy (e.g. KockĂˇs â†’ RĂ©gi â†’ books)"
 					},
 					"nested": {
 						"label": "Nested",
@@ -2886,6 +2886,8 @@
 		"manage": "Manage",
 		"email": "Email",
 		"download": "Download",
+		"read": "Read",
+		"readAgain": "Read again",
 		"toasts": {
 			"failedCompletion": "Failed to update book completion status",
 			"failedDeleteSession": "Failed to delete current session",
@@ -3204,9 +3206,9 @@
 			"details": "Details",
 			"delete": "Delete",
 			"dismiss": "Dismiss",
-		"download": "Download",
-		"read": "Read",
-		"readAgain": "Read again",
+			"download": "Download",
+			"read": "Read",
+			"readAgain": "Read Again",
 			"downloaded": "Downloaded",
 			"downloads": "Downloads",
 			"done": "Done",
@@ -3229,8 +3231,6 @@
 			"password": "Password",
 			"progress": "Progress",
 			"publication": "Publication",
-			"read": "Read",
-			"readAgain": "Read Again",
 			"readTime": "Reading Time",
 			"readthrough": "Readthrough",
 			"readMore": "Read More",
@@ -3337,8 +3337,8 @@
 					"DESC": "Descending"
 				},
 				"sortDirectionText": {
-					"ASC": "A → Z",
-					"DESC": "Z → A"
+					"ASC": "A â†’ Z",
+					"DESC": "Z â†’ A"
 				},
 				"sortDirectionDate": {
 					"ASC": "Oldest First",
@@ -3747,16 +3747,16 @@
 				"DESC": "Descending"
 			},
 			"sortDirectionString": {
-				"ASC": "A → Z",
-				"DESC": "Z → A"
+				"ASC": "A â†’ Z",
+				"DESC": "Z â†’ A"
 			},
 			"sortDirectionDate": {
 				"ASC": "Oldest First",
 				"DESC": "Newest First"
 			},
 			"sortDirectionNumber": {
-				"ASC": "1 → 10",
-				"DESC": "10 → 1"
+				"ASC": "1 â†’ 10",
+				"DESC": "10 â†’ 1"
 			}
 		},
 		"widgets": {
@@ -3764,5 +3764,51 @@
 				"nothingInProgress": "Nothing in Progress"
 			}
 		}
+	},
+	"filters": {
+		"orderBy": {
+			"label": "Order by",
+			"configure": "Configure ordering",
+			"selectOption": "Select an option",
+			"ascending": "Ascending",
+			"descending": "Descending",
+			"fields": {
+				"NAME": "Name",
+				"STATUS": "Status",
+				"CREATED_AT": "Created",
+				"PATH": "Path",
+				"SIZE": "Size",
+				"EXTENSION": "Extension",
+				"PAGES": "Pages",
+				"SERIES_ID": "Series",
+				"MODIFIED_AT": "Modified",
+				"NUMBER": "Number",
+				"VOLUME": "Volume",
+				"DESCRIPTION": "Description",
+				"LIBRARY_ID": "Library"
+			}
+		},
+		"drawer": {
+			"title": "Filters",
+			"description": "Adjust the filters applied to the current view",
+			"tooltip": "Configure filters",
+			"clear": "Clear filters",
+			"apply": "Apply filters"
+		},
+		"slideOver": {
+			"title": "Filter options",
+			"description": "Use the options below to narrow your search"
+		},
+		"extension": "Extension",
+		"extensionAny": "Any",
+		"ageRating": "Age rating",
+		"ageAny": "Any age",
+		"ageAnyDescription": "No age rating filter will be applied",
+		"ageNAndUp": "Aged N and up",
+		"ageNAndUpDescription": "Only {{variant}} with an age rating of N or lower will be shown, where N is the number you enter below",
+		"onlyFromSeries": "Only show options available from series",
+		"status": "Status",
+		"statusContinuing": "Continuing",
+		"statusEnded": "Ended"
 	}
 }
