@@ -1,5 +1,6 @@
 import { invalidateQueries, useSDK } from '@stump/client'
 import { Avatar, cn, NavigationMenu } from '@stump/components'
+import { useLocaleContext } from '@stump/i18n'
 import { Bell, LogOut } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
@@ -14,6 +15,7 @@ import TopBarLinkListItem from '../TopBarLinkListItem'
 export default function UserMenu() {
 	const { sdk } = useSDK()
 	const { user } = useAppContext()
+	const { t } = useLocaleContext()
 
 	const setUser = useUserStore((store) => store.setUser)
 	const navigate = useNavigate()
@@ -56,12 +58,12 @@ export default function UserMenu() {
 						isDisabled
 					>
 						<Bell className="mr-2 h-4 w-4 shrink-0" />
-						<span className="ml-1 font-medium line-clamp-1">Notifications</span>
+						<span className="ml-1 font-medium line-clamp-1">{t('navigation.notifications')}</span>
 					</TopBarLinkListItem>
 
 					<TopBarButtonItem className="py-3 rounded-md" onClick={logout}>
 						<LogOut className="mr-2 h-4 w-4 shrink-0" />
-						Logout
+						{t('signOutModal.buttons.signOut')}
 					</TopBarButtonItem>
 				</ul>
 			</NavigationMenu.Content>

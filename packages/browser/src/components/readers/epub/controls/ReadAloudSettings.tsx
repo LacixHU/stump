@@ -1,4 +1,5 @@
 import { Button, IconButton, Label, NativeSelect, Text } from '@stump/components'
+import { useLocaleContext } from '@stump/i18n'
 import { Minus, Pause, Play, Plus } from 'lucide-react'
 import { useMemo } from 'react'
 
@@ -8,6 +9,7 @@ const clampRate = (value: number) => Math.min(2, Math.max(0.5, Math.round(value 
 const clampPitch = (value: number) => Math.min(2, Math.max(0, Math.round(value * 10) / 10))
 
 export default function ReadAloudSettings() {
+	const { t } = useLocaleContext()
 	const {
 		isReadAloudActive,
 		isReadAloudPaused,
@@ -28,24 +30,24 @@ export default function ReadAloudSettings() {
 	} = useEpubReaderControls()
 
 	const engineOptions = useMemo(() => {
-		const options = [{ label: 'Browser', value: 'browser' }]
+		const options = [{ label: t('reader.browserEngine'), value: 'browser' }]
 		if (readAloudServerAvailable) {
-			options.push({ label: 'Server (Piper)', value: 'server' })
+			options.push({ label: t('reader.serverEngine'), value: 'server' })
 		}
 		return options
-	}, [readAloudServerAvailable])
+	}, [readAloudServerAvailable, t])
 
 	const voiceOptions = useMemo(
-		() => [{ label: 'Default voice', value: '' }, ...readAloudVoices],
-		[readAloudVoices],
+		() => [{ label: t('reader.defaultVoice'), value: '' }, ...readAloudVoices],
+		[readAloudVoices, t],
 	)
 
 	if (!readAloudSupported) {
 		return (
 			<div className="space-y-1.5 py-1.5">
-				<Label>Read aloud</Label>
+				<Label>{t('reader.readAloud')}</Label>
 				<Text size="sm" variant="muted">
-					Your browser does not support read aloud.
+					{t('reader.toasts.readAloudUnsupported')}
 				</Text>
 			</div>
 		)
@@ -53,11 +55,11 @@ export default function ReadAloudSettings() {
 
 	return (
 		<div className="gap-y-3 py-1.5 flex flex-col">
-			<Label>Read aloud</Label>
+			<Label>{t('reader.readAloud')}</Label>
 
 			{readAloudServerAvailable && (
 				<div className="space-y-1">
-					<Label htmlFor="read-aloud-engine">Engine</Label>
+					<Label htmlFor="read-aloud-engine">{t('reader.engine')}</Label>
 					<NativeSelect
 						id="read-aloud-engine"
 						size="sm"
@@ -71,7 +73,7 @@ export default function ReadAloudSettings() {
 			)}
 
 			<div className="space-y-1">
-				<Label htmlFor="read-aloud-voice">Voice</Label>
+				<Label htmlFor="read-aloud-voice">{t('reader.voice')}</Label>
 				<NativeSelect
 					id="read-aloud-voice"
 					size="sm"
@@ -82,7 +84,7 @@ export default function ReadAloudSettings() {
 			</div>
 
 			<div className="gap-y-2 flex flex-col">
-				<Label>Rate</Label>
+				<Label>{t('reader.rate')}</Label>
 				<div className="gap-x-2 flex items-center">
 					<IconButton
 						variant="ghost"
@@ -106,7 +108,7 @@ export default function ReadAloudSettings() {
 
 			{readAloudEngine === 'browser' && (
 				<div className="gap-y-2 flex flex-col">
-					<Label>Pitch</Label>
+					<Label>{t('reader.pitch')}</Label>
 					<div className="gap-x-2 flex items-center">
 						<IconButton
 							variant="ghost"

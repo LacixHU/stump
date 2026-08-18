@@ -66,6 +66,27 @@ export type UsePrefetchSeriesBooksParams = {
 	pageSize?: number
 	filter: MediaFilterInput[]
 	orderBy: MediaOrderBy[]
+	path?: string
+}
+
+function seriesBooksScope(
+	id: string,
+	path?: string,
+	includeDescendants?: boolean,
+): MediaFilterInput {
+	if (!includeDescendants || !path) {
+		return { seriesId: { eq: id } }
+	}
+
+	return {
+		series: {
+			_or: [
+				{ path: { eq: path } },
+				{ path: { startsWith: `${path}/` } },
+				{ path: { startsWith: `${path}\\` } },
+			],
+		},
+	}
 }
 
 export const usePrefetchSeriesBooks = () => {
@@ -95,7 +116,7 @@ export const usePrefetchSeriesBooks = () => {
 				queryFn: async () => {
 					const response = await sdk.execute(query, {
 						filter: {
-							seriesId: { eq: id },
+							...seriesBooksScope(id, params.path, !!search),
 							_and: params.filter,
 							_or: searchFilter,
 						},
@@ -221,9 +242,10 @@ function SeriesBooksScene() {
 					},
 				],
 				orderBy,
+				path: series.path,
 			})
 		},
-		[prefetch, series.id, pageSize, orderBy, filters],
+		[prefetch, series.id, series.path, pageSize, orderBy, filters],
 	)
 
 	const { sdk } = useSDK()
@@ -240,7 +262,7 @@ function SeriesBooksScene() {
 		),
 		{
 			filter: {
-				seriesId: { eq: series.id },
+				...seriesBooksScope(series.id, series.path, !!search),
 				_and: resolvedFilters,
 				_or: searchFilter,
 			},
@@ -295,6 +317,7 @@ function SeriesBooksScene() {
 							pageSize,
 							filter: [filters],
 							orderBy: orderBy,
+							path: series.path,
 						})
 					}}
 				>
@@ -340,6 +363,7 @@ function SeriesBooksScene() {
 									pageSize,
 									filter: resolvedFilters,
 									orderBy: orderBy,
+									path: series.path,
 								})
 							}}
 							tableControls={

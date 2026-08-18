@@ -1,6 +1,7 @@
 import { formatBytes } from '@stump/client'
 import { Badge, Heading, Link, Statistic, Text } from '@stump/components'
 import { BookCardFragment, BookOverviewSceneQuery, Tag } from '@stump/graphql'
+import { useLocaleContext } from '@stump/i18n'
 import { ExternalLink } from 'lucide-react'
 import { Suspense } from 'react'
 
@@ -18,6 +19,7 @@ type Props = {
 }
 
 export default function BookOverviewSceneHeader({ media, book, completedAt }: Props) {
+	const { t } = useLocaleContext()
 	const metadata = media.metadata
 	const tags = media.tags as Tag[] | undefined
 	const pages = media.pages ?? 0
@@ -49,17 +51,17 @@ export default function BookOverviewSceneHeader({ media, book, completedAt }: Pr
 
 			{hasStats && (
 				<div className="gap-3 sm:grid-cols-3 md:flex md:flex-wrap md:gap-6 grid grid-cols-2">
-					{pages > 0 && <Statistic.Item label="Pages" value={pages} />}
-					{size > 0 && <Statistic.Item label="Size" value={formatBytes(size) ?? '—'} />}
+					{pages > 0 && <Statistic.Item label={t('common.pages')} value={pages} />}
+					{size > 0 && <Statistic.Item label={t('common.size')} value={formatBytes(size) ?? '—'} />}
 					{media.extension && (
-						<Statistic.Item label="Format" value={media.extension.toUpperCase()} />
+						<Statistic.Item label={t('common.format')} value={media.extension.toUpperCase()} />
 					)}
 					{metadata?.year && metadata.year > 0 && (
-						<Statistic.Item label="Year" value={metadata.year} />
+						<Statistic.Item label={t('common.year')} value={metadata.year} />
 					)}
 					{progressPercent != null && progressPercent > 0 && progressPercent < 100 && (
 						<Statistic.Item
-							label="Progress"
+							label={t('common.progress')}
 							value={`${progressPercent}%`}
 							suffix={readProgress?.page ? `(p. ${readProgress.page})` : undefined}
 						/>
@@ -147,7 +149,7 @@ export default function BookOverviewSceneHeader({ media, book, completedAt }: Pr
 			{hasTags && (
 				<div className="gap-1 flex flex-col">
 					<Text size="xs" variant="muted">
-						Tags
+						{t('common.tags')}
 					</Text>
 					<TagList
 						tags={tags}

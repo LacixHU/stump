@@ -1,6 +1,7 @@
 import { useGraphQLMutation } from '@stump/client'
 import { Button, DropdownMenu, Label, Text } from '@stump/components'
 import { graphql } from '@stump/graphql'
+import { useLocaleContext } from '@stump/i18n'
 import { AlertTriangle, ChevronDown, ImagePlus } from 'lucide-react'
 import { useCallback } from 'react'
 
@@ -13,6 +14,7 @@ const mutation = graphql(`
 `)
 
 export default function ProcessLibraryThumbnails() {
+	const { t } = useLocaleContext()
 	const { library } = useLibraryManagement()
 
 	const { mutate } = useGraphQLMutation(mutation)
@@ -27,10 +29,9 @@ export default function ProcessLibraryThumbnails() {
 	return (
 		<div className="gap-4 flex flex-col">
 			<div>
-				<Label>Process thumbnail colors</Label>
+				<Label>{t('createLibraryScene.form.review.labels.processThumbnailColors')}</Label>
 				<Text size="sm" variant="muted">
-					Extract missing thumbnail color metadata or force the regeneration of it for all
-					thumbnails
+					{t('libraryThumbnails.processColors.description')}
 				</Text>
 			</div>
 
@@ -38,7 +39,7 @@ export default function ProcessLibraryThumbnails() {
 				<DropdownMenu
 					trigger={
 						<Button variant="outline">
-							Extract colors
+							{t('libraryThumbnails.processColors.extract')}
 							<ChevronDown className="ml-2 h-4 w-4" />
 						</Button>
 					}
@@ -46,12 +47,12 @@ export default function ProcessLibraryThumbnails() {
 						{
 							items: [
 								{
-									label: 'Missing only',
+									label: t('libraryThumbnails.processColors.missingOnly'),
 									leftIcon: <ImagePlus className={iconStyle} />,
 									onClick: () => process(false),
 								},
 								{
-									label: 'Reprocess all',
+									label: t('libraryThumbnails.processColors.reprocessAll'),
 									isDestructive: true,
 									leftIcon: <AlertTriangle className={iconStyle} />,
 									onClick: () => process(true),

@@ -816,10 +816,19 @@
 	"errorScene": {
 		"heading": "lol, oops",
 		"message": "An error occurred:",
+		"criticalHeading": "A critical error occurred",
+		"emptyMessage": "The error message was empty.",
+		"notFound": "The page you are looking for does not seem to exist!",
+		"toasts": {
+			"copied": "Copied error details to your clipboard"
+		},
 		"buttons": {
 			"report": "Report Bug",
 			"copy": "Copy Error Details",
-			"goHome": "Go Home"
+			"goHome": "Go Home",
+			"goHomeTitle": "Go back to the homepage",
+			"reportTitle": "Report this error as a potential bug on GitHub",
+			"copyTitle": "Copy the error details to your clipboard"
 		}
 	},
 	"homeScene": {
@@ -1761,12 +1770,18 @@
 			"description": "Default preferences for reading. Some of these are local-only to your current device",
 			"sections": {
 				"universal": {
+					"label": "Universal",
+					"description": "Settings which apply to all types of books",
 					"sections": {
 						"readingDirection": {
 							"label": "Reading direction",
 							"description": "The direction in which the reader will progress through pages"
 						}
 					}
+				},
+				"formats": {
+					"label": "Formats",
+					"description": "Configure reader default settings independently"
 				},
 				"imageBasedBooks": {
 					"label": "Image-based books",
@@ -2605,6 +2620,8 @@
 			"createBookClub": "Create book club",
 			"noBookClubs": "No book clubs",
 			"settings": "Settings",
+			"goToSettings": "Go to settings",
+			"switchServer": "Switch server",
 			"themeToggle": "Toggle Theme",
 			"goForward": "Go Forward",
 			"goBack": "Go Back",
@@ -2733,7 +2750,170 @@
 			"tooManyFiles": "You have selected too many files",
 			"noValidFiles": "No valid files were selected"
 		},
-		"unknownError": "An unknown error occurred"
+		"unknownError": "An unknown error occurred",
+		"close": "Close",
+		"dismiss": "Dismiss",
+		"dismissAlert": "Dismiss this alert",
+		"download": "Download",
+		"manage": "Manage",
+		"email": "Email",
+		"metadata": "Metadata",
+		"tags": "Tags",
+		"analysis": "Analysis",
+		"thumbnail": "Thumbnail",
+		"goHome": "Go Home",
+		"nothingToShow": "Nothing to show",
+		"search": "Search",
+		"filter": "Filter",
+		"refresh": "Refresh",
+		"tryAgain": "Try again",
+		"inspect": "Inspect",
+		"enabled": "Enabled",
+		"disabled": "Disabled",
+		"preview": "Preview",
+		"write": "Write",
+		"pages": "Pages",
+		"size": "Size",
+		"format": "Format",
+		"year": "Year",
+		"progress": "Progress",
+		"thisCannotBeUndone": "This cannot be undone"
+	},
+	"reader": {
+		"sections": {
+			"mode": "Mode",
+			"imageOptions": "Image Options",
+			"preferences": "Preferences"
+		},
+		"separateSecondPage": "Separate second page",
+		"panzoomWithoutCtrl": "Pan and zoom without Ctrl / Cmd",
+		"tapSidesToNavigate": "Tap sides to navigate",
+		"readingTimer": "Reading timer",
+		"experimentalAnimatedReader": "Experimental animated reader",
+		"flow": "Flow",
+		"readingMode": "Reading mode",
+		"readingDirection": "Reading direction",
+		"imageScaling": "Image scaling",
+		"doublePaged": "Double Paged",
+		"brightness": "Brightness",
+		"resetTimer": "Reset Timer",
+		"startTimer": "Start Timer",
+		"stopTimer": "Stop Timer",
+		"tabs": {
+			"book": "Book",
+			"global": "Global"
+		},
+		"goToMediaOverview": "Go to media overview",
+		"bookOverview": "Book Overview",
+		"jumpToPage": "Jump to another page",
+		"pdfFailed": "PDF failed to load.",
+		"clickHere": "Click here",
+		"locationManager": "Location manager",
+		"contents": "Contents",
+		"bookmarks": "Bookmarks",
+		"annotations": "Annotations",
+		"tableOfContents": "Table of Contents",
+		"noBookmarks": "No bookmarks",
+		"searchPlaceholder": "Enter a basic query to search for",
+		"themeAndOptions": "Theme and options",
+		"appearance": "Appearance",
+		"readAloud": "Read aloud",
+		"engine": "Engine",
+		"voice": "Voice",
+		"rate": "Rate",
+		"pitch": "Pitch",
+		"browserEngine": "Browser",
+		"serverEngine": "Server (Piper)",
+		"defaultVoice": "Default voice",
+		"fontSize": "Font size",
+		"lineHeight": "Line height",
+		"fontDefault": "Default",
+		"options": {
+			"verticalScroll": "Vertical scroll",
+			"horizontalScroll": "Horizontal scroll",
+			"paged": "Paged",
+			"continuous": "Continuous",
+			"ltr": "Left to right",
+			"rtl": "Right to left",
+			"auto": "Auto",
+			"height": "Height",
+			"width": "Width",
+			"original": "Original",
+			"always": "Always",
+			"off": "Off"
+		},
+		"toasts": {
+			"failedReadAloud": "Failed to read aloud this page",
+			"failedContinueReadAloud": "Failed to continue read aloud on the next section",
+			"readAloudUnsupported": "Read aloud is not supported in this browser",
+			"noReadableText": "No readable text is available on this page",
+			"failedResumeReadAloud": "Failed to resume read aloud",
+			"somethingWentWrong": "Something went wrong!",
+			"failedNavigateEpub": "Failed to navigate, please check the integrity of the epub file"
+		}
+	},
+	"bookActions": {
+		"continueReading": "Continue reading",
+		"readFromBeginning": "Read from beginning",
+		"incognitoMode": "Incognito mode",
+		"nativePdfViewer": "Native PDF viewer",
+		"markAsRead": "Mark as read",
+		"clearProgress": "Clear progress",
+		"deleteHistory": "Delete history",
+		"manage": "Manage",
+		"email": "Email",
+		"download": "Download",
+		"toasts": {
+			"failedCompletion": "Failed to update book completion status",
+			"failedDeleteSession": "Failed to delete current session",
+			"failedDeleteHistory": "Failed to delete read history"
+		},
+		"deleteHistoryModal": {
+			"title": "Delete reading history",
+			"description": "Are you sure you want to delete your reading history?",
+			"cannotRecover": "Your completion history cannot be recovered once deleted"
+		},
+		"markSeriesCompleted": {
+			"title": "Mark series completed",
+			"description": "Are you sure you want to mark every book in this series completed?"
+		}
+	},
+	"directoryPicker": {
+		"title": "Select a Directory",
+		"description": "Specify the directory where your library is located.",
+		"showHidden": "Show Hidden Directories"
+	},
+	"libraryThumbnails": {
+		"delete": {
+			"heading": "Delete thumbnails",
+			"description": "Remove all generated thumbnails for this library",
+			"confirmTitle": "Delete library thumbnails",
+			"confirmDescription": "Are you sure you want to delete all thumbnails for this library?",
+			"warning": "Deleting the library thumbnails will remove all generated images and you will have to manually regenerate them",
+			"success": "Library thumbnails deleted",
+			"error": "An error occurred while deleting the library thumbnails"
+		},
+		"regenerate": {
+			"heading": "Regenerate thumbnails",
+			"description": "Either generate missing thumbnails or force the recreation of all thumbnails",
+			"missingOnly": "Create missing only",
+			"forceAll": "Force recreate all"
+		},
+		"processColors": {
+			"description": "Extract missing thumbnail color metadata or force the regeneration of it for all thumbnails",
+			"extract": "Extract colors",
+			"missingOnly": "Missing only",
+			"reprocessAll": "Reprocess all"
+		}
+	},
+	"navigation": {
+		"goHome": "Go home",
+		"section": "Section",
+		"settingsAria": "Settings",
+		"noLibraries": "No libraries",
+		"createLibrary": "Create library",
+		"seeAll": "See all",
+		"notifications": "Notifications"
 	},
 	"userPermissions": {
 		"ACCESS_API_KEYS": {

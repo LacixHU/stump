@@ -1,4 +1,5 @@
 import { cn, IconButton, ToolTip } from '@stump/components'
+import { useLocaleContext } from '@stump/i18n'
 import { Settings } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router'
 
@@ -8,11 +9,12 @@ export default function SettingsButton() {
 	const navigate = useNavigate()
 	const location = useLocation()
 	const paths = usePaths()
+	const { t } = useLocaleContext()
 
 	const isActive = location.pathname.startsWith(paths.settings())
 
 	return (
-		<ToolTip content="Go to settings" align="end">
+		<ToolTip content={t('sidebar.buttons.goToSettings')} align="end">
 			<IconButton
 				variant="ghost"
 				className={cn(

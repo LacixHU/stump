@@ -1,4 +1,5 @@
 import { cx, IconButton, Label, Text, TEXT_VARIANTS } from '@stump/components'
+import { useLocaleContext } from '@stump/i18n'
 import { Minus, Plus } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -8,6 +9,7 @@ import { useBookPreferences } from '@/scenes/book/reader/useBookPreferences'
 import { useEpubReaderContext } from '../context'
 
 export default function FontSizeControl() {
+	const { t } = useLocaleContext()
 	const {
 		readerMeta: { bookEntity },
 	} = useEpubReaderContext()
@@ -46,7 +48,7 @@ export default function FontSizeControl() {
 
 	return (
 		<div className="gap-y-2.5 flex flex-col">
-			<Label>Font size</Label>
+			<Label>{t('reader.fontSize')}</Label>
 			<div className="gap-x-2 flex items-center">
 				<IconButton
 					{...bindMinus({

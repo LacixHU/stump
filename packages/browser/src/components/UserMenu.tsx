@@ -1,4 +1,5 @@
 import { Avatar, cn, ConfirmationModal, Dropdown, Text } from '@stump/components'
+import { useLocaleContext } from '@stump/i18n'
 import { Bell, Server, Settings } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -16,6 +17,7 @@ export default function UserMenu({ variant = 'sidebar' }: Props) {
 	const [isOpen, setIsOpen] = useState(false)
 	const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false)
 	const navigate = useNavigate()
+	const { t } = useLocaleContext()
 
 	const { logout, user } = useAppContext()
 
@@ -29,9 +31,9 @@ export default function UserMenu({ variant = 'sidebar' }: Props) {
 	return (
 		<>
 			<ConfirmationModal
-				title="Sign out"
-				description="Are you sure you want sign out?"
-				confirmText="Sign out"
+				title={t('signOutModal.title')}
+				description={t('signOutModal.message')}
+				confirmText={t('signOutModal.buttons.signOut')}
 				confirmVariant="destructive"
 				isOpen={isSignOutConfirmOpen}
 				onClose={() => setIsSignOutConfirmOpen(false)}
@@ -86,7 +88,7 @@ export default function UserMenu({ variant = 'sidebar' }: Props) {
 							<Dropdown.Group>
 								<Dropdown.Item disabled className={cn(itemClasses(isSidebar), 'opacity-40')}>
 									<Bell className="mr-1.5 h-4 w-4" />
-									Notifications
+									{t('settingsScene.sidebar.management.notifications')}
 								</Dropdown.Item>
 
 								<Dropdown.Item
@@ -94,7 +96,7 @@ export default function UserMenu({ variant = 'sidebar' }: Props) {
 									className={itemClasses(isSidebar)}
 								>
 									<Settings className="mr-1.5 h-4 w-4" />
-									Settings
+									{t('sidebar.buttons.settings')}
 								</Dropdown.Item>
 							</Dropdown.Group>
 
@@ -104,7 +106,7 @@ export default function UserMenu({ variant = 'sidebar' }: Props) {
 								{platform !== 'browser' && (
 									<Dropdown.Item onClick={() => navigate('/')} className={itemClasses(isSidebar)}>
 										<Server className="mr-1.5 h-4 w-4" />
-										Switch server
+										{t('sidebar.buttons.switchServer')}
 									</Dropdown.Item>
 								)}
 
@@ -113,7 +115,7 @@ export default function UserMenu({ variant = 'sidebar' }: Props) {
 									isDestructive
 									className={itemClasses(isSidebar, true)}
 								>
-									Sign out
+									{t('signOutModal.buttons.signOut')}
 								</Dropdown.Item>
 							</Dropdown.Group>
 						</Dropdown.Content>

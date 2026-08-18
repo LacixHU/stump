@@ -25,7 +25,7 @@ describe('ReadingModeSelect', () => {
 			<ReadingModeSelect value={ReadingMode.Paged} onChange={onChange} />,
 		)
 
-		fireEvent.change(getByLabelText('Flow'), { target: { value: 'invalid' } })
+		fireEvent.change(getByLabelText('reader.flow'), { target: { value: 'invalid' } })
 		expect(onChange).not.toHaveBeenCalled()
 	})
 })

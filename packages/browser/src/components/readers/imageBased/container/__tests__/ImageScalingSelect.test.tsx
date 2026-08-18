@@ -34,7 +34,7 @@ describe('ImageScalingSelect', () => {
 			ReadingImageScaleFit.None,
 		]
 		for (const option of validOptions) {
-			fireEvent.change(screen.getByLabelText('Image scaling'), { target: { value: option } })
+			fireEvent.change(screen.getByLabelText('reader.imageScaling'), { target: { value: option } })
 			expect(onChange).toHaveBeenCalledWith(option)
 		}
 	})
@@ -42,7 +42,7 @@ describe('ImageScalingSelect', () => {
 	it('should not allow invalid image scaling options', () => {
 		const onChange = jest.fn()
 		render(<ImageScalingSelect value={ReadingImageScaleFit.Height} onChange={onChange} />)
-		fireEvent.change(screen.getByLabelText('Image scaling'), { target: { value: 'invalid' } })
+		fireEvent.change(screen.getByLabelText('reader.imageScaling'), { target: { value: 'invalid' } })
 		expect(onChange).not.toHaveBeenCalled()
 	})
 })

@@ -102,7 +102,7 @@ export default function BookManagementScene() {
 				<div className="gap-y-1.5 flex flex-col">
 					<Breadcrumbs segments={breadcrumbs} trailingSlash />
 					<Heading size="lg" className="font-bold">
-						Manage
+						{t('common.manage')}
 					</Heading>
 
 					<Text size="sm" variant="muted">
@@ -120,7 +120,7 @@ export default function BookManagementScene() {
 				{checkPermission(UserPermission.ManageLibrary) && (
 					<div className="gap-y-2 flex flex-col">
 						<div>
-							<Heading size="sm">Analysis</Heading>
+							<Heading size="sm">{t('common.analysis')}</Heading>
 							<Text size="sm" variant="muted">
 								Re-analyze this book to update metadata from its file
 							</Text>
@@ -173,7 +173,7 @@ export default function BookManagementScene() {
 				{checkPermission(UserPermission.EditThumbnails) && (
 					<div className="gap-y-2 flex flex-col">
 						<div>
-							<Heading size="sm">Thumbnail</Heading>
+							<Heading size="sm">{t('common.thumbnail')}</Heading>
 							<Text size="sm" variant="muted">
 								Change the cover image for this book
 							</Text>

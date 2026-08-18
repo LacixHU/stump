@@ -1,4 +1,5 @@
 import { Alert, AlertTitle, ConfirmationModal } from '@stump/components'
+import { useLocaleContext } from '@stump/i18n'
 import { AlertTriangle } from 'lucide-react'
 
 type Props = {
@@ -8,10 +9,14 @@ type Props = {
 }
 
 export default function CompleteSeriesConfirmation({ isOpen, onCancel, onConfirm }: Props) {
+	const { t } = useLocaleContext()
+
 	return (
 		<ConfirmationModal
-			title="Mark series completed"
-			description="Are you sure you want to mark every book in this series completed?"
+			title={t('bookActions.markSeriesCompleted.title')}
+			description={t('bookActions.markSeriesCompleted.description')}
+			confirmText={t('common.confirm')}
+			cancelText={t('common.cancel')}
 			isOpen={isOpen}
 			onClose={onCancel}
 			onConfirm={onConfirm}
@@ -19,7 +24,7 @@ export default function CompleteSeriesConfirmation({ isOpen, onCancel, onConfirm
 		>
 			<Alert>
 				<AlertTriangle />
-				<AlertTitle>This cannot be undone</AlertTitle>
+				<AlertTitle>{t('common.thisCannotBeUndone')}</AlertTitle>
 			</Alert>
 		</ConfirmationModal>
 	)

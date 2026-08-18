@@ -1,4 +1,5 @@
 import { cn, ProgressSpinner, usePreviousIsDifferent } from '@stump/components'
+import { useLocaleContext } from '@stump/i18n'
 import { SearchIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useDebouncedValue } from 'rooks'
@@ -37,6 +38,7 @@ export default function Search({
 	isLoading,
 	isDisabled,
 }: Props) {
+	const { t } = useLocaleContext()
 	const inputRef = useRef<HTMLInputElement>(null)
 	const containerRef = useRef<HTMLDivElement>(null)
 	const [expanded, setExpanded] = useState(() => !!initialValue)
@@ -105,12 +107,12 @@ export default function Search({
 					value={value}
 					onChange={(e) => setValue(e.target.value)}
 					onBlur={handleBlur}
-					placeholder={placeholder || 'Search'}
+					placeholder={placeholder || t('search.placeholder')}
 					disabled={isDisabled}
 					className="pr-8 text-sm h-full w-full bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
 				/>
 			) : (
-				<span className="pr-2.5 text-sm whitespace-nowrap select-none">Search</span>
+				<span className="pr-2.5 text-sm whitespace-nowrap select-none">{t('common.search')}</span>
 			)}
 
 			{showLoader && (

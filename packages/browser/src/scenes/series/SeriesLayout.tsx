@@ -6,6 +6,7 @@ import { Suspense, useEffect, useMemo } from 'react'
 import { Outlet, useNavigate, useParams } from 'react-router'
 
 import { SceneContainer } from '@/components/container'
+import { useURLKeywordSearch } from '@/components/filters/useFilterScene'
 import { Link } from '@/context'
 import { usePreferences } from '@/hooks'
 import { usePaths } from '@/paths'
@@ -101,6 +102,7 @@ export default function SeriesLayout() {
 	const { sdk } = useSDK()
 
 	const { id } = useParams()
+	const { search } = useURLKeywordSearch()
 	const seriesId = id || ''
 	const {
 		data: { seriesById: series },
@@ -134,7 +136,7 @@ export default function SeriesLayout() {
 
 	if (!series) return null
 
-	const hasChildren = (series.childCount ?? 0) > 0
+	const hasChildren = (series.childCount ?? 0) > 0 && !search
 
 	// TODO: conditional render header, conform to library layout patterns (e.g., settings header + settings sidebar, etc)
 	return (

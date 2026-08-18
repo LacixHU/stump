@@ -9,6 +9,7 @@ import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
+import { DEFAULT_MEDIA_ORDER_BY } from '@/components/filters/useFilterScene'
 import { EntityHeader } from '@/components/sharedLayout'
 import { useAppContext } from '@/context'
 import { usePaths } from '@/paths'
@@ -98,7 +99,7 @@ export default function SeriesHeader() {
 		{
 			isActive: !!location.pathname.match(/\/series\/[^/]+\/books(\/.*)?$/),
 			label: t('seriesHeader.tabs.books'),
-			onHover: () => prefetchSeriesBooks(id),
+			onHover: () => prefetchSeriesBooks(id, { filter: [], orderBy: DEFAULT_MEDIA_ORDER_BY, path }),
 			to: 'books',
 		},
 		...(canAccessFiles

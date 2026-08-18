@@ -9,6 +9,7 @@ import {
 	SupportedFont,
 	UserPermission,
 } from '@stump/graphql'
+import { useLocaleContext } from '@stump/i18n'
 import { useQueryClient } from '@tanstack/react-query'
 import { Book, Contents, Rendition } from 'epubjs'
 import uniqby from 'lodash/uniqBy'
@@ -296,6 +297,7 @@ const injectFontStylesheet = (rendition: Rendition) => {
  */
 export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 	const { sdk } = useSDK()
+	const { t } = useLocaleContext()
 	const { checkPermission } = useAppContext()
 	const { isDarkVariant } = useTheme()
 	const canUseServerTts = checkPermission(UserPermission.AccessServerTts)
@@ -727,7 +729,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 									setIsReadAloudActive(false)
 									setIsReadAloudPaused(false)
 									setReadAloudCurrentSentence(null)
-									toast.error('Failed to read aloud this page')
+									toast.error(t('reader.toasts.failedReadAloud'))
 								}
 							}
 							window.speechSynthesis.speak(recoveryUtterance)
@@ -738,13 +740,13 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 							setIsReadAloudActive(false)
 							setIsReadAloudPaused(false)
 							setReadAloudCurrentSentence(null)
-							toast.error('Failed to read aloud this page')
+							toast.error(t('reader.toasts.failedReadAloud'))
 						}
 					} else {
 						setIsReadAloudActive(false)
 						setIsReadAloudPaused(false)
 						setReadAloudCurrentSentence(null)
-						toast.error('Failed to read aloud this page')
+						toast.error(t('reader.toasts.failedReadAloud'))
 					}
 				}
 			}
@@ -758,11 +760,11 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 					setIsReadAloudPaused(false)
 					setReadAloudCurrentSentence(null)
 					console.error(`Failed to call speak(): ${e instanceof Error ? e.message : String(e)}`)
-					toast.error('Failed to read aloud this page')
+					toast.error(t('reader.toasts.failedReadAloud'))
 				}
 			}
 		},
-		[readAloudPitch, readAloudRate, readAloudVoiceUri],
+		[readAloudPitch, readAloudRate, readAloudVoiceUri, t],
 	)
 
 	const playServerSentence = useCallback(
@@ -813,7 +815,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 						setIsReadAloudActive(false)
 						setIsReadAloudPaused(false)
 						setReadAloudCurrentSentence(null)
-						toast.error('Failed to read aloud this page')
+						toast.error(t('reader.toasts.failedReadAloud'))
 					}
 				}
 
@@ -824,11 +826,11 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 					setIsReadAloudActive(false)
 					setIsReadAloudPaused(false)
 					setReadAloudCurrentSentence(null)
-					toast.error('Failed to read aloud this page')
+					toast.error(t('reader.toasts.failedReadAloud'))
 				}
 			}
 		},
-		[clearServerAudio, readAloudRate, readAloudVoiceUri, sdk],
+		[clearServerAudio, readAloudRate, readAloudVoiceUri, sdk, t],
 	)
 
 	const playSentenceQueue = useCallback(
@@ -883,7 +885,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 								setIsReadAloudActive(false)
 								setIsReadAloudPaused(false)
 								setReadAloudCurrentSentence(null)
-								toast.error('Failed to continue read aloud on the next section')
+								toast.error(t('reader.toasts.failedContinueReadAloud'))
 							}
 						})
 					return
@@ -914,7 +916,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				setIsReadAloudActive(false)
 				setIsReadAloudPaused(false)
 				setReadAloudCurrentSentence(null)
-				toast.error('Read aloud is not supported in this browser')
+				toast.error(t('reader.toasts.readAloudUnsupported'))
 				return
 			}
 
@@ -928,6 +930,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			playServerSentence,
 			readAloudSupported,
 			rendition,
+			t,
 		],
 	)
 
@@ -954,7 +957,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 		) => {
 			if (!readAloudSupported) {
 				if (!opts.suppressToast) {
-					toast.error('Read aloud is not supported in this browser')
+					toast.error(t('reader.toasts.readAloudUnsupported'))
 				}
 				return false
 			}
@@ -1070,7 +1073,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				setIsReadAloudPaused(false)
 				setReadAloudCurrentSentence(null)
 				if (!opts.suppressToast) {
-					toast.error('No readable text is available on this page')
+					toast.error(t('reader.toasts.noReadableText'))
 				}
 				return false
 			}
@@ -1101,6 +1104,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			readAloudSupported,
 			readAloudVoiceUri,
 			splitIntoSentences,
+			t,
 		],
 	)
 
@@ -1143,7 +1147,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 
 		if (effectiveReadAloudEngine === 'server') {
 			void readAloudAudioRef.current?.play().catch(() => {
-				toast.error('Failed to resume read aloud')
+				toast.error(t('reader.toasts.failedResumeReadAloud'))
 			})
 		} else if (browserSpeechSupported) {
 			window.speechSynthesis.resume()
@@ -1155,6 +1159,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 		isReadAloudActive,
 		isReadAloudPaused,
 		readAloudSupported,
+		t,
 	])
 
 	const onSetReadAloudEngine = useCallback(
@@ -1653,10 +1658,10 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				await rendition.next()
 			} catch (err) {
 				console.error(err)
-				toast.error('')
+				toast.error(t('common.unknownError'))
 			}
 		}
-	}, [rendition])
+	}, [rendition, t])
 
 	/**
 	 * A callback for when the reader should paginate backward. This will only run if the
@@ -1668,10 +1673,10 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				await rendition.prev()
 			} catch (err) {
 				console.error(err)
-				toast.error('Something went wrong!')
+				toast.error(t('reader.toasts.somethingWentWrong'))
 			}
 		}
-	}, [rendition])
+	}, [rendition, t])
 
 	/**
 	 * A callback for when the user wants to navigate to a specific cfi. This will only run
@@ -1689,10 +1694,10 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				await rendition.display(cfi)
 			} catch (err) {
 				console.error(err)
-				toast.error('Failed to navigate, please check the integrity of the epub file')
+				toast.error(t('reader.toasts.failedNavigateEpub'))
 			}
 		},
-		[rendition],
+		[rendition, t],
 	)
 
 	// jump to a specific section
@@ -1713,7 +1718,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				return
 			}
 
-			const failureMessage = 'Failed to navigate, please check the integrity of the epub file'
+			const failureMessage = t('reader.toasts.failedNavigateEpub')
 			const targets = getHrefDisplayTargets(href, ebook.rootBase)
 			let displayError: unknown
 
@@ -1768,7 +1773,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				toast.error(failureMessage)
 			}
 		},
-		[book, rendition, ebook.rootBase],
+		[book, rendition, ebook.rootBase, t],
 	)
 
 	/**

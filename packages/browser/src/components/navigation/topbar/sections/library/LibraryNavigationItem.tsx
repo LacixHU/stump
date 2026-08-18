@@ -1,6 +1,7 @@
 import { useSDK, useSuspenseGraphQL } from '@stump/client'
 import { cn, cx, Label, NavigationMenu, ScrollArea, Text } from '@stump/components'
 import { FilterableArrangementEntityLink, graphql, UserPermission } from '@stump/graphql'
+import { useLocaleContext } from '@stump/i18n'
 import { CircleSlash2, Library, LibrarySquare } from 'lucide-react'
 import { Suspense, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
@@ -39,6 +40,7 @@ export default function LibraryNavigationItem({
 	} = useSuspenseGraphQL(query, sdk.cacheKey('libraries'))
 
 	const location = useLocation()
+	const { t } = useLocaleContext()
 
 	const { checkPermission } = useAppContext()
 
@@ -56,7 +58,7 @@ export default function LibraryNavigationItem({
 					<div className="gap-y-2 flex flex-col items-start">
 						<CircleSlash2 className="h-7 w-7 text-muted-foreground" />
 						<div className="text-left">
-							<Label>No libraries</Label>
+							<Label>{t('navigation.noLibraries')}</Label>
 							<Text size="sm" variant="muted">
 								You don&apos;t have any libraries yet
 							</Text>
@@ -99,7 +101,7 @@ export default function LibraryNavigationItem({
 		<NavigationMenu.Item>
 			<NavigationMenu.Trigger className="bg-sidebar text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
 				<Library className="mr-2 h-4 w-4" />
-				Libraries
+				{t('sidebar.buttons.libraries')}
 			</NavigationMenu.Trigger>
 			<NavigationMenu.Content>
 				<div
@@ -124,7 +126,9 @@ export default function LibraryNavigationItem({
 										isActive={location.pathname.startsWith(paths.libraryCreate())}
 										className="p-1 justify-center self-end border border-dashed border-sidebar-border"
 									>
-										<span className="text-sm font-medium line-clamp-1">Create library</span>
+										<span className="text-sm font-medium line-clamp-1">
+											{t('navigation.createLibrary')}
+										</span>
 									</TopBarLinkListItem>
 								)}
 
@@ -134,7 +138,9 @@ export default function LibraryNavigationItem({
 										isActive={location.pathname.startsWith(paths.libraries())}
 										className="p-1 justify-center self-end border border-dashed border-sidebar-border"
 									>
-										<span className="text-sm font-medium line-clamp-1">See all</span>
+										<span className="text-sm font-medium line-clamp-1">
+											{t('navigation.seeAll')}
+										</span>
 									</TopBarLinkListItem>
 								)}
 							</div>

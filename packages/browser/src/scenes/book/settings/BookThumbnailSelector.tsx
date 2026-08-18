@@ -12,6 +12,7 @@ import {
 	graphql,
 	useFragment,
 } from '@stump/graphql'
+import { useLocaleContext } from '@stump/i18n'
 import { useCallback, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -64,6 +65,7 @@ type Props = {
 }
 
 export default function BookThumbnailSelector({ fragment }: Props) {
+	const { t } = useLocaleContext()
 	const book = useFragment(BookThumbnailSelectorFragment, fragment)
 
 	const [isOpen, setIsOpen] = useState(false)
@@ -176,7 +178,7 @@ export default function BookThumbnailSelector({ fragment }: Props) {
 				</Dialog.Trigger>
 				<Dialog.Content size="xl">
 					<Dialog.Header>
-						<Dialog.Title>Select a thumbnail</Dialog.Title>
+						<Dialog.Title>{t('thumbnailDropdown.label')}</Dialog.Title>
 						<Dialog.Description>
 							Choose a page from this book to use as the new thumbnail
 						</Dialog.Description>
@@ -192,14 +194,14 @@ export default function BookThumbnailSelector({ fragment }: Props) {
 
 					<Dialog.Footer>
 						<Button variant="outline" onClick={handleCancel}>
-							Cancel
+							{t('common.cancel')}
 						</Button>
 						<Button
 							onClick={handleConfirm}
 							disabled={!page}
 							isLoading={isPatchingThumbnail || isUploadingThumbnail}
 						>
-							Confirm selection
+							{t('common.confirm')}
 						</Button>
 					</Dialog.Footer>
 				</Dialog.Content>

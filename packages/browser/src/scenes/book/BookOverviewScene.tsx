@@ -1,5 +1,6 @@
 import { Heading } from '@stump/components'
 import { useFragment, UserPermission } from '@stump/graphql'
+import { useLocaleContext } from '@stump/i18n'
 import sortBy from 'lodash/sortBy'
 import { Suspense, useEffect, useMemo } from 'react'
 import { Helmet } from 'react-helmet'
@@ -24,6 +25,7 @@ export default function BookOverviewScene() {
 		data: { mediaById: media },
 	} = useBookOverview(id || '')
 	const { checkPermission } = useAppContext()
+	const { t } = useLocaleContext()
 
 	if (!media) {
 		throw new Error('Book not found')
@@ -71,7 +73,7 @@ export default function BookOverviewScene() {
 					<BooksAfterCursor cursor={media.id} />
 
 					<div className="gap-y-2 flex flex-col">
-						<Heading size="sm">Metadata</Heading>
+						<Heading size="sm">{t('common.metadata')}</Heading>
 						<MediaMetadataEditor mediaId={media.id} data={media.metadata} />
 					</div>
 				</div>

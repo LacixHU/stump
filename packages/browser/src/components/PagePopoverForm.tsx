@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Form, Input, Popover, useBoolean } from '@stump/components'
+import { useLocaleContext } from '@stump/i18n'
 import { useMemo, useRef } from 'react'
 import { FieldValues, useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -20,6 +21,7 @@ export default function PagePopoverForm({
 	pos,
 	trigger,
 }: PagePopoverFormProps) {
+	const { t } = useLocaleContext()
 	const inputRef = useRef<HTMLInputElement | null>(null)
 
 	const [isOpen, { on, off }] = useBoolean()
@@ -72,7 +74,7 @@ export default function PagePopoverForm({
 				<div className="gap-2 flex flex-col">
 					<Form id={`pagination-page-entry-form-${pos}`} form={form} onSubmit={handleSubmit}>
 						<Input
-							label="Jump to another page"
+							label={t('reader.jumpToPage')}
 							type="number"
 							autoFocus
 							max={totalPages}
