@@ -54,7 +54,9 @@ In the EPUB reader, open read aloud settings. If server TTS is available for you
 - **Browser** — device/OS voices (Web Speech API)
 - **Server (Piper)** — neural synthesis on the Stump host
 
-Speech is generated per sentence and streamed as WAV audio. Concurrent jobs are limited on the server to protect CPU.
+Speech is generated per sentence and streamed as WAV audio. The reader keeps paragraph and line breaks (newlines become sentence boundaries) and prefetches the next sentence so playback stays continuous. Concurrent jobs are limited on the server to protect CPU.
+
+Hungarian voices (`hu_*`) rewrite common English names and clearly foreign words to Hungarian phonetics before Piper speaks them. That is a pronunciation aid, not a translator.
 
 ## API
 

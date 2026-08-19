@@ -25,6 +25,9 @@ use crate::{
 	middleware::auth::auth_middleware,
 };
 
+#[path = "tts_hu.rs"]
+mod tts_hu;
+
 const MAX_CONCURRENT_TTS: usize = 2;
 
 /// Shared limit so a few readers cannot saturate the host with Piper jobs.
@@ -207,8 +210,16 @@ async fn speak_tts(
 	})?;
 
 	let piper_path = config.get_piper_path();
+	let spoken_text = if tts_hu::is_hungarian_voice(&voice_id) {
+		tts_hu::apply_pronunciation(text)
+	} else {
+		text.to_string()
+	};
+
 	let wav =
-		match synthesize_with_piper(&piper_path, &model_path, text, length_scale).await {
+		match synthesize_with_piper(&piper_path, &model_path, &spoken_text, length_scale)
+			.await
+		{
 			Ok(bytes) => bytes,
 			Err(err) => {
 				drop(permit);

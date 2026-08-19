@@ -25,6 +25,7 @@ import { useBookTimer } from '@/stores/reader'
 
 import { EpubContent, ReadAloudEngine } from './context'
 import EpubReaderContainer from './EpubReaderContainer'
+import { elementReadableText, normalizeReaderWhitespace, splitIntoSentences } from './readAloudText'
 import { darkVariantText, toFamilyName } from './themes'
 
 // TODO: Fix all lifecycle lints
@@ -344,6 +345,11 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 	const readAloudResumeRef = useRef<ReadAloudResume>(loadReadAloudResume(id))
 	const readAloudAudioRef = useRef<HTMLAudioElement | null>(null)
 	const readAloudObjectUrlRef = useRef<string | null>(null)
+	const readAloudPrefetchRef = useRef<{
+		requestId: number
+		sentenceIndex: number
+		promise: Promise<string | null>
+	} | null>(null)
 	const playSentenceQueueRef = useRef<((requestId: number, sentenceIndex: number) => void) | null>(
 		null,
 	)
@@ -383,7 +389,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 	const readAloudVoices =
 		effectiveReadAloudEngine === 'server' ? serverReadAloudVoices : browserReadAloudVoices
 
-	const clearServerAudio = useCallback(() => {
+	const clearPlayingServerAudio = useCallback(() => {
 		if (readAloudAudioRef.current) {
 			readAloudAudioRef.current.pause()
 			readAloudAudioRef.current.src = ''
@@ -394,6 +400,24 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			readAloudObjectUrlRef.current = null
 		}
 	}, [])
+
+	const clearPrefetchedServerAudio = useCallback(() => {
+		const entry = readAloudPrefetchRef.current
+		readAloudPrefetchRef.current = null
+		if (!entry) {
+			return
+		}
+		void entry.promise.then((url) => {
+			if (url) {
+				URL.revokeObjectURL(url)
+			}
+		})
+	}, [])
+
+	const clearServerAudio = useCallback(() => {
+		clearPlayingServerAudio()
+		clearPrefetchedServerAudio()
+	}, [clearPlayingServerAudio, clearPrefetchedServerAudio])
 
 	const persistReadAloudResume = useCallback(
 		(resume: ReadAloudResume) => {
@@ -423,6 +447,10 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			}),
 		)
 	}, [readAloudEngine, readAloudPitch, readAloudRate, readAloudVoiceUri])
+
+	useEffect(() => {
+		clearPrefetchedServerAudio()
+	}, [clearPrefetchedServerAudio, readAloudRate, readAloudVoiceUri])
 
 	useEffect(() => {
 		if (!browserSpeechSupported) {
@@ -529,42 +557,28 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			return ''
 		}
 
-		const text = rendition
-			.getContents()
-			.map(
-				(content) => content.document?.body?.innerText || content.document?.body?.textContent || '',
-			)
-			.join(' ')
-			.replace(/\s+/g, ' ')
-			.trim()
-
-		return text
+		return normalizeReaderWhitespace(
+			rendition
+				.getContents()
+				.map(
+					(content) =>
+						content.document?.body?.innerText || content.document?.body?.textContent || '',
+				)
+				.join('\n'),
+		)
 	}, [rendition])
-
-	const splitIntoSentences = useCallback((text: string) => {
-		const matches = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || []
-		const cleaned = matches.map((sentence) => sentence.trim()).filter(Boolean)
-		if (cleaned.length > 0) {
-			return cleaned
-		}
-
-		const fallback = text.trim()
-		return fallback ? [fallback] : []
-	}, [])
 
 	const getSelectedVisibleText = useCallback(() => {
 		if (!rendition) {
 			return ''
 		}
 
-		const selection = rendition
-			.getContents()
-			.map((content) => content.window?.getSelection?.()?.toString() || '')
-			.join(' ')
-			.replace(/\s+/g, ' ')
-			.trim()
-
-		return selection
+		return normalizeReaderWhitespace(
+			rendition
+				.getContents()
+				.map((content) => content.window?.getSelection?.()?.toString() || '')
+				.join('\n'),
+		)
 	}, [rendition])
 
 	const extractTextFromCurrentLocation = useCallback(async () => {
@@ -583,35 +597,45 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			const startContainer = range.startContainer
 			const doc = startContainer?.ownerDocument
 			if (!doc || !startContainer) {
-				return (range.toString() || '').replace(/\s+/g, ' ').trim()
+				return normalizeReaderWhitespace(range.toString() || '')
 			}
 
-			// Collect text from the CFI point forward, staying within the current document/spine item
 			const fragments: string[] = []
 			const body = doc.body
-
-			if (startContainer.nodeType === Node.TEXT_NODE) {
-				// Get text from the start offset onwards in this text node
-				const nodeText = startContainer.textContent?.slice(range.startOffset) ?? ''
-				fragments.push(nodeText)
-
-				// Walk through following siblings to collect remaining text in current section
-				let nextNode: Node | null = startContainer.nextSibling
-				while (nextNode && body?.contains(nextNode)) {
-					if (nextNode.nodeType === Node.TEXT_NODE) {
-						fragments.push(nextNode.textContent ?? '')
-					} else if (nextNode.nodeType === Node.ELEMENT_NODE) {
-						fragments.push((nextNode as Element).textContent ?? '')
-					}
-					nextNode = nextNode.nextSibling
+			const pushNodeText = (node: Node) => {
+				if (node.nodeType === Node.TEXT_NODE) {
+					fragments.push(node.textContent ?? '')
+					return
 				}
-			} else if (startContainer.nodeType === Node.ELEMENT_NODE) {
-				// If CFI points to element, get text from that element onwards within the spine
-				fragments.push((startContainer as Element).textContent ?? '')
+				if (node.nodeType === Node.ELEMENT_NODE) {
+					fragments.push(elementReadableText(node as Element))
+				}
 			}
 
-			const text = fragments.join(' ').replace(/\s+/g, ' ').trim()
-			return text || (range.toString() || '').replace(/\s+/g, ' ').trim()
+			if (startContainer.nodeType === Node.TEXT_NODE) {
+				fragments.push(startContainer.textContent?.slice(range.startOffset) ?? '')
+
+				let nextNode: Node | null = startContainer.nextSibling
+				while (nextNode && body?.contains(nextNode)) {
+					pushNodeText(nextNode)
+					nextNode = nextNode.nextSibling
+				}
+
+				let ancestor: Node | null = startContainer.parentNode
+				while (ancestor && ancestor !== body) {
+					let uncle = ancestor.nextSibling
+					while (uncle && body.contains(uncle)) {
+						pushNodeText(uncle)
+						uncle = uncle.nextSibling
+					}
+					ancestor = ancestor.parentNode
+				}
+			} else if (startContainer.nodeType === Node.ELEMENT_NODE) {
+				fragments.push(elementReadableText(startContainer as Element))
+			}
+
+			const text = normalizeReaderWhitespace(fragments.join('\n'))
+			return text || normalizeReaderWhitespace(range.toString() || '')
 		} catch (error) {
 			console.error('Error extracting text from current location:', error)
 			return ''
@@ -767,24 +791,84 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 		[readAloudPitch, readAloudRate, readAloudVoiceUri, t],
 	)
 
-	const playServerSentence = useCallback(
-		async (requestId: number, sentenceIndex: number, sentence: string) => {
-			clearServerAudio()
+	const requestServerSentenceAudio = useCallback(
+		(requestId: number, sentenceIndex: number, sentence: string) => {
+			const existing = readAloudPrefetchRef.current
+			if (
+				existing &&
+				existing.requestId === requestId &&
+				existing.sentenceIndex === sentenceIndex
+			) {
+				return existing.promise
+			}
 
-			try {
-				const blob = await sdk.tts.speak({
+			if (existing) {
+				readAloudPrefetchRef.current = null
+				void existing.promise.then((url) => {
+					if (url) {
+						URL.revokeObjectURL(url)
+					}
+				})
+			}
+
+			const promise = sdk.tts
+				.speak({
 					rate: readAloudRate,
 					text: sentence,
 					voice: readAloudVoiceUri,
 				})
+				.then((blob) => {
+					if (readAloudRequestRef.current !== requestId) {
+						return null
+					}
+					return URL.createObjectURL(new Blob([blob], { type: 'audio/wav' }))
+				})
+				.catch((error) => {
+					console.error('Server TTS failed', error)
+					return null
+				})
+
+			readAloudPrefetchRef.current = { promise, requestId, sentenceIndex }
+			return promise
+		},
+		[readAloudRate, readAloudVoiceUri, sdk],
+	)
+
+	const playServerSentence = useCallback(
+		async (requestId: number, sentenceIndex: number, sentence: string) => {
+			clearPlayingServerAudio()
+
+			try {
+				const objectUrl = await requestServerSentenceAudio(requestId, sentenceIndex, sentence)
+				if (
+					readAloudPrefetchRef.current?.requestId === requestId &&
+					readAloudPrefetchRef.current.sentenceIndex === sentenceIndex
+				) {
+					readAloudPrefetchRef.current = null
+				}
 
 				if (readAloudRequestRef.current !== requestId) {
+					if (objectUrl) {
+						URL.revokeObjectURL(objectUrl)
+					}
 					return
+				}
+
+				if (!objectUrl) {
+					setIsReadAloudActive(false)
+					setIsReadAloudPaused(false)
+					setReadAloudCurrentSentence(null)
+					toast.error(t('reader.toasts.failedReadAloud'))
+					return
+				}
+
+				const nextSentence = readAloudSentenceQueueRef.current[sentenceIndex + 1]
+				if (nextSentence) {
+					void requestServerSentenceAudio(requestId, sentenceIndex + 1, nextSentence)
 				}
 
 				// Keep playbackRate at 1 — speed is already applied server-side via Piper length_scale.
 				// Stacking both causes chipmunk/distorted audio.
-				const objectUrl = URL.createObjectURL(new Blob([blob], { type: 'audio/wav' }))
 				readAloudObjectUrlRef.current = objectUrl
 				const audio = new Audio(objectUrl)
 				readAloudAudioRef.current = audio
@@ -830,7 +914,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				}
 			}
 		},
-		[clearServerAudio, readAloudRate, readAloudVoiceUri, sdk, t],
+		[clearPlayingServerAudio, requestServerSentenceAudio, t],
 	)
 
 	const playSentenceQueue = useCallback(
@@ -1103,7 +1187,6 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			playSentenceQueue,
 			readAloudSupported,
 			readAloudVoiceUri,
-			splitIntoSentences,
 			t,
 		],
 	)
