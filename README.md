@@ -32,8 +32,9 @@ This is a fork of [stumpapp/stump](https://github.com/stumpapp/stump). Extra fea
 - **Text-to-speech** — server-side Piper TTS, plus client rate/pitch controls
 - **Opt-in library access** — users only see libraries they have been granted
 - **Nested libraries** — hierarchical series via a nested library pattern
-- **Versioned thumbnails** — cache-safe URLs and more reliable upload/loading
-- **EPUB reader** — better TOC navigation, alignment fixes, appearance dialog close
+- **Versioned thumbnails** — cache-safe URLs, more reliable upload/loading, nested series 3-cover stacks
+- **EPUB reader** — better TOC/chapters, desktop fullscreen, download spinner, translated control tooltips
+- **PDF reader** — centered loading spinner while the file downloads
 - **Image reader** — pinch/pan zoom, 2× max zoom, slip-tolerant tap advance, 20% side tap zones, Android centering, Auto scale default
 - **Server** — TLS, Apalis job worker with graceful shutdown, safer PDF routing
 - **UI polish** — settings cleanup, Go Home error-boundary fix, image error fallback, dialog close buttons

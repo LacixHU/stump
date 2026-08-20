@@ -141,7 +141,7 @@ export default function SearchCommand() {
 
 	return (
 		<>
-			<ControlButton onClick={() => setOpen(true)}>
+			<ControlButton title={t('common.search')} onClick={() => setOpen(true)}>
 				<Search className="h-4 w-4" />
 			</ControlButton>
 			<Command.Dialog open={open} onOpenChange={setOpen}>
