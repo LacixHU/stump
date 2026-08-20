@@ -996,6 +996,7 @@
 	},
 	"seriesHeader": {
 		"tabs": {
+			"series": "Sorozat",
 			"books": "Könyvek",
 			"files": "Fájlok"
 		},

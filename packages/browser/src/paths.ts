@@ -114,7 +114,7 @@ const pathsInternal = {
 		if (page != undefined) {
 			return `/series/${id}/books?page=${page}`
 		}
-		return `/series/${id}/books`
+		return `/series/${id}`
 	},
 	serverLogs: (jobId?: string) =>
 		pathsInternal.settings('logs') + (jobId ? `?job_id=${jobId}` : ''),

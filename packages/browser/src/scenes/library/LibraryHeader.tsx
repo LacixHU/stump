@@ -32,6 +32,7 @@ export default function LibraryHeader() {
 	}
 
 	const canAccessFiles = checkPermission(UserPermission.FileExplorer)
+	const canManageLibrary = checkPermission(UserPermission.ManageLibrary)
 	const hideSeriesView = config?.hideSeriesView ?? false
 
 	const formattedSize = stats?.totalBytes ? formatBytesSeparate(stats.totalBytes) : null
@@ -119,7 +120,7 @@ export default function LibraryHeader() {
 				name={name}
 				tabs={tabs}
 				stats={resolvedStats}
-				settingsLink="settings"
+				settingsLink={canManageLibrary ? 'settings' : undefined}
 				onInfoClick={() => setIsOverviewSheetOpen(true)}
 			/>
 

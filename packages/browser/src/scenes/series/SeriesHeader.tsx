@@ -18,6 +18,7 @@ import CompleteSeriesConfirmation from './CompleteSeriesConfirmation'
 import { useSeriesContext } from './context'
 import { SeriesOverviewSheet } from './SeriesOverviewSheet'
 import { usePrefetchSeriesBooks } from './tabs/books/SeriesBooksScene'
+import { usePrefetchSeriesChildren } from './tabs/series/SeriesChildrenScene'
 
 const completeSeriesMutation = graphql(`
 	mutation SeriesActionComplete($id: ID!) {
@@ -33,6 +34,7 @@ export default function SeriesHeader() {
 			resolvedName,
 			path,
 			stats,
+			childCount,
 			library: { id: libraryId },
 		},
 	} = useSeriesContext()
@@ -91,11 +93,23 @@ export default function SeriesHeader() {
 	] satisfies DropdownItemGroup[]
 
 	const prefetchSeriesBooks = usePrefetchSeriesBooks()
+	const prefetchSeriesChildren = usePrefetchSeriesChildren()
 	const prefetchFiles = usePrefetchFiles()
 
 	const canAccessFiles = checkPermission(UserPermission.FileExplorer)
+	const hasChildSeries = (childCount ?? 0) > 0
 
 	const tabs = [
+		...(hasChildSeries
+			? [
+					{
+						isActive: !!location.pathname.match(/\/series\/[^/]+\/series(\/.*)?$/),
+						label: t('seriesHeader.tabs.series'),
+						onHover: () => prefetchSeriesChildren(id),
+						to: 'series',
+					},
+				]
+			: []),
 		{
 			isActive: !!location.pathname.match(/\/series\/[^/]+\/books(\/.*)?$/),
 			label: t('seriesHeader.tabs.books'),

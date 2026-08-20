@@ -20,21 +20,18 @@ import {
 } from '@/components/filters'
 import {
 	DEFAULT_MEDIA_ORDER_BY,
-	DEFAULT_SERIES_ORDER_BY,
 	useMediaURLOrderBy,
 	useSearchMediaFilter,
 	useURLKeywordSearch,
 	useURLPageParams,
 } from '@/components/filters/useFilterScene'
 import GenericEmptyState from '@/components/GenericEmptyState'
-import { LibrarySeriesCard, SeriesBooksAlphabet } from '@/components/series'
+import { SeriesBooksAlphabet } from '@/components/series'
 import { EntityTableColumnConfiguration } from '@/components/table'
 import TableOrGridLayout from '@/components/TableOrGridLayout'
 import useIsInView from '@/hooks/useIsInView'
 import { usePreferences } from '@/hooks/usePreferences'
 import { useBooksLayout } from '@/stores/layout'
-
-import { librarySeriesQuery } from '@/scenes/library/tabs/series/LibrarySeriesScene'
 
 import { useSeriesContext } from '../../context'
 
@@ -252,23 +249,6 @@ function SeriesBooksScene() {
 	)
 
 	const { sdk } = useSDK()
-	const { data: childSeriesData } = useGraphQL(
-		librarySeriesQuery,
-		['seriesChildSeries', series.id],
-		{
-			filter: {
-				parentSeriesId: { eq: series.id },
-			},
-			orderBy: DEFAULT_SERIES_ORDER_BY,
-			pagination: {
-				offset: {
-					page: 1,
-					pageSize: 50,
-				},
-			},
-		},
-		{ enabled: !search && page === 1 && (series.childCount ?? 0) > 0 },
-	)
 	const { data, isLoading } = useGraphQL(
 		query,
 		getQueryKey(
@@ -297,8 +277,6 @@ function SeriesBooksScene() {
 	)
 
 	const nodes = data?.media.nodes || []
-	const childSeries = !search && page === 1 ? (childSeriesData?.series.nodes ?? []) : []
-	const gridCount = childSeries.length + nodes.length
 	const pageInfo = data?.media.pageInfo || {
 		__typename: 'OffsetPaginationInfo',
 		currentPage: 1,
@@ -344,20 +322,13 @@ function SeriesBooksScene() {
 					}}
 				>
 					<div className="px-4 pt-4 flex flex-1">
-						{!!gridCount && (
+						{!!nodes.length && (
 							<DynamicCardGrid
-								count={gridCount}
-								renderItem={(index) => {
-									if (index < childSeries.length) {
-										const child = childSeries[index]!
-										return <LibrarySeriesCard key={child.id} data={child as any} />
-									}
-									const book = nodes[index - childSeries.length]!
-									return <BookCard key={book.id} fragment={book} />
-								}}
+								count={nodes.length}
+								renderItem={(index) => <BookCard key={nodes[index]!.id} fragment={nodes[index]!} />}
 							/>
 						)}
-						{!gridCount && !isLoading && (
+						{!nodes.length && !isLoading && (
 							<div className="col-span-full grid flex-1 place-self-center">
 								<GenericEmptyState
 									title={
