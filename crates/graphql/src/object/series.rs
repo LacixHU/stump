@@ -203,18 +203,41 @@ impl Series {
 	}
 
 	// TODO(perf): We probably could put this behind a dataloader if used frequently
-	/// Get media in this series
+	/// Get media in this series. When `includeDescendants` is true, include media
+	/// from descendant series via path-prefix rollup.
 	async fn media(
 		&self,
 		ctx: &Context<'_>,
 		#[graphql(default, validator(minimum = 1))] take: Option<u64>,
 		#[graphql(default, validator(minimum = 0))] skip: Option<u64>,
+		#[graphql(default = false)] include_descendants: bool,
 	) -> Result<Vec<Media>> {
 		let AuthContext { user, .. } = ctx.data::<AuthContext>()?;
 		let conn = ctx.data::<CoreContext>()?.conn.as_ref();
 
-		let models = media::ModelWithMetadata::find_for_user(user)
-			.filter(media::Column::SeriesId.eq(self.model.id.clone()))
+		let mut query = media::ModelWithMetadata::find_for_user(user);
+
+		if include_descendants {
+			let path_prefix = format!("{}{}", self.model.path, std::path::MAIN_SEPARATOR);
+			query = query.filter(
+				media::Column::SeriesId.in_subquery(
+					Query::select()
+						.column(series::Column::Id)
+						.from(series::Entity)
+						.and_where(
+							series::Column::Id
+								.eq(self.model.id.clone())
+								.or(series::Column::Path.starts_with(path_prefix)),
+						)
+						.and_where(series::Column::DeletedAt.is_null())
+						.to_owned(),
+				),
+			);
+		} else {
+			query = query.filter(media::Column::SeriesId.eq(self.model.id.clone()));
+		}
+
+		let models = query
 			// TODO: Consider allowing custom ordering?
 			.order_by_asc(media::Column::Name)
 			.apply_if(take, |query, take| query.limit(take))

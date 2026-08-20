@@ -1,4 +1,5 @@
 import { queryClient, useGraphQLMutation, useSDK, useSuspenseGraphQL } from '@stump/client'
+import { ProgressSpinner } from '@stump/components'
 import {
 	Bookmark,
 	EpubJsReaderQuery,
@@ -17,7 +18,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AutoSizer from 'react-virtualized-auto-sizer'
 import { toast } from 'sonner'
 
-import Spinner from '@/components/Spinner'
 import { useAppContext } from '@/context'
 import { useTheme } from '@/hooks'
 import { useBookPreferences } from '@/scenes/book/reader/useBookPreferences'
@@ -2084,9 +2084,9 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 					}}
 				</AutoSizer>
 
-				{isInitialLoading && (
-					<div className="flex h-full flex-1 items-center justify-center">
-						<Spinner />
+				{(isInitialLoading || !rendition) && (
+					<div className="inset-0 absolute z-50 flex items-center justify-center bg-background">
+						<ProgressSpinner size="lg" />
 					</div>
 				)}
 			</div>

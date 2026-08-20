@@ -1944,12 +1944,11 @@ type Mutation {
 	"""
 	updateLibraryThumbnail(id: ID!, input: UpdateThumbnailInput!): Library!
 	"""
-	Exclude users from a library, preventing them from seeing the library in the UI. This operates as a
-	full replacement of the excluded users list, so any users not included in the provided list will be
-	removed from the exclusion list if they were previously excluded.
+	Grant users access to a library. This operates as a full replacement of the included users
+	list, so any users not present in the provided list will lose access if they previously had it.
 	
-	The server owner cannot be excluded from a library, nor can the user performing the action exclude
-	themselves.
+	The server owner always has access to every library and does not need to be (and cannot be)
+	added to this list.
 	"""
 	updateLibraryIncludedUsers(id: ID!, userIds: [String!]!): Library!
 	deleteLibraryScanHistory(id: ID!): Library!
@@ -2875,8 +2874,11 @@ type Series {
 	childCount: Int!
 	"Count of media in this series and all descendant series (path-prefix rollup)."
 	descendantMediaCount: Int!
-	"Get media in this series"
-	media(take: Int = null, skip: Int = null): [Media!]!
+	"""
+	Get media in this series. When `includeDescendants` is true, include media
+	from descendant series via path-prefix rollup.
+	"""
+	media(take: Int = null, skip: Int = null, includeDescendants: Boolean! = false): [Media!]!
 	mediaCount: Int!
 	mediaAlphabet: JSONObject!
 	upNext(take: Int! = 1, cursor: String): [Media!]!
@@ -3306,6 +3308,16 @@ type StumpConfig {
 	enableUpload: Boolean!
 	"The maximum size, in bytes, of files that can be uploaded to be included in libraries."
 	maxFileUploadSize: Int!
+	"Whether server-side TTS (Piper) is enabled for users with AccessServerTts."
+	enableServerTts: Boolean!
+	"Path to the Piper binary. Defaults to looking up `piper` on PATH when unset."
+	piperPath: String
+	"Directory containing Piper voice models (`.onnx` + matching `.onnx.json`)."
+	piperVoicesDir: String
+	"Default Piper voice id (filename stem without `.onnx`)."
+	piperDefaultVoice: String
+	"Maximum characters accepted per server TTS request."
+	serverTtsMaxChars: Int!
 	"The DPI (dots per inch) to use when rendering PDF pages as images."
 	pdfRenderDpi: Int!
 	"The maximum width or height dimension for rendered PDF pages."
@@ -3545,6 +3557,8 @@ enum UserPermission {
 	ACCESS_KOREADER_SYNC
 	"Grant access to the kobo sync feature"
 	ACCESS_KOBO_SYNC
+	"Grant access to server-side text-to-speech (e.g. Piper read aloud)"
+	ACCESS_SERVER_TTS
 	"""
 	TODO: Expand permissions for bookclub + smartlist
 	Grant access to the book club feature

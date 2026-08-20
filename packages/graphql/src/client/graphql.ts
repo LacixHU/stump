@@ -2187,12 +2187,11 @@ export type Mutation = {
   /** Update the emoji for a library */
   updateLibraryEmoji: Library;
   /**
-   * Exclude users from a library, preventing them from seeing the library in the UI. This operates as a
-   * full replacement of the excluded users list, so any users not included in the provided list will be
-   * removed from the exclusion list if they were previously excluded.
+   * Grant users access to a library. This operates as a full replacement of the included users
+   * list, so any users not present in the provided list will lose access if they previously had it.
    *
-   * The server owner cannot be excluded from a library, nor can the user performing the action exclude
-   * themselves.
+   * The server owner always has access to every library and does not need to be (and cannot be)
+   * added to this list.
    */
   updateLibraryIncludedUsers: Library;
   /**
@@ -4022,7 +4021,10 @@ export type Series = {
   isFavorite: Scalars['Boolean']['output'];
   library: Library;
   libraryId?: Maybe<Scalars['String']['output']>;
-  /** Get media in this series */
+  /**
+   * Get media in this series. When `includeDescendants` is true, include media
+   * from descendant series via path-prefix rollup.
+   */
   media: Array<Media>;
   mediaAlphabet: Scalars['JSONObject']['output'];
   mediaCount: Scalars['Int']['output'];
@@ -4059,6 +4061,7 @@ export type SeriesChildrenArgs = {
 
 
 export type SeriesMediaArgs = {
+  includeDescendants?: Scalars['Boolean']['input'];
   skip?: InputMaybe<Scalars['Int']['input']>;
   take?: InputMaybe<Scalars['Int']['input']>;
 };
@@ -4469,6 +4472,8 @@ export type StumpConfig = {
   enableOpdsProgression: Scalars['Boolean']['output'];
   /** Indicates if the GraphQL playground should be enabled. */
   enablePlayground: Scalars['Boolean']['output'];
+  /** Whether server-side TTS (Piper) is enabled for users with AccessServerTts. */
+  enableServerTts: Scalars['Boolean']['output'];
   /** Whether or not the server will allow users with the appropriate permissions to upload books and series. */
   enableUpload: Scalars['Boolean']['output'];
   /** The interval at which automatic deleted session cleanup is performed. */
@@ -4505,6 +4510,12 @@ export type StumpConfig = {
   pdfRenderFormat: Scalars['String']['output'];
   /** Path to the PDFium binary for PDF support. */
   pdfiumPath?: Maybe<Scalars['String']['output']>;
+  /** Default Piper voice id (filename stem without `.onnx`). */
+  piperDefaultVoice?: Maybe<Scalars['String']['output']>;
+  /** Path to the Piper binary. Defaults to looking up `piper` on PATH when unset. */
+  piperPath?: Maybe<Scalars['String']['output']>;
+  /** Directory containing Piper voice models (`.onnx` + matching `.onnx.json`). */
+  piperVoicesDir?: Maybe<Scalars['String']['output']>;
   /** The port from which to serve the application (default: 10801). */
   port: Scalars['Int']['output'];
   /** Whether or not to pretty print logs. */
@@ -4512,6 +4523,8 @@ export type StumpConfig = {
   /** The "release" | "debug" profile with which the application is running. */
   profile: Scalars['String']['output'];
   refreshTokenTtl: Scalars['Int']['output'];
+  /** Maximum characters accepted per server TTS request. */
+  serverTtsMaxChars: Scalars['Int']['output'];
   /** The time in seconds that a login session will be valid for. */
   sessionTtl: Scalars['Int']['output'];
   /** Path to the TLS certificate PEM chain (e.g. fullchain.pem). */
@@ -7368,7 +7381,7 @@ export const RecentlyAddedSeriesItemFragmentDoc = new TypedDocumentString(`
   id
   createdAt
   resolvedName
-  media(take: 2, skip: 1) {
+  media(take: 2, skip: 1, includeDescendants: true) {
     resolvedName
     thumbnail {
       url
@@ -9669,7 +9682,7 @@ export const RecentlyAddedSeriesHorizontalDocument = new TypedDocumentString(`
   id
   createdAt
   resolvedName
-  media(take: 2, skip: 1) {
+  media(take: 2, skip: 1, includeDescendants: true) {
     resolvedName
     thumbnail {
       url
@@ -11948,7 +11961,7 @@ export const RecentlyAddedSeriesDocument = new TypedDocumentString(`
       percentageCompleted
       status
       createdAt
-      media(take: 2, skip: 1) {
+      media(take: 2, skip: 1, includeDescendants: true) {
         id
         resolvedName
         thumbnail {
@@ -12160,7 +12173,7 @@ export const LibrarySeriesDocument = new TypedDocumentString(`
       descendantMediaCount
       percentageCompleted
       status
-      media(take: 2, skip: 1) {
+      media(take: 2, skip: 1, includeDescendants: true) {
         id
         thumbnail {
           url

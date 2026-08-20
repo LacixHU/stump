@@ -14,7 +14,7 @@ const fragment = graphql(`
 		id
 		createdAt
 		resolvedName
-		media(take: 2, skip: 1) {
+		media(take: 2, skip: 1, includeDescendants: true) {
 			resolvedName
 			thumbnail {
 				url

@@ -1,5 +1,5 @@
 import { useSDK } from '@stump/client'
-import { Link, Text } from '@stump/components'
+import { Link, ProgressSpinner, Text } from '@stump/components'
 import { useLocaleContext } from '@stump/i18n'
 import { useEffect, useState } from 'react'
 
@@ -49,9 +49,12 @@ export default function NativePDFViewer({ id }: Props) {
 		}
 	}, [sdk, id, pdfObjectUrl])
 
-	// TODO: consider some sort of loading state here
 	if (!pdfObjectUrl) {
-		return null
+		return (
+			<div className="inset-0 fixed z-50 flex items-center justify-center bg-background">
+				<ProgressSpinner size="lg" />
+			</div>
+		)
 	}
 
 	return (

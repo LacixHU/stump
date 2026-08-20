@@ -22,7 +22,7 @@ const query = graphql(`
 				percentageCompleted
 				status
 				createdAt
-				media(take: 2, skip: 1) {
+				media(take: 2, skip: 1, includeDescendants: true) {
 					id
 					resolvedName
 					thumbnail {

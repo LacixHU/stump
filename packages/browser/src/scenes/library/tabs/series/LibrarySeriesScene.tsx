@@ -60,7 +60,7 @@ export const librarySeriesQuery = graphql(`
 				status
 				# We fetch 2 and skip 1 because the first thumbnail _might_ be the same as the series thumbnail.
 				# See https://github.com/stumpapp/stump/issues/899
-				media(take: 2, skip: 1) {
+				media(take: 2, skip: 1, includeDescendants: true) {
 					id
 					thumbnail {
 						url
