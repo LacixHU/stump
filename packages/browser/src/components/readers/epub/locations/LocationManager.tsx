@@ -14,18 +14,10 @@ export default function LocationManager() {
 	const [isOpen, setIsOpen] = useState(false)
 	const [activeTab, setActiveTab] = useState<LocationTab>('contents')
 
-	const handleClose = () => setIsOpen(false)
-	const handleOpenChange = (nowOpen: boolean) => {
-		if (!nowOpen) {
-			handleClose()
-		}
-	}
 	const handleTabChange = (tab: LocationTab) => setActiveTab(tab)
 	const handleLocationChanged = useCallback(() => {
-		if (isOpen) {
-			setIsOpen(false)
-		}
-	}, [isOpen])
+		setIsOpen(false)
+	}, [])
 
 	const renderTabContent = () => {
 		if (activeTab === 'contents') {
@@ -40,10 +32,10 @@ export default function LocationManager() {
 	}
 
 	return (
-		<Dialog open={isOpen} onOpenChange={handleOpenChange}>
+		<Dialog open={isOpen} onOpenChange={setIsOpen}>
 			<Dialog.Trigger asChild>
 				<ControlButton title={t('reader.locationManager')}>
-					<List className="h-4 w-4" onClick={() => setIsOpen(true)} />
+					<List className="h-4 w-4" />
 				</ControlButton>
 			</Dialog.Trigger>
 			<Dialog.Content size="md">
@@ -69,7 +61,7 @@ export default function LocationManager() {
 						</Tabs.List>
 					</Tabs>
 
-					<Dialog.Close onClick={handleClose} />
+					<Dialog.Close onClick={() => setIsOpen(false)} />
 				</Dialog.Header>
 				<div className="scrollbar-hide h-[300px] overflow-y-auto">{renderTabContent()}</div>
 			</Dialog.Content>

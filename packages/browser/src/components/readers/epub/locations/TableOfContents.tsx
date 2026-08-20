@@ -22,7 +22,7 @@ function TableOfContentsItem({ item, handleSelect }: ItemProps) {
 			>
 				<Text className="line-clamp-1">{item.label}</Text>
 			</button>
-			{item.children.map((childItem) => (
+			{item.children?.map((childItem) => (
 				<TableOfContentsItem key={childItem.label} item={childItem} handleSelect={handleSelect} />
 			))}
 		</>
