@@ -38,6 +38,7 @@ import { darkVariantText, toFamilyName } from './themes'
 const LOCATIONS_CACHE_KEY = 'stump:epubjs-locations-cache'
 const READ_ALOUD_PREFS_KEY = 'stump:epubjs-read-aloud-preferences'
 const READ_ALOUD_RESUME_KEY = 'stump:epubjs-read-aloud-resume'
+const READ_ALOUD_SENTENCE_GAP_MS = 400
 
 type ReadAloudPreferences = {
 	engine: ReadAloudEngine
@@ -350,6 +351,11 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 		sentenceIndex: number
 		promise: Promise<string | null>
 	} | null>(null)
+	const readAloudSentenceGapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const readAloudSentenceGapPendingRef = useRef<{
+		requestId: number
+		nextIndex: number
+	} | null>(null)
 	const playSentenceQueueRef = useRef<((requestId: number, sentenceIndex: number) => void) | null>(
 		null,
 	)
@@ -418,6 +424,35 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 		clearPlayingServerAudio()
 		clearPrefetchedServerAudio()
 	}, [clearPlayingServerAudio, clearPrefetchedServerAudio])
+
+	const clearSentenceGapTimer = useCallback(() => {
+		if (readAloudSentenceGapTimeoutRef.current !== null) {
+			clearTimeout(readAloudSentenceGapTimeoutRef.current)
+			readAloudSentenceGapTimeoutRef.current = null
+		}
+	}, [])
+
+	const clearSentenceGap = useCallback(() => {
+		clearSentenceGapTimer()
+		readAloudSentenceGapPendingRef.current = null
+	}, [clearSentenceGapTimer])
+
+	const scheduleNextReadAloudSentence = useCallback(
+		(requestId: number, nextIndex: number) => {
+			clearSentenceGapTimer()
+			readAloudSentenceGapPendingRef.current = { nextIndex, requestId }
+			readAloudSentenceGapTimeoutRef.current = setTimeout(() => {
+				readAloudSentenceGapTimeoutRef.current = null
+				if (readAloudRequestRef.current !== requestId) {
+					readAloudSentenceGapPendingRef.current = null
+					return
+				}
+				readAloudSentenceGapPendingRef.current = null
+				playSentenceQueueRef.current?.(requestId, nextIndex)
+			}, READ_ALOUD_SENTENCE_GAP_MS)
+		},
+		[clearSentenceGapTimer],
+	)
 
 	const persistReadAloudResume = useCallback(
 		(resume: ReadAloudResume) => {
@@ -653,6 +688,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 		clearServerAudio()
 		readAloudRequestRef.current += 1
 		readAloudSentenceQueueRef.current = []
+		clearSentenceGap()
 		persistReadAloudResume({
 			cfi: readAloudCurrentCfiRef.current,
 			sentenceIndex: readAloudSentenceIndexRef.current,
@@ -661,7 +697,13 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 		setIsReadAloudPaused(false)
 		setReadAloudCurrentSentence(null)
 		readAloudAutoTurnInProgressRef.current = false
-	}, [browserSpeechSupported, clearServerAudio, persistReadAloudResume, readAloudSupported])
+	}, [
+		browserSpeechSupported,
+		clearSentenceGap,
+		clearServerAudio,
+		persistReadAloudResume,
+		readAloudSupported,
+	])
 
 	const playBrowserSentence = useCallback(
 		(requestId: number, sentenceIndex: number, sentence: string) => {
@@ -726,7 +768,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 
 			utterance.onend = () => {
 				if (readAloudRequestRef.current === requestId) {
-					playSentenceQueueRef.current?.(requestId, sentenceIndex + 1)
+					scheduleNextReadAloudSentence(requestId, sentenceIndex + 1)
 				}
 			}
 			utterance.onerror = (event: SpeechSynthesisErrorEvent) => {
@@ -788,7 +830,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				}
 			}
 		},
-		[readAloudPitch, readAloudRate, readAloudVoiceUri, t],
+		[readAloudPitch, readAloudRate, readAloudVoiceUri, scheduleNextReadAloudSentence, t],
 	)
 
 	const requestServerSentenceAudio = useCallback(
@@ -883,7 +925,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 						readAloudAudioRef.current = null
 					}
 					if (readAloudRequestRef.current === requestId) {
-						playSentenceQueueRef.current?.(requestId, sentenceIndex + 1)
+						scheduleNextReadAloudSentence(requestId, sentenceIndex + 1)
 					}
 				}
 
@@ -914,7 +956,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				}
 			}
 		},
-		[clearPlayingServerAudio, requestServerSentenceAudio, t],
+		[clearPlayingServerAudio, requestServerSentenceAudio, scheduleNextReadAloudSentence, t],
 	)
 
 	const playSentenceQueue = useCallback(
@@ -1027,9 +1069,10 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
 				window.speechSynthesis.cancel()
 			}
+			clearSentenceGap()
 			clearServerAudio()
 		}
-	}, [clearServerAudio])
+	}, [clearSentenceGap, clearServerAudio])
 
 	const speakCurrentLocation = useCallback(
 		async (
@@ -1165,6 +1208,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			if (browserSpeechSupported) {
 				window.speechSynthesis.cancel()
 			}
+			clearSentenceGap()
 			clearServerAudio()
 			setIsReadAloudActive(true)
 			setIsReadAloudPaused(false)
@@ -1179,6 +1223,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 		},
 		[
 			browserSpeechSupported,
+			clearSentenceGap,
 			clearServerAudio,
 			effectiveReadAloudEngine,
 			extractTextFromCurrentLocation,
@@ -1209,6 +1254,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 			return
 		}
 
+		clearSentenceGapTimer()
 		if (effectiveReadAloudEngine === 'server') {
 			readAloudAudioRef.current?.pause()
 		} else if (browserSpeechSupported) {
@@ -1217,6 +1263,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 		setIsReadAloudPaused(true)
 	}, [
 		browserSpeechSupported,
+		clearSentenceGapTimer,
 		effectiveReadAloudEngine,
 		isReadAloudActive,
 		isReadAloudPaused,
@@ -1225,6 +1272,14 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 
 	const onResumeReadAloud = useCallback(() => {
 		if (!readAloudSupported || !isReadAloudActive || !isReadAloudPaused) {
+			return
+		}
+
+		const pendingGap = readAloudSentenceGapPendingRef.current
+		if (pendingGap && pendingGap.requestId === readAloudRequestRef.current) {
+			readAloudSentenceGapPendingRef.current = null
+			setIsReadAloudPaused(false)
+			playSentenceQueueRef.current?.(pendingGap.requestId, pendingGap.nextIndex)
 			return
 		}
 
