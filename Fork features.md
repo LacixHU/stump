@@ -6,21 +6,41 @@ This fork of [Stump](https://github.com/stumpapp/stump) adds the following featu
 
 - Server-side TTS using [Piper](https://github.com/rhasspy/piper)
 - Client TTS controls with rate and pitch adjustments
+- Sentence-level playback with prefetch of the next sentence for continuous read-aloud
+- Short gap between sentences for smoother continuity
+- Hungarian voice pronunciation aid: common English names and foreign words are rewritten to Hungarian phonetics before Piper speaks (not a translator)
 
 ## Access control
 
 - Library access is **opt-in** instead of opt-out
 - Users only see libraries they have been granted
+- Library settings button is shown only to users with **Manage library** permission
 
-## Libraries
+## Libraries and series
 
 - Nested library pattern for hierarchical series
+- Parent series with child series get a **Series** tab (like libraries), plus **Books** and **Files**
+- Opening a parent series lands on the Series tab; leaf series still open on Books
+- Series tab shows **sub-series and direct books** together (series first), in grid or list view
+- Books tab is **books only** (no nested series cards mixed in)
+- Book search within the library series view (results toggle alongside the alphabet selector)
 
 ## Thumbnails
 
 - Versioned thumbnail URLs
 - More reliable thumbnail upload and image loading
 - Nested parent series use descendant books for the 3-cover stack
+
+## Localization
+
+- Broad browser UI internationalization (readers, navigation, filters, book/series/library scenes, settings, errors)
+- English and Hungarian locale coverage for fork UI strings, including EPUB reader control tooltips
+
+## Filtering and sorting
+
+- Localized filter forms and ordering controls
+- Additional media/series filter options (including age rating, extension, and status)
+- More accurate title sorting via metadata title with fallback to base name
 
 ## EPUB reader
 
@@ -87,7 +107,7 @@ enable_server_tts = true
 # piper_default_voice = "en_US-lessac-medium"
 ```
 
-### PDF rendering
+### PDF rendering (same as in original repository)
 
 | Key                   | Env                         | Default | Description                                      |
 | --------------------- | --------------------------- | ------- | ------------------------------------------------ |

@@ -29,10 +29,12 @@ Stump is a free and open source comics, manga, and digital book server with OPDS
 
 This is a fork of [stumpapp/stump](https://github.com/stumpapp/stump). Extra features beyond `upstream/nightly`:
 
-- **Text-to-speech** — server-side Piper TTS, plus client rate/pitch controls
-- **Opt-in library access** — users only see libraries they have been granted
-- **Nested libraries** — hierarchical series via a nested library pattern
+- **Text-to-speech** — server-side Piper TTS, rate/pitch, sentence prefetch/gaps, Hungarian pronunciation aid
+- **Opt-in library access** — users only see libraries they have been granted; library settings gated by Manage library
+- **Nested libraries / series tabs** — hierarchical series; parent Series tab shows sub-series + direct books; Books tab is books-only
 - **Versioned thumbnails** — cache-safe URLs, more reliable upload/loading, nested series 3-cover stacks
+- **Localization** — broad EN/HU browser UI i18n, including reader controls and filters
+- **Filtering** — richer media/series filters and metadata-aware title sort
 - **EPUB reader** — better TOC/chapters, desktop fullscreen, download spinner, translated control tooltips
 - **PDF reader** — centered loading spinner while the file downloads
 - **Image reader** — pinch/pan zoom, 2× max zoom, slip-tolerant tap advance, 20% side tap zones, Android centering, Auto scale default
