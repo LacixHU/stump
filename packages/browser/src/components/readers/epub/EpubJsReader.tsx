@@ -135,31 +135,42 @@ const saveCachedLocations = (id: string, locations: string[]) => {
 	localStorage.setItem(formatCacheKey(id), JSON.stringify(locations))
 }
 
+/** EPUB paths must use `/`; server PathBuf can emit `\` on Windows. */
+const normalizeEpubPath = (value: string) => value.replace(/\\/g, '/')
+
 const splitHrefFragment = (href: string) => {
-	const hashIndex = href.indexOf('#')
+	const normalized = normalizeEpubPath(href)
+	const hashIndex = normalized.indexOf('#')
 	if (hashIndex === -1) {
-		return { path: href, fragment: '' }
+		return { path: normalized, fragment: '' }
 	}
 
 	return {
-		path: href.slice(0, hashIndex),
-		fragment: href.slice(hashIndex),
+		path: normalized.slice(0, hashIndex),
+		fragment: normalized.slice(hashIndex),
 	}
 }
 
 const formatHrefTarget = (path: string, fragment: string) => `${path}${fragment}`
 
 const getHrefDisplayTargets = (href: string, rootBase?: string) => {
-	const trimmedHref = href.trim()
+	const trimmedHref = normalizeEpubPath(href.trim())
 	if (!trimmedHref) {
 		return []
 	}
 
 	const { path, fragment } = splitHrefFragment(trimmedHref)
-	const trimmedRoot = rootBase?.replace(/^\/+|\/+$/g, '')
+	const trimmedRoot = rootBase ? normalizeEpubPath(rootBase).replace(/^\/+|\/+$/g, '') : undefined
 	const pathWithoutLeadingSlash = path.replace(/^\/+/, '')
+	const basename = pathWithoutLeadingSlash.includes('/')
+		? pathWithoutLeadingSlash.slice(pathWithoutLeadingSlash.lastIndexOf('/') + 1)
+		: pathWithoutLeadingSlash
 
-	const candidates = [trimmedHref, formatHrefTarget(pathWithoutLeadingSlash, fragment)]
+	const candidates = [
+		trimmedHref,
+		formatHrefTarget(pathWithoutLeadingSlash, fragment),
+		formatHrefTarget(basename, fragment),
+	]
 
 	if (trimmedRoot) {
 		if (pathWithoutLeadingSlash.startsWith(`${trimmedRoot}/`)) {
@@ -171,7 +182,15 @@ const getHrefDisplayTargets = (href: string, rootBase?: string) => {
 		}
 	}
 
-	return Array.from(new Set(candidates))
+	// Path-only fallbacks (epubjs often fails on missing/odd fragment ids)
+	for (const withFragment of [...candidates]) {
+		const pathOnly = splitHrefFragment(withFragment).path
+		if (pathOnly) {
+			candidates.push(pathOnly)
+		}
+	}
+
+	return Array.from(new Set(candidates.filter(Boolean)))
 }
 
 /** The props for the EpubJsReader component */
@@ -1877,14 +1896,17 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				// @ts-expect-error: epubjs has incorrect types
 				const matches = book.spine.items
 					.filter((item: Record<string, unknown>) => {
-						const itemTargets = [item.url, item.canonical]
+						const itemTargets = [item.href, item.url, item.canonical]
 							.filter((value): value is string => typeof value === 'string')
-							.flatMap((value) => [value, value.replace(/^\/+/, '')])
+							.flatMap((value) => {
+								const normalized = normalizeEpubPath(value).replace(/^\/+/, '')
+								const base = normalized.includes('/')
+									? normalized.slice(normalized.lastIndexOf('/') + 1)
+									: normalized
+								return [normalized, `/${normalized}`, base]
+							})
 
-						return (
-							itemTargets.some((target) => adjustedTargetSet.has(target)) ||
-							itemTargets.some((target) => adjustedTargetSet.has(`/${target}`))
-						)
+						return itemTargets.some((target) => adjustedTargetSet.has(target))
 					})
 					.map((item: Record<string, unknown>) => book.spine.get(item.index as number))
 					.filter(Boolean)
@@ -1892,7 +1914,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 				if (matches.length > 0) {
 					spineItem = matches[0]
 				} else {
-					console.error('Could not find spine item for href', href)
+					console.error('Could not find spine item for href', href, { targets })
 					toast.error(failureMessage)
 					return
 				}

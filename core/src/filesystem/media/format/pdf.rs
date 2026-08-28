@@ -3,6 +3,7 @@ use std::{
 	io::Cursor,
 	path::{Path, PathBuf},
 	sync::{Mutex, OnceLock},
+	time::SystemTime,
 };
 
 use models::shared::image_processor_options::SupportedImageFormat;
@@ -520,6 +521,13 @@ impl PdfProcessor {
 						size = content.len(),
 						"Cached PDF page successfully"
 					);
+
+					if config.pdf_cache_max_size_bytes > 0 {
+						let cache_config = config.clone();
+						tokio::spawn(async move {
+							Self::enforce_pdf_cache_size_limit(&cache_config).await;
+						});
+					}
 				},
 				Err(error) => {
 					tracing::warn!(?cache_file, ?error, "Failed to move temp cache file");
@@ -532,6 +540,81 @@ impl PdfProcessor {
 		}
 
 		Ok(())
+	}
+
+	/// Gradually evict oldest cached PDF pages when the cache exceeds
+	/// `pdf_cache_max_size_bytes`. Files are deleted in chunks of
+	/// `pdf_cache_eviction_chunk_bytes` starting from the oldest until the
+	/// total cache size is under the limit.
+	async fn enforce_pdf_cache_size_limit(config: &StumpConfig) {
+		let max_size = config.pdf_cache_max_size_bytes;
+		if max_size == 0 {
+			return;
+		}
+
+		let cache_dir = match config.get_pdf_cache_dir().canonicalize() {
+			Ok(dir) => dir,
+			Err(_) => return,
+		};
+
+		let Ok(mut entries) = tokio::fs::read_dir(&cache_dir).await else {
+			return;
+		};
+
+		let mut files: Vec<(SystemTime, u64, PathBuf)> = Vec::new();
+		let mut total_size: u64 = 0;
+
+		while let Ok(Some(entry)) = entries.next_entry().await {
+			let Ok(metadata) = entry.metadata().await else {
+				continue;
+			};
+			if !metadata.is_file() {
+				continue;
+			}
+			let size = metadata.len();
+			total_size = total_size.saturating_add(size);
+			let modified = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+			files.push((modified, size, entry.path()));
+		}
+
+		if total_size <= max_size {
+			return;
+		}
+
+		files.sort_by(|a, b| a.0.cmp(&b.0));
+
+		let chunk = config.pdf_cache_eviction_chunk_bytes.max(1);
+		let mut to_remove: u64 = 0;
+		let mut removed: u64 = 0;
+		let mut paths_to_delete: Vec<PathBuf> = Vec::new();
+
+		for (_, size, path) in &files {
+			if total_size.saturating_sub(removed) <= max_size {
+				break;
+			}
+			to_remove = to_remove.saturating_add(*size);
+			paths_to_delete.push(path.clone());
+			removed = removed.saturating_add(*size);
+
+			if to_remove >= chunk {
+				for p in &paths_to_delete {
+					let _ = tokio::fs::remove_file(p).await;
+				}
+				paths_to_delete.clear();
+				to_remove = 0;
+			}
+		}
+
+		for p in &paths_to_delete {
+			let _ = tokio::fs::remove_file(p).await;
+		}
+
+		tracing::debug!(
+			total = total_size,
+			removed = removed,
+			max = max_size,
+			"Enforced PDF cache size limit"
+		);
 	}
 
 	async fn prerender_adjacent_pages(
@@ -648,6 +731,13 @@ impl PdfProcessor {
 					);
 				},
 			}
+		}
+
+		if config_owned.pdf_cache_max_size_bytes > 0 {
+			let cache_config = config_owned.clone();
+			tokio::spawn(async move {
+				Self::enforce_pdf_cache_size_limit(&cache_config).await;
+			});
 		}
 	}
 }

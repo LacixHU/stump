@@ -1,6 +1,9 @@
 # Fork features
 
-This fork of [Stump](https://github.com/stumpapp/stump) adds the following features and improvements on top of `upstream/nightly`.
+**Fork version:** 0.1.7  
+**Based on:** [Stump](https://github.com/stumpapp/stump) `upstream/nightly`
+
+This fork adds the following features and improvements on top of `upstream/nightly`.
 
 ## Text-to-speech
 
@@ -107,16 +110,18 @@ enable_server_tts = true
 # piper_default_voice = "en_US-lessac-medium"
 ```
 
-### PDF rendering (same as in original repository)
+### PDF rendering
 
-| Key                   | Env                         | Default | Description                                      |
-| --------------------- | --------------------------- | ------- | ------------------------------------------------ |
-| `pdf_render_dpi`      | `STUMP_PDF_RENDER_DPI`      | `150`   | DPI when rendering PDF pages                     |
-| `pdf_max_dimension`   | `STUMP_PDF_MAX_DIMENSION`   | `1200`  | Max width or height (px) for rendered pages      |
-| `pdf_render_format`   | `STUMP_PDF_RENDER_FORMAT`   | `webp`  | Image format: `webp`, `png`, or `jpeg`           |
-| `pdf_cache_pages`     | `STUMP_PDF_CACHE_PAGES`     | `true`  | Cache rendered PDF pages on disk                 |
-| `pdf_prerender_range` | `STUMP_PDF_PRERENDER_RANGE` | `5`     | Pages to pre-render before/after the current one |
-| `pdf_high_quality`    | `STUMP_PDF_HIGH_QUALITY`    | `true`  | Higher-quality rendering (slower)                |
+| Key                          | Env                                  | Default | Description                                                      |
+| ---------------------------- | ------------------------------------ | ------- | ---------------------------------------------------------------- |
+| `pdf_render_dpi`             | `STUMP_PDF_RENDER_DPI`               | `150`   | DPI for rendering PDF pages                                      |
+| `pdf_max_dimension`          | `STUMP_PDF_MAX_DIMENSION`            | `1200`  | Max width or height (px) for rendered pages                      |
+| `pdf_render_format`          | `STUMP_PDF_RENDER_FORMAT`            | `webp`  | Image format: `webp`, `png`, or `jpeg`                           |
+| `pdf_cache_pages`            | `STUMP_PDF_CACHE_PAGES`              | `true`  | Cache rendered PDF pages on disk                                 |
+| **pdf_cache_max_size**       | **`STUMP_PDF_CACHE_MAX_SIZE`**       | `2GB`   | Max total size of the PDF page cache on disk                     |
+| **pdf_cache_eviction_chunk** | **`STUMP_PDF_CACHE_EVICTION_CHUNK`** | `500MB` | Bytes removed per eviction pass when the cache is over the limit |
+| `pdf_prerender_range`        | `STUMP_PDF_PRERENDER_RANGE`          | `5`     | Pages to pre-render before/after the current one                 |
+| `pdf_high_quality`           | `STUMP_PDF_HIGH_QUALITY`             | `true`  | Higher-quality rendering (slower)                                |
 
 ## PDF reader
 

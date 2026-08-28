@@ -66,6 +66,8 @@ pub mod env_keys {
 	pub const PDF_CACHE_PAGES_KEY: &str = "STUMP_PDF_CACHE_PAGES";
 	pub const PDF_PRERENDER_RANGE_KEY: &str = "STUMP_PDF_PRERENDER_RANGE";
 	pub const PDF_HIGH_QUALITY_KEY: &str = "STUMP_PDF_HIGH_QUALITY";
+	pub const PDF_CACHE_MAX_SIZE_KEY: &str = "STUMP_PDF_CACHE_MAX_SIZE";
+	pub const PDF_CACHE_EVICTION_CHUNK_KEY: &str = "STUMP_PDF_CACHE_EVICTION_CHUNK";
 	pub const OIDC_ENABLED_KEY: &str = "STUMP_OIDC_ENABLED";
 	pub const OIDC_CLIENT_ID_KEY: &str = "STUMP_OIDC_CLIENT_ID";
 	pub const OIDC_CLIENT_SECRET_KEY: &str = "STUMP_OIDC_CLIENT_SECRET";
@@ -97,6 +99,8 @@ pub mod defaults {
 	pub const DEFAULT_PDF_CACHE_PAGES: bool = true; // Enable page caching by default
 	pub const DEFAULT_PDF_PRERENDER_RANGE: u32 = 5; // Pre-render 5 pages before/after current
 	pub const DEFAULT_PDF_HIGH_QUALITY: bool = true; // Enable high-quality rendering by default
+	pub const DEFAULT_PDF_CACHE_MAX_SIZE_BYTES: u64 = 2 * 1024 * 1024 * 1024; // 2 GiB
+	pub const DEFAULT_PDF_CACHE_EVICTION_CHUNK_BYTES: u64 = 500 * 1024 * 1024; // 500 MiB
 	pub const DEFAULT_BOOK_COMPLETION_DEDUP_TIMEOUT_SECS: i64 = 60 * 60 * 24; // 1 day
 	pub const DEFAULT_PARALLELISM_MULTIPLIER: usize = 2;
 }
@@ -339,6 +343,19 @@ pub struct StumpConfig {
 	#[default_value(DEFAULT_PDF_HIGH_QUALITY)]
 	#[env_key(PDF_HIGH_QUALITY_KEY)]
 	pub pdf_high_quality: bool,
+
+	/// Maximum total size of the PDF page cache directory in bytes.
+	/// When the cache exceeds this limit, the oldest cached files are gradually
+	/// deleted in chunks until the cache is under the limit.
+	#[default_value(DEFAULT_PDF_CACHE_MAX_SIZE_BYTES)]
+	#[env_key(PDF_CACHE_MAX_SIZE_KEY)]
+	pub pdf_cache_max_size_bytes: u64,
+
+	/// Number of bytes to remove from the PDF cache at a time when enforcing
+	/// `pdf_cache_max_size_bytes`. Older files are deleted first.
+	#[default_value(DEFAULT_PDF_CACHE_EVICTION_CHUNK_BYTES)]
+	#[env_key(PDF_CACHE_EVICTION_CHUNK_KEY)]
+	pub pdf_cache_eviction_chunk_bytes: u64,
 
 	/// OIDC authentication configuration
 	#[serde(default)]
@@ -614,6 +631,10 @@ mod tests {
 				pdf_cache_pages: Some(DEFAULT_PDF_CACHE_PAGES),
 				pdf_prerender_range: Some(DEFAULT_PDF_PRERENDER_RANGE),
 				pdf_high_quality: Some(DEFAULT_PDF_HIGH_QUALITY),
+				pdf_cache_max_size_bytes: Some(DEFAULT_PDF_CACHE_MAX_SIZE_BYTES),
+				pdf_cache_eviction_chunk_bytes: Some(
+					DEFAULT_PDF_CACHE_EVICTION_CHUNK_BYTES
+				),
 				oidc: None,
 				trust_proxy_headers: Some(false),
 			}
@@ -690,6 +711,9 @@ mod tests {
 						pdf_cache_pages: DEFAULT_PDF_CACHE_PAGES,
 						pdf_prerender_range: DEFAULT_PDF_PRERENDER_RANGE,
 						pdf_high_quality: DEFAULT_PDF_HIGH_QUALITY,
+						pdf_cache_max_size_bytes: DEFAULT_PDF_CACHE_MAX_SIZE_BYTES,
+						pdf_cache_eviction_chunk_bytes:
+							DEFAULT_PDF_CACHE_EVICTION_CHUNK_BYTES,
 						oidc: None,
 						trust_proxy_headers: false,
 					}

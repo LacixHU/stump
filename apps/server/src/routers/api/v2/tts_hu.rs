@@ -154,6 +154,7 @@ const WORDS: &[(&str, &str)] = &[
 	("don't", "dóunt"),
 	("it's", "ítsz"),
 	("that's", "detsz"),
+	("...", ". "),
 ];
 
 pub fn apply_pronunciation(text: &str) -> String {

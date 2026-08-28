@@ -4,8 +4,8 @@ use epub::doc::{EpubDoc, NavPoint};
 use models::entity::{bookmark, media, media_annotation};
 use sea_orm::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::io::{Read, Seek};
-use std::{collections::HashMap, path::PathBuf};
 
 use super::bookmark::Bookmark;
 use super::media::Media;
@@ -13,16 +13,22 @@ use super::media::Media;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EpubContent {
 	label: String,
-	content: PathBuf,
+	/// EPUB-relative href (always `/` separators; may include a `#fragment`).
+	content: String,
 	children: Vec<EpubContent>,
 	play_order: u32,
+}
+
+/// PathBuf uses `\` on Windows; EPUB/epubjs require `/`.
+fn epub_path_to_href(path: &std::path::Path) -> String {
+	path.to_string_lossy().replace('\\', "/")
 }
 
 impl From<NavPoint> for EpubContent {
 	fn from(nav_point: NavPoint) -> EpubContent {
 		EpubContent {
 			label: nav_point.label,
-			content: nav_point.content,
+			content: epub_path_to_href(&nav_point.content),
 			children: nav_point
 				.children
 				.into_iter()
@@ -64,12 +70,7 @@ impl Epub {
 		let resources_serialized = epub_file
 			.resources
 			.into_iter()
-			.map(|(k, v)| {
-				Ok((
-					k,
-					(v.path.to_str().ok_or("Invalid path")?.to_string(), v.mime),
-				))
-			})
+			.map(|(k, v)| Ok((k, (epub_path_to_href(&v.path), v.mime))))
 			.collect::<Result<HashMap<String, (String, String)>>>()?;
 
 		// serialize toc to string, return error if any path fails to serialize
@@ -104,16 +105,8 @@ impl Epub {
 			resources: resources_serialized,
 			toc: toc_serialized,
 			metadata: metadata_map,
-			root_base: epub_file
-				.root_base
-				.to_str()
-				.ok_or("Invalid path")?
-				.to_string(),
-			root_file: epub_file
-				.root_file
-				.to_str()
-				.ok_or("Invalid path")?
-				.to_string(),
+			root_base: epub_path_to_href(&epub_file.root_base),
+			root_file: epub_path_to_href(&epub_file.root_file),
 			extra_css: epub_file.extra_css,
 		})
 	}
@@ -184,6 +177,7 @@ mod tests {
 	use super::*;
 	use epub::doc::ResourceItem;
 	use models::entity::media::MediaIdentSelect;
+	use std::path::PathBuf;
 
 	#[tokio::test]
 	async fn test_epub_try_from() {
@@ -221,57 +215,22 @@ mod tests {
 		assert_eq!(epub.root_file, "test.html");
 	}
 
-	// Test for malformed epub file, non-utf8 path are os dependent so only run on linux or mac
-	// since windows uses utf-16 for paths
-	#[cfg(any(target_os = "linux", target_os = "macos"))]
-	#[tokio::test]
-	async fn test_epub_try_from_malformed() {
-		use std::ffi::OsString;
-		use std::os::unix::ffi::OsStringExt;
-		let malformed_path = PathBuf::from(OsString::from_vec(vec![255]));
-		let mut epub_doc = EpubDoc::mock().unwrap();
-		epub_doc.resources.insert(
-			"test.css".to_string(),
-			ResourceItem {
-				mime: "text/css".to_string(),
-				path: malformed_path.clone(),
-				properties: None,
-			},
-		);
-		let epub = Epub::try_from_with_epub(
-			MediaIdentSelect {
-				id: "test".to_string(),
-				path: "test.epub".to_string(),
-			},
-			epub_doc,
-		);
-		assert!(epub.is_err());
-		// try with toc
-		epub_doc = EpubDoc::mock().unwrap();
-		epub_doc.toc = vec![NavPoint {
-			label: "test".to_string(),
-			content: malformed_path.clone(),
+	#[test]
+	fn test_epub_path_to_href_normalizes_separators() {
+		let path = PathBuf::from("OPS").join("ch1-5.xhtml#id4");
+		assert_eq!(epub_path_to_href(&path), "OPS/ch1-5.xhtml#id4");
+	}
+
+	#[test]
+	fn test_epub_content_from_nav_point_uses_forward_slashes() {
+		let content = EpubContent::from(NavPoint {
+			label: "chapter".to_string(),
+			content: PathBuf::from("OPS").join("ch1-5.xhtml#id4"),
 			children: vec![],
-			play_order: Some(0),
-		}];
-		let epub = Epub::try_from_with_epub(
-			MediaIdentSelect {
-				id: "test".to_string(),
-				path: "test.epub".to_string(),
-			},
-			epub_doc,
-		);
-		assert!(epub.is_err());
-		// try with base file
-		epub_doc = EpubDoc::mock().unwrap();
-		epub_doc.root_base = malformed_path.clone();
-		let epub = Epub::try_from_with_epub(
-			MediaIdentSelect {
-				id: "test".to_string(),
-				path: "test.epub".to_string(),
-			},
-			epub_doc,
-		);
-		assert!(epub.is_err());
+			play_order: Some(1),
+		});
+		let json = serde_json::to_string(&content).unwrap();
+		assert!(json.contains("\"content\":\"OPS/ch1-5.xhtml#id4\""));
+		assert!(!json.contains('\\'));
 	}
 }
