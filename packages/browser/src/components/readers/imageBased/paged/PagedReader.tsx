@@ -53,6 +53,11 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 	// Blocks side-tap page turns while pinching/panning (including when one finger is on a side bar)
 	const suppressSideNavigationRef = useRef(false)
 	const PAN_GESTURE_THRESHOLD_PX = 2
+	const SWIPE_VELOCITY_PX_PER_MS = 0.5
+	const SWIPE_MIN_DISTANCE_PX = 40
+	const SWIPE_HORIZONTAL_RATIO = 1.5
+	const handleLeftwardPageChangeRef = useRef<() => void>(() => {})
+	const handleRightwardPageChangeRef = useRef<() => void>(() => {})
 
 	const [pageSetWidth, setPageSetWidth] = useState(0)
 	useEffect(() => {
@@ -111,10 +116,11 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 		const activePanPointerIds = new Set<number>()
 		// Latest event per pointer (down or move) so pinch starts at current finger positions
 		const latestPointerEvents = new Map<number, PointerEvent>()
-		const pointerDownPositions = new Map<number, { x: number; y: number }>()
+		const pointerDownPositions = new Map<number, { x: number; y: number; time: number }>()
 		// True when that pointer's down target was a page-change side bar
 		const pointerStartedOnSideNav = new Map<number, boolean>()
 		let panInitialized = false
+		let hadMultiTouch = false
 
 		const setCursor = (cursor: string) => {
 			parentElement.style.cursor = cursor
@@ -132,6 +138,7 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 			pointerDownPositions.clear()
 			pointerStartedOnSideNav.clear()
 			panInitialized = false
+			hadMultiTouch = false
 			panGestureActive.current = false
 			setCursor('default')
 		}
@@ -212,13 +219,18 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 			if (event.pointerType !== 'touch' && startedOnSideNav) return
 
 			latestPointerEvents.set(event.pointerId, event)
-			pointerDownPositions.set(event.pointerId, { x: event.clientX, y: event.clientY })
+			pointerDownPositions.set(event.pointerId, {
+				x: event.clientX,
+				y: event.clientY,
+				time: event.timeStamp,
+			})
 			pointerStartedOnSideNav.set(event.pointerId, startedOnSideNav)
 			activePanPointerIds.add(event.pointerId)
 
 			if (event.pointerType === 'touch') {
 				// Two or more fingers: always allow pinch, even if one is on a side bar
 				if (activePanPointerIds.size >= 2) {
+					hadMultiTouch = true
 					markSideNavSuppressed()
 					if (panInitialized && panGestureActive.current) {
 						panzoomRef.current?.handleDown(event)
@@ -250,9 +262,37 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 				return
 			}
 
-			const deltaX = event.clientX - startX
-			const deltaY = event.clientY - startY
+			const down = pointerDownPositions.get(event.pointerId)
+			const deltaX = event.clientX - (down?.x ?? startX)
+			const deltaY = event.clientY - (down?.y ?? startY)
+			const elapsed = Math.max(event.timeStamp - (down?.time ?? event.timeStamp), 1)
+			const wasSingleFinger = activePanPointerIds.size === 1 && !hadMultiTouch
+			const scale = panzoomRef.current?.getScale() ?? 1
+
 			releasePointer(event)
+
+			const isFastHorizontalSwipe =
+				event.pointerType === 'touch' &&
+				wasSingleFinger &&
+				scale <= 1 &&
+				Math.abs(deltaX) >= SWIPE_MIN_DISTANCE_PX &&
+				Math.abs(deltaX) > Math.abs(deltaY) * SWIPE_HORIZONTAL_RATIO &&
+				Math.abs(deltaX) / elapsed >= SWIPE_VELOCITY_PX_PER_MS
+
+			if (isFastHorizontalSwipe) {
+				panningDetected.current = false
+				panzoomRef.current?.reset({ animate: false })
+				if (deltaX < 0) {
+					handleRightwardPageChangeRef.current()
+				} else {
+					handleLeftwardPageChangeRef.current()
+				}
+				panningDetected.current = true
+				setTimeout(() => {
+					panningDetected.current = false
+				}, 100)
+				return
+			}
 
 			panningDetected.current =
 				Math.abs(deltaX) > PAN_GESTURE_THRESHOLD_PX || Math.abs(deltaY) > PAN_GESTURE_THRESHOLD_PX
@@ -292,6 +332,9 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 
 				if (!moved && activePanPointerIds.size < 2) return
 				if (isSideAreaSingleTouchBlocked()) return
+				if (activePanPointerIds.size < 2 && (panzoomRef.current?.getScale() ?? 1) <= 1) {
+					return
+				}
 
 				beginPanzoomWithActivePointers()
 			}
@@ -412,6 +455,11 @@ function PagedReader({ currentPage, onPageChange }: PagedReaderProps) {
 			doChangePage(startOfNextSet + 1)
 		}
 	}, [doChangePage, currentSetIdx, pageSets])
+
+	useEffect(() => {
+		handleLeftwardPageChangeRef.current = handleLeftwardPageChange
+		handleRightwardPageChangeRef.current = handleRightwardPageChange
+	}, [handleLeftwardPageChange, handleRightwardPageChange])
 
 	/**
 	 * A callback handler for changing the page or toggling the toolbar visibility via

@@ -61,6 +61,7 @@ This fork adds the following features and improvements on top of `upstream/night
 - Higher maximum zoom (2×)
 - More forgiving tap-to-advance (slip-tolerant)
 - 20% side tap zones on web (mobile browsers)
+- Fast horizontal swipe at 1× zoom turns the page by direction; pinch/pan still used when zoomed in
 - Android address-bar page centering
 - Zoom clipping fix
 - Image scaling defaults to Auto
