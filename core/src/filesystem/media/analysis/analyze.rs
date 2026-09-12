@@ -103,6 +103,20 @@ pub async fn safely_analyze_book(
 
 	let page_count = book.page_count.unwrap_or(book.pages);
 
+	// Non-page media (e.g. retro disk images with pages = -1)
+	if page_count < 1 {
+		tracing::debug!(
+			media_id = %book.id,
+			pages = page_count,
+			"Skipping page analysis for non-page media"
+		);
+		return JobTaskOutput {
+			output,
+			logs,
+			subtasks: vec![],
+		};
+	}
+
 	let mut image_dimensions: Vec<PageDimension> =
 		Vec::with_capacity(page_count as usize);
 	let mut content_types: Vec<String> = Vec::with_capacity(page_count as usize);

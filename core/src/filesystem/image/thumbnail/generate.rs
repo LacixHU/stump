@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use chrono::Utc;
 use futures::{stream::FuturesUnordered, StreamExt};
@@ -79,6 +79,15 @@ fn do_generate_book_thumbnail(
 	options: ImageProcessorOptions,
 ) -> Result<GenerateOutput, ProcessorError> {
 	let (_, page_data) = get_page(book_path, options.page.unwrap_or(1), config)?;
+	generate_thumbnail_from_bytes(&page_data, file_name, config, options)
+}
+
+fn generate_thumbnail_from_bytes(
+	image_bytes: &[u8],
+	file_name: &str,
+	config: &StumpConfig,
+	options: ImageProcessorOptions,
+) -> Result<GenerateOutput, ProcessorError> {
 	let ext = options.format.extension();
 
 	let thumbnail_path = config
@@ -86,14 +95,61 @@ fn do_generate_book_thumbnail(
 		.join(format!("{}.{ext}", file_name));
 
 	let thumbnail_buffer = match options.format {
-		SupportedImageFormat::Webp => WebpProcessor::generate(&page_data, options),
-		_ => GenericImageProcessor::generate(&page_data, options),
+		SupportedImageFormat::Webp => WebpProcessor::generate(image_bytes, options),
+		_ => GenericImageProcessor::generate(image_bytes, options),
 	}?;
 
-	// Explicitly drop the page data to free memory immediately
-	drop(page_data);
-
 	Ok((thumbnail_buffer, thumbnail_path, true))
+}
+
+async fn fetch_wikipedia_cover_bytes(book_path: &str) -> Result<Option<Vec<u8>>, String> {
+	use crate::filesystem::media::resolve_retro_platform;
+	use crate::filesystem::{FileParts, PathUtils};
+
+	let path = Path::new(book_path);
+	let FileParts {
+		file_stem,
+		extension,
+		..
+	} = path.file_parts();
+	let platform = resolve_retro_platform(book_path, &extension);
+	let url = metadata_integrations::lookup_wikipedia_game_cover(
+		&file_stem,
+		Some(platform.as_str()),
+	)
+	.await
+	.map_err(|e| e.to_string())?;
+
+	let Some(url) = url else {
+		return Ok(None);
+	};
+
+	tracing::info!(
+		?book_path,
+		%url,
+		"Found Wikipedia video game cover"
+	);
+
+	let bytes = metadata_integrations::download_cover_bytes(&url)
+		.await
+		.map_err(|e| e.to_string())?;
+	Ok(Some(bytes))
+}
+
+/// Build a thumbnail from a local sidecar cover (retro disk/tape images).
+fn do_generate_sidecar_thumbnail(
+	cover_path: &Path,
+	file_name: &str,
+	config: &StumpConfig,
+	options: ImageProcessorOptions,
+) -> Result<GenerateOutput, ProcessorError> {
+	let image_bytes = std::fs::read(cover_path).map_err(|e| {
+		ProcessorError::UnknownError(format!(
+			"Failed to read sidecar cover {}: {e}",
+			cover_path.display()
+		))
+	})?;
+	generate_thumbnail_from_bytes(&image_bytes, file_name, config, options)
 }
 
 /// Generate a thumbnail for a book, returning the thumbnail data, the path to the thumbnail file,
@@ -112,6 +168,42 @@ pub async fn generate_book_thumbnail(
 ) -> Result<GenerateOutput, ThumbnailGenerateError> {
 	let book_path = book.path.clone();
 	let file_name = filename.unwrap_or_else(|| book.id.clone());
+	let is_non_page = book.pages < 1;
+
+	// Retro / non-page: sidecar first, then Wikipedia Category:Video game covers
+	let sidecar_cover = if is_non_page {
+		use crate::filesystem::media::find_sidecar_cover;
+		find_sidecar_cover(Path::new(&book_path))
+	} else {
+		None
+	};
+
+	let wikipedia_cover_bytes = if is_non_page && sidecar_cover.is_none() {
+		match fetch_wikipedia_cover_bytes(&book_path).await {
+			Ok(Some(bytes)) => Some(bytes),
+			Ok(None) => None,
+			Err(e) => {
+				tracing::warn!(
+					media_id = %book.id,
+					error = %e,
+					"Wikipedia cover lookup failed"
+				);
+				None
+			},
+		}
+	} else {
+		None
+	};
+
+	if is_non_page && sidecar_cover.is_none() && wikipedia_cover_bytes.is_none() {
+		tracing::debug!(
+			media_id = %book.id,
+			pages = book.pages,
+			path = %book_path,
+			"No sidecar or Wikipedia cover for non-page media; skip auto thumbnail"
+		);
+		return Err(ThumbnailGenerateError::NothingToGenerate);
+	}
 
 	let file_path = if let Some(stored_path) = &book.thumbnail_path {
 		PathBuf::from(stored_path.clone())
@@ -143,19 +235,36 @@ pub async fn generate_book_thumbnail(
 	let (tx, rx) = oneshot::channel();
 
 	// Spawn a blocking task to handle the IO-intensive operations:
-	// 1. Pulling the page data from the book file
-	// 2. Generating the thumbnail from said page data
+	// 1. Pulling the page data from the book file (or sidecar cover for retro)
+	// 2. Generating the thumbnail from said image data
 	let handle = spawn_blocking({
 		let book_path = book_path.clone();
 		let file_name = file_name.clone();
+		let sidecar_cover = sidecar_cover.clone();
 
 		move || {
-			let result = do_generate_book_thumbnail(
-				&book_path,
-				&file_name,
-				&core_config,
-				image_options,
-			);
+			let result = if let Some(cover) = sidecar_cover {
+				do_generate_sidecar_thumbnail(
+					&cover,
+					&file_name,
+					&core_config,
+					image_options,
+				)
+			} else if let Some(bytes) = wikipedia_cover_bytes {
+				generate_thumbnail_from_bytes(
+					&bytes,
+					&file_name,
+					&core_config,
+					image_options,
+				)
+			} else {
+				do_generate_book_thumbnail(
+					&book_path,
+					&file_name,
+					&core_config,
+					image_options,
+				)
+			};
 			let send_result = tx.send(result);
 			tracing::trace!(
 				is_err = send_result.is_err(),
@@ -555,6 +664,9 @@ pub async fn generate_book_placeholder(
 			let path = PathBuf::from(thumbnail_path);
 			fs::read(&path).await?
 		},
+		_ if book.pages < 1 => {
+			return Err(ThumbnailGenerateError::NothingToGenerate);
+		},
 		_ => {
 			let (_, data) = get_page_async(&book.path, 1, ctx.config()).await?;
 			data
@@ -600,6 +712,9 @@ async fn get_series_thumbnail_candidate(
 		Some(thumbnail_path) if fs::metadata(&thumbnail_path).await.is_ok() => {
 			let path = PathBuf::from(thumbnail_path);
 			fs::read(&path).await?
+		},
+		_ if first_book.pages < 1 => {
+			return Err(ThumbnailGenerateError::NothingToGenerate);
 		},
 		_ => {
 			let (_, data) = get_page_async(&first_book.path, 1, ctx.config()).await?;
@@ -688,6 +803,9 @@ async fn get_library_thumbnail_candidate(
 		Some(thumbnail_path) if fs::metadata(&thumbnail_path).await.is_ok() => {
 			let path = PathBuf::from(thumbnail_path);
 			fs::read(&path).await?
+		},
+		_ if book.pages < 1 => {
+			return Err(ThumbnailGenerateError::NothingToGenerate);
 		},
 		_ => {
 			let (_, data) = get_page_async(&book.path, 1, ctx.config()).await?;

@@ -31,6 +31,7 @@
 		"@tanstack/react-virtual": "3.10.8",
 		"@tauri-apps/plugin-store": "^2.0.0",
 		"ansi-to-react": "^6.2.6",
+		"c64-ready": "2.5.0",
 		"class-variance-authority": "^0.7.0",
 		"clsx": "^2.1.1",
 		"colorjs.io": "^0.5.2",

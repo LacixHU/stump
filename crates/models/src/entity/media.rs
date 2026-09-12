@@ -276,6 +276,8 @@ pub struct MediaThumbSelect {
 	pub series_id: String,
 	pub thumbnail_path: Option<String>,
 	pub thumbnail_meta: Option<ImageMetadata>,
+	/// Page count; −1 for non-page media (e.g. retro disk images)
+	pub pages: i32,
 }
 
 impl MediaThumbSelect {
@@ -286,6 +288,7 @@ impl MediaThumbSelect {
 			Column::SeriesId,
 			Column::ThumbnailPath,
 			Column::ThumbnailMeta,
+			Column::Pages,
 		]
 	}
 }
@@ -298,6 +301,7 @@ impl From<Model> for MediaThumbSelect {
 			series_id: model.series_id.unwrap_or_default(),
 			thumbnail_path: model.thumbnail_path,
 			thumbnail_meta: model.thumbnail_meta,
+			pages: model.pages,
 		}
 	}
 }

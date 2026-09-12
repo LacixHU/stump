@@ -1,6 +1,10 @@
 import { PREFETCH_STALE_TIME, useInfiniteSuspenseGraphQL, useSDK } from '@stump/client'
 import { Text } from '@stump/components'
-import { graphql } from '@stump/graphql'
+import {
+	RecentlyAddedSeriesQuery,
+	RecentlyAddedSeriesQueryVariables,
+	TypedDocumentString,
+} from '@stump/graphql'
 import { useLocaleContext } from '@stump/i18n'
 import { useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
@@ -12,7 +16,7 @@ import MultiRowHorizontalCardList from '@/components/MultiRowHorizontalCardList'
 import { StackedSeriesCard } from '@/components/series'
 import { usePreferences } from '@/hooks/usePreferences'
 
-const query = graphql(`
+const query = new TypedDocumentString(`
 	query RecentlyAddedSeries($pagination: Pagination!) {
 		recentlyAddedSeries(pagination: $pagination) {
 			nodes {
@@ -22,6 +26,7 @@ const query = graphql(`
 				percentageCompleted
 				status
 				createdAt
+				useSingleThumbnail
 				media(take: 2, skip: 1, includeDescendants: true) {
 					id
 					resolvedName
@@ -59,7 +64,7 @@ const query = graphql(`
 			}
 		}
 	}
-`)
+`) as unknown as TypedDocumentString<RecentlyAddedSeriesQuery, RecentlyAddedSeriesQueryVariables>
 
 export const usePrefetchRecentlyAddedSeries = () => {
 	const { sdk } = useSDK()
@@ -139,7 +144,11 @@ function RecentlyAddedSeries() {
 					subtitle={formatDistanceToNow(new Date(series.createdAt), { addSuffix: true })}
 					isMissing={series.status === 'MISSING'}
 					width={cardWidth}
-					thumbnailData={[series.thumbnail, ...series.media.map((m) => m.thumbnail)]}
+					thumbnailData={
+						(series as { useSingleThumbnail?: boolean }).useSingleThumbnail
+							? [series.thumbnail]
+							: [series.thumbnail, ...series.media.map((m) => m.thumbnail)]
+					}
 				/>
 			)}
 			cardHeight={cardHeight}

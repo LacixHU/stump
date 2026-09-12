@@ -26,6 +26,7 @@ const INDEX: &str = "/";
 const INDEX_HTML: &str = "/index.html";
 const ASSETS: &str = "/assets";
 const DIST: &str = "/dist";
+const RETRO: &str = "/retro";
 
 pub(crate) fn mount(app_state: AppState) -> Router<AppState> {
 	let dist_path = Path::new(&app_state.config.client_dir);
@@ -75,6 +76,24 @@ pub(crate) fn mount(app_state: AppState) -> Router<AppState> {
 		.route(MANIFEST, get(manifest))
 		.nest_service(ASSETS, static_assets)
 		.nest_service(DIST, dist_files)
+		.nest_service(RETRO, {
+			ServiceBuilder::new()
+				.layer(SetResponseHeaderLayer::if_not_present(
+					header::VARY,
+					HeaderValue::from_static("Accept-Encoding"),
+				))
+				.layer(SetResponseHeaderLayer::overriding(
+					header::CACHE_CONTROL,
+					HeaderValue::from_static(
+						"public, max-age=31536000, immutable, no-transform",
+					),
+				))
+				.service(
+					ServeDir::new(dist_path.join("retro"))
+						.precompressed_br()
+						.precompressed_gzip(),
+				)
+		})
 		.fallback_service(spa_fallback)
 }
 

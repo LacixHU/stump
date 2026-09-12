@@ -13,7 +13,7 @@ use crate::{
 	filesystem::{
 		content_type::ContentType,
 		error::FileError,
-		media::{epub::EpubProcessor, pdf::PdfProcessor},
+		media::{epub::EpubProcessor, pdf::PdfProcessor, retro::RetroProcessor},
 		FileParts, PathUtils,
 	},
 };
@@ -157,11 +157,20 @@ enum ProcessorType {
 	Rar,
 	Epub,
 	Pdf,
+	Retro,
 }
 
 fn determine_processor(path: &Path) -> Result<ProcessorType, FileError> {
-	let mime = ContentType::from_path(path).mime_type();
 	let FileParts { extension, .. } = path.file_parts();
+	let extension_lower = extension.to_lowercase();
+
+	// Retro formats: extension-first (infer is unreliable for disk images)
+	if ContentType::is_retro_extension(&extension_lower) {
+		tracing::debug!(?path, ?extension, "Using Retro processor");
+		return Ok(ProcessorType::Retro);
+	}
+
+	let mime = ContentType::from_path(path).mime_type();
 
 	tracing::debug!(
 		?path,
@@ -170,7 +179,7 @@ fn determine_processor(path: &Path) -> Result<ProcessorType, FileError> {
 		"Determining processor type for entry"
 	);
 
-	match (mime.as_str(), extension.to_lowercase().as_str()) {
+	match (mime.as_str(), extension_lower.as_str()) {
 		("application/zip" | "application/vnd.comicbook+zip", ext) if ext != "epub" => {
 			Ok(ProcessorType::Zip)
 		},
@@ -196,6 +205,7 @@ macro_rules! dispatch_processor {
             ProcessorType::Rar => RarProcessor::$method($($arg),*),
             ProcessorType::Epub => EpubProcessor::$method($($arg),*),
             ProcessorType::Pdf => PdfProcessor::$method($($arg),*),
+            ProcessorType::Retro => RetroProcessor::$method($($arg),*),
         }
     }};
 }
@@ -570,6 +580,19 @@ mod tests {
 		let result = determine_processor(path);
 		assert!(result.is_ok());
 		assert!(matches!(result.unwrap(), ProcessorType::Pdf));
+	}
+
+	#[test]
+	fn test_determine_processor_retro_extensions() {
+		for ext in ContentType::retro_extensions() {
+			let path = PathBuf::from(format!("/fake/game.{}", ext));
+			let result = determine_processor(&path);
+			assert!(
+				result.is_ok(),
+				"expected Retro processor for .{ext}, got {result:?}"
+			);
+			assert!(matches!(result.unwrap(), ProcessorType::Retro));
+		}
 	}
 
 	#[test]

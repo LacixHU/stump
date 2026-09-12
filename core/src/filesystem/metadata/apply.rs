@@ -1,14 +1,17 @@
+use std::path::{Path, PathBuf};
+
 use metadata_integrations::{
 	AutoApplyConfig, ExternalMediaMetadata, ExternalMetadata, ExternalSeriesMetadata,
 	FieldMerger, MatchCandidate, MergeStrategy, MetadataField, MetadataFieldOverride,
 };
 use models::{
-	entity::{media_metadata, metadata_fetch_record, series_metadata},
+	entity::{media, media_metadata, metadata_fetch_record, series_metadata},
 	shared::enums::MetadataFetchStatus,
 };
 use rust_decimal::prelude::FromPrimitive;
-use sea_orm::{prelude::*, IntoActiveModel, Set};
+use sea_orm::{prelude::*, sea_query::Expr, IntoActiveModel, Set};
 use serde_json::Value as JsonValue;
+use tokio::fs;
 
 use crate::CoreError;
 
@@ -131,6 +134,118 @@ where
 	mark_fetch_status_accepted(conn, None, Some(media_id), candidate).await?;
 
 	Ok(())
+}
+
+/// If the candidate has a `cover_url` and the media has no thumbnail yet, download
+/// the image into `thumbnails_dir` and set `media.thumbnail_path`.
+///
+/// Failures are logged and do not fail metadata text apply.
+pub async fn maybe_apply_cover_from_candidate<C>(
+	conn: &C,
+	media_id: &str,
+	candidate: &MatchCandidate,
+	thumbnails_dir: &Path,
+) -> Result<(), CoreError>
+where
+	C: ConnectionTrait,
+{
+	let cover_url = match &candidate.metadata {
+		ExternalMetadata::Media(m) => m.cover_url.as_deref(),
+		ExternalMetadata::Series(s) => s.cover_url.as_deref(),
+	};
+
+	let Some(url) = cover_url.filter(|u| !u.is_empty()) else {
+		return Ok(());
+	};
+
+	let book = media::Entity::find_by_id(media_id)
+		.one(conn)
+		.await?
+		.ok_or_else(|| CoreError::NotFound(format!("Media {media_id}")))?;
+
+	if book.thumbnail_path.is_some() {
+		return Ok(());
+	}
+
+	match download_cover_image(url, thumbnails_dir, media_id).await {
+		Ok(path) => {
+			media::Entity::update_many()
+				.filter(media::Column::Id.eq(media_id))
+				.col_expr(
+					media::Column::ThumbnailPath,
+					Expr::value(Some(path.to_string_lossy().to_string())),
+				)
+				.exec(conn)
+				.await?;
+			tracing::info!(media_id, ?path, "Applied cover from metadata cover_url");
+			Ok(())
+		},
+		Err(e) => {
+			tracing::warn!(
+				media_id,
+				error = %e,
+				"Failed to download cover_url; metadata text still applied"
+			);
+			Ok(())
+		},
+	}
+}
+
+async fn download_cover_image(
+	url: &str,
+	thumbnails_dir: &Path,
+	media_id: &str,
+) -> Result<PathBuf, String> {
+	let response = reqwest::get(url)
+		.await
+		.map_err(|e| format!("Failed to fetch cover from '{url}': {e}"))?;
+
+	if !response.status().is_success() {
+		return Err(format!(
+			"Non-success status {} fetching cover from '{url}'",
+			response.status()
+		));
+	}
+
+	let content_type = response
+		.headers()
+		.get(reqwest::header::CONTENT_TYPE)
+		.and_then(|v| v.to_str().ok())
+		.unwrap_or_default();
+
+	if !content_type.starts_with("image/") {
+		return Err(format!(
+			"Invalid content type '{content_type}' for cover from '{url}'"
+		));
+	}
+
+	let ext = content_type
+		.split('/')
+		.nth(1)
+		.map(|s| s.split(';').next().unwrap_or(s).trim().to_lowercase())
+		.unwrap_or_else(|| "jpg".to_string());
+	let ext = match ext.as_str() {
+		"jpeg" => "jpg",
+		"jpg" | "png" | "webp" | "gif" => ext.as_str(),
+		_ => "jpg",
+	};
+
+	if !thumbnails_dir.exists() {
+		fs::create_dir_all(thumbnails_dir)
+			.await
+			.map_err(|e| format!("Failed to create thumbnails dir: {e}"))?;
+	}
+
+	let path = thumbnails_dir.join(format!("{media_id}.{ext}"));
+	let bytes = response
+		.bytes()
+		.await
+		.map_err(|e| format!("Failed to read cover bytes: {e}"))?;
+	fs::write(&path, &bytes)
+		.await
+		.map_err(|e| format!("Failed to write cover: {e}"))?;
+
+	Ok(path)
 }
 
 /// Given a list of candidates and a set of provider configs, find the best

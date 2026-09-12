@@ -312,6 +312,18 @@ Whether or not OPDS page access should automatically track reading progression. 
 | ------- | ------------- | ------------------------- |
 | Boolean | `false`       | `enable_opds_progression` |
 
+## Retro emulation
+
+### STUMP_FIRMWARE_DIR
+
+Directory for user-supplied emulator firmware/BIOS (for example Amiga Kickstart ROMs). Files are never bundled with Stump. Defaults to `{config_dir}/firmware` when unset. Served via authenticated `GET /api/v2/firmware/{file_name}` (basename only).
+
+| Type   | Default Value           | TOML Key       |
+| ------ | ----------------------- | -------------- |
+| String | `{config_dir}/firmware` | `firmware_dir` |
+
+See [Retro computer libraries](/docs/guides/features/retro-libraries).
+
 ## PDF Rendering
 
 ### PDFIUM_PATH

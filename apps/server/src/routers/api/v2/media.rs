@@ -34,7 +34,8 @@ pub(crate) fn mount(app_state: AppState) -> Router<AppState> {
 			Router::new()
 				.route("/thumbnail", get(get_media_thumbnail_handler))
 				.route("/page/{page}", get(get_media_page))
-				.route("/file", get(get_media_file)),
+				.route("/file", get(get_media_file))
+				.route("/play-file", get(get_media_play_file)),
 		)
 		.layer(middleware::from_fn_with_state(app_state, auth_middleware))
 }
@@ -47,6 +48,16 @@ pub(crate) async fn get_media_file(
 	headers: HeaderMap,
 ) -> APIResult<impl IntoResponse> {
 	serve_media::serve_media_file(req, headers, ctx.conn.as_ref(), id).await
+}
+
+/// Serve a retro disk/tape image for in-browser play (library access; no DownloadFile).
+pub(crate) async fn get_media_play_file(
+	Path(id): Path<String>,
+	State(ctx): State<AppState>,
+	Extension(req): Extension<AuthContext>,
+	headers: HeaderMap,
+) -> APIResult<impl IntoResponse> {
+	serve_media::serve_media_play_file(req, headers, ctx.conn.as_ref(), id).await
 }
 
 pub(crate) async fn get_media_thumbnail(
@@ -75,6 +86,10 @@ pub(crate) async fn get_media_thumbnail(
 
 	if let Some((content_type, bytes)) = generated_thumb {
 		Ok((content_type, bytes))
+	} else if book.pages < 1 {
+		Err(APIError::NotFound(
+			"No thumbnail available for this media".to_string(),
+		))
 	} else {
 		Ok(get_page_async(&book.path, 1, &adjusted_config).await?)
 	}

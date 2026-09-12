@@ -80,7 +80,7 @@
 	},
 	"lint-staged": {
 		"*.{js,jsx,ts,tsx,md,json}": [
-			"prettier --config prettier.config.js --check"
+			"node ./node_modules/prettier/bin/prettier.cjs --config prettier.config.js --check"
 		],
 		"*.rs": [
 			"cargo fmt --check --manifest-path=core/Cargo.toml --",

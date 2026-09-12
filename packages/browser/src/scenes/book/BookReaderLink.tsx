@@ -1,4 +1,4 @@
-import { EBOOK_EXTENSION } from '@stump/client'
+import { EBOOK_EXTENSION, isRetroExtension } from '@stump/client'
 import { ButtonOrLink } from '@stump/components'
 import { BookCardFragment } from '@stump/graphql'
 import { useLocaleContext } from '@stump/i18n'
@@ -15,10 +15,14 @@ export default function BookReaderLink({ book }: Props) {
 	const { t } = useLocaleContext()
 
 	const isReadAgain = useMemo(() => isReadAgainPrompt(book), [book])
+	const isRetro = useMemo(() => isRetroExtension(book.extension || ''), [book.extension])
 
 	const epubcfi = book?.readProgress?.epubcfi
 	const currentPage = book.readProgress?.page ?? -1
 	const title = useMemo(() => {
+		if (isRetro) {
+			return t('bookActions.play')
+		}
 		if (isReadAgain) {
 			return t('bookActions.readAgain')
 		} else if (currentPage > 0 || !!epubcfi) {
@@ -26,11 +30,15 @@ export default function BookReaderLink({ book }: Props) {
 		} else {
 			return t('bookActions.read')
 		}
-	}, [isReadAgain, currentPage, epubcfi, t])
+	}, [isRetro, isReadAgain, currentPage, epubcfi, t])
 
 	const readUrl = useMemo(() => {
 		const { id, readProgress, extension } = book
 		const { epubcfi, page } = readProgress || {}
+
+		if (isRetroExtension(extension || '')) {
+			return paths.bookReader(id, { isRetro: true })
+		}
 
 		if (epubcfi || extension.match(EBOOK_EXTENSION)) {
 			return paths.bookReader(id, {

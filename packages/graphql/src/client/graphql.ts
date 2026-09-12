@@ -1308,7 +1308,8 @@ export enum LibraryType {
   Manhwa = 'MANHWA',
   Mixed = 'MIXED',
   Webtoon = 'WEBTOON',
-  WebNovel = 'WEB_NOVEL'
+  WebNovel = 'WEB_NOVEL',
+  Retro = 'RETRO'
 }
 
 export enum LibraryViewMode {
@@ -1886,7 +1887,15 @@ export enum MetadataProvider {
   /** ComicVine (https://comicvine.gamespot.com/api/) */
   ComicVine = 'COMIC_VINE',
   /** Hardcover (https://hardcover.app) */
-  Hardcover = 'HARDCOVER'
+  Hardcover = 'HARDCOVER',
+  /** Lemon64 C64 game database */
+  Lemon64 = 'LEMON64',
+  /** World of Spectrum–style Spectrum metadata */
+  WorldOfSpectrum = 'WORLD_OF_SPECTRUM',
+  /** Lemon Amiga */
+  LemonAmiga = 'LEMON_AMIGA',
+  /** Wikipedia Category:Video game covers */
+  Wikipedia = 'WIKIPEDIA'
 }
 
 export type MetadataProviderConfigModel = {

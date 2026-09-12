@@ -32,8 +32,10 @@ impl OpdsLinkType {
 			"png" => Some(OpdsLinkType::ImagePng),
 			"gif" => Some(OpdsLinkType::ImageGif),
 			"epub" => Some(OpdsLinkType::Epub),
-			// TODO: RARs as ZIP??? Obviously for content type it's different, but does OPDS concern itself with that?
+			// TODO: what about rar?
 			"zip" | "cbz" | "rar" | "cbr" => Some(OpdsLinkType::Zip),
+			"d64" | "t64" | "prg" | "g64" | "tap" | "tzx" | "z80" | "sna" | "adf"
+			| "adz" => Some(OpdsLinkType::OctetStream),
 			_ => None,
 		}
 	}

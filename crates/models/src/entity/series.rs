@@ -43,6 +43,9 @@ pub struct Model {
 	pub thumbnail_meta: Option<ImageMetadata>,
 	#[sea_orm(column_type = "Text", nullable)]
 	pub thumbnail_path: Option<String>,
+	/// When true, library/series grids show only this series thumbnail (no stacked book covers)
+	#[sea_orm(default_value = "false")]
+	pub use_single_thumbnail: bool,
 	#[sea_orm(column_type = "Text", nullable)]
 	pub library_id: Option<String>,
 	#[sea_orm(column_type = "Text", nullable)]

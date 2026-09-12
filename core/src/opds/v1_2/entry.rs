@@ -190,6 +190,67 @@ impl IntoOPDSEntry for OPDSEntryBuilder<OPDSPublicationEntity> {
 		let FileParts { file_name, .. } = path_buf.file_parts();
 		let file_name_encoded = encode(&file_name);
 
+		let entry_file_acquisition_link_type =
+			OpdsLinkType::from_extension(&self.data.media.extension).unwrap_or_else(|| {
+				tracing::error!(?self.data.media.extension, "Failed to convert file extension to OPDS link type");
+				// Retro and other binary formats
+				OpdsLinkType::OctetStream
+			});
+
+		// Non-page media (e.g. retro disk images with pages = -1): acquisition only
+		if self.data.media.pages < 1 {
+			let links = vec![
+				OpdsLink::new(
+					OpdsLinkType::ImageJpeg,
+					OpdsLinkRel::Thumbnail,
+					format!("{base_url}/thumbnail"),
+				),
+				OpdsLink::new(
+					entry_file_acquisition_link_type,
+					OpdsLinkRel::Acquisition,
+					format!("{base_url}/file/{file_name_encoded}"),
+				),
+			];
+
+			let mib = self.data.media.size as f64 / (1024.0 * 1024.0);
+			let title = self
+				.data
+				.metadata
+				.as_ref()
+				.and_then(|m| m.title.clone())
+				.unwrap_or_else(|| self.data.media.name.clone());
+			let summary = self.data.metadata.as_ref().and_then(|m| m.summary.clone());
+			let authors = self
+				.data
+				.metadata
+				.as_ref()
+				.and_then(|m| m.writers.clone())
+				.map(|w| {
+					w.split(',')
+						.map(|s| s.trim().to_string())
+						.collect::<Vec<_>>()
+				})
+				.filter(|v| !v.is_empty());
+			let content = match &summary {
+				Some(s) => Some(format!(
+					"{:.1} MiB - {}<br/><br/>{}",
+					mib, self.data.media.extension, s
+				)),
+				None => Some(format!("{:.1} MiB - {}", mib, self.data.media.extension)),
+			};
+
+			return OpdsEntry {
+				id: self.data.media.id.to_string(),
+				title,
+				updated: chrono::Utc::now().into(),
+				summary,
+				content,
+				links,
+				authors,
+				stream_link: None,
+			};
+		}
+
 		let (current_page, last_read_at) =
 			self.data.reading_session.map_or((None, None), |session| {
 				(session.end_page, session.updated_at)
@@ -237,12 +298,6 @@ impl IntoOPDSEntry for OPDSEntryBuilder<OPDSPublicationEntity> {
 			tracing::error!(error = ?error, ?thumbnail_link_type, "Failed to convert thumbnail content type to OPDS link type");
 			OpdsLinkType::ImageJpeg
 		});
-
-		let entry_file_acquisition_link_type =
-			OpdsLinkType::from_extension(&self.data.media.extension).unwrap_or_else(|| {
-				tracing::error!(?self.data.media.extension, "Failed to convert file extension to OPDS link type");
-				OpdsLinkType::Zip
-			});
 
 		let links = vec![
 			OpdsLink::new(

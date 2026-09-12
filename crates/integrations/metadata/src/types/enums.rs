@@ -63,6 +63,8 @@ pub enum MediaType {
 	Manhwa,
 	WebNovel,
 	Webtoon,
+	/// Retro computer disk/tape images (C64, Spectrum, Amiga, etc.)
+	Retro,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Enum)]

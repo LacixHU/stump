@@ -1,5 +1,4 @@
-import { getThumbnailTintColor } from '@stump/client'
-import { formatBytes } from '@stump/client'
+import { formatBytes, getThumbnailTintColor, isRetroExtension } from '@stump/client'
 import { cn, ProgressBar, Text } from '@stump/components'
 import { FragmentType, graphql, useFragment } from '@stump/graphql'
 import { useLocaleContext } from '@stump/i18n'
@@ -83,6 +82,10 @@ const BookCard = memo(function BookCard({
 	)
 
 	const progress = useMemo(() => {
+		if (data.pages < 1) {
+			if (data.readHistory?.length) return 100
+			return null
+		}
 		if (!data.readProgress && !data.readHistory) {
 			return null
 		} else if (data.readProgress) {
@@ -117,17 +120,19 @@ const BookCard = memo(function BookCard({
 
 		const shouldSkipOverview = data.libraryConfig?.skipBookOverview === true
 
+		const isRetro = isRetroExtension(data.extension || '')
 		return readingLink || shouldSkipOverview
 			? paths.bookReader(data.id, {
-					epubcfi: data.readProgress?.epubcfi,
-					page: data.readProgress?.page ?? undefined,
+					epubcfi: isRetro ? undefined : data.readProgress?.epubcfi,
+					isRetro: isRetro || undefined,
+					page: isRetro ? undefined : (data.readProgress?.page ?? undefined),
 				})
 			: paths.bookOverview(data.id)
-	}, [readingLink, data.id, onSelect, data.readProgress, data.libraryConfig, paths])
+	}, [readingLink, data.id, onSelect, data.readProgress, data.libraryConfig, data.extension, paths])
 
 	const isMissing = data.status === 'MISSING'
 	const isEbookProgress = !!data.readProgress?.epubcfi
-	const pagesLeft = data.pages - (data.readProgress?.page || 0)
+	const pagesLeft = data.pages > 0 ? data.pages - (data.readProgress?.page || 0) : 0
 	const progressPercent = progress ?? 0
 
 	const renderSubtitle = () => {
@@ -135,6 +140,21 @@ const BookCard = memo(function BookCard({
 			return (
 				<Text size="xs" className="text-warning uppercase">
 					{t('common.fileMissing')}
+				</Text>
+			)
+		}
+
+		if (data.pages < 1) {
+			if (progressPercent === 100) {
+				return (
+					<Text size="xs" variant="muted">
+						{t('common.completed')}
+					</Text>
+				)
+			}
+			return (
+				<Text size="xs" variant="muted">
+					{formatBytes(data.size)}
 				</Text>
 			)
 		}

@@ -1,13 +1,15 @@
 import { PREFETCH_STALE_TIME, useGraphQL, useSDK } from '@stump/client'
 import { usePrevious } from '@stump/components'
 import {
-	graphql,
 	InterfaceLayout,
 	LibraryPattern,
+	LibrarySeriesQuery,
+	LibrarySeriesQueryVariables,
 	OrderDirection,
 	SeriesFilterInput,
 	SeriesModelOrdering,
 	SeriesOrderBy,
+	TypedDocumentString,
 } from '@stump/graphql'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -43,7 +45,7 @@ import { useSeriesLayout } from '@/stores/layout'
 import { useLibraryContext } from '../../context'
 import LibrarySearchBooks from './LibrarySearchBooks'
 
-export const librarySeriesQuery = graphql(`
+export const librarySeriesQuery = new TypedDocumentString(`
 	query LibrarySeries(
 		$filter: SeriesFilterInput!
 		$orderBy: [SeriesOrderBy!]!
@@ -58,6 +60,7 @@ export const librarySeriesQuery = graphql(`
 				descendantMediaCount
 				percentageCompleted
 				status
+				useSingleThumbnail
 				# We fetch 2 and skip 1 because the first thumbnail _might_ be the same as the series thumbnail.
 				# See https://github.com/stumpapp/stump/issues/899
 				media(take: 2, skip: 1, includeDescendants: true) {
@@ -98,7 +101,7 @@ export const librarySeriesQuery = graphql(`
 			}
 		}
 	}
-`)
+`) as unknown as TypedDocumentString<LibrarySeriesQuery, LibrarySeriesQueryVariables>
 
 export type UsePrefetchLibrarySeriesParams = {
 	page?: number

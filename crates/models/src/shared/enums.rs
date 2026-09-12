@@ -374,6 +374,8 @@ pub enum LibraryType {
 	Mixed,
 	WebNovel,
 	Webtoon,
+	/// Retro computer disk/tape image libraries (C64, Spectrum, Amiga, etc.)
+	Retro,
 }
 
 #[derive(
@@ -470,6 +472,14 @@ pub enum MetadataProvider {
 	Hardcover,
 	/// ComicVine (https://comicvine.gamespot.com/api/)
 	ComicVine,
+	/// Lemon64 C64 game database (HTML/public; no API token)
+	Lemon64,
+	/// World of Spectrum–style Spectrum metadata (HTML/public; no API token)
+	WorldOfSpectrum,
+	/// Lemon Amiga (or similar); may be stubbed if scrape is fragile
+	LemonAmiga,
+	/// Wikipedia Category:Video game covers (MediaWiki API; no token)
+	Wikipedia,
 }
 
 impl MetadataProvider {
@@ -483,6 +493,10 @@ impl MetadataProvider {
 				LibraryType::LightNovel,
 			],
 			Self::ComicVine => &[LibraryType::Comic],
+			Self::Lemon64
+			| Self::WorldOfSpectrum
+			| Self::LemonAmiga
+			| Self::Wikipedia => &[LibraryType::Retro],
 		}
 	}
 }

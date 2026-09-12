@@ -8324,6 +8324,7 @@ dependencies = [
  "rand 0.9.5",
  "rayon",
  "regex",
+ "reqwest",
  "ring",
  "rust_decimal",
  "sea-orm",

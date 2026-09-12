@@ -1,5 +1,5 @@
 import { useGraphQLMutation, useSDK } from '@stump/client'
-import { EBOOK_EXTENSION, PDF_EXTENSION } from '@stump/client'
+import { EBOOK_EXTENSION, isRetroExtension, PDF_EXTENSION } from '@stump/client'
 import { Button, ButtonOrLink, DropdownMenu } from '@stump/components'
 import { DropdownItemGroup } from '@stump/components/dropdown/DropdownMenu'
 import { BookCardFragment, graphql, UserPermission } from '@stump/graphql'
@@ -124,6 +124,9 @@ export default function BookActionMenu({ book }: Props) {
 	const getReadFromBeginningLink = useCallback(
 		(incognito: boolean) => {
 			const { id, extension } = book
+			if (isRetroExtension(extension || '')) {
+				return paths.bookReader(id, { isRetro: true, isIncognito: incognito || undefined })
+			}
 			if (extension.match(EBOOK_EXTENSION)) {
 				return paths.bookReader(id, { isEpub: true, isIncognito: incognito || undefined })
 			}
@@ -131,6 +134,8 @@ export default function BookActionMenu({ book }: Props) {
 		},
 		[book, paths],
 	)
+
+	const isRetro = isRetroExtension(book.extension || '')
 
 	const groups = useMemo<DropdownItemGroup[]>(
 		() =>
@@ -147,15 +152,23 @@ export default function BookActionMenu({ book }: Props) {
 								]
 							: []),
 						{
-							label: t('bookActions.readFromBeginning'),
-							leftIcon: <BookOpen className="mr-2 h-4 w-4" />,
+							label: isRetro ? t('bookActions.play') : t('bookActions.readFromBeginning'),
+							leftIcon: isRetro ? (
+								<Play className="mr-2 h-4 w-4" />
+							) : (
+								<BookOpen className="mr-2 h-4 w-4" />
+							),
 							onClick: () => navigate(getReadFromBeginningLink(false)),
 						},
-						{
-							label: t('bookActions.incognitoMode'),
-							leftIcon: <EyeOff className="mr-2 h-4 w-4" />,
-							onClick: () => navigate(getReadFromBeginningLink(true)),
-						},
+						...(isRetro
+							? []
+							: [
+									{
+										label: t('bookActions.incognitoMode'),
+										leftIcon: <EyeOff className="mr-2 h-4 w-4" />,
+										onClick: () => navigate(getReadFromBeginningLink(true)),
+									},
+								]),
 						...(book.extension?.match(PDF_EXTENSION)
 							? [
 									{
@@ -173,7 +186,7 @@ export default function BookActionMenu({ book }: Props) {
 						...(progression.isUntouched || progression.isReading
 							? [
 									{
-										label: t('bookActions.markAsRead'),
+										label: isRetro ? t('bookActions.markComplete') : t('bookActions.markAsRead'),
 										leftIcon: <BookOpenCheck className="mr-2 h-4 w-4" />,
 										onClick: () => {
 											actions.completeBook({ id: book.id })

@@ -1,6 +1,7 @@
 import {
 	ARCHIVE_EXTENSION,
 	EBOOK_EXTENSION,
+	isRetroExtension,
 	PDF_EXTENSION,
 	useGraphQLMutation,
 	useSDK,
@@ -153,7 +154,9 @@ function BookReaderScene({ book }: Props) {
 	const initialPage = useMemo(() => (page ? parseInt(page, 10) : undefined), [page])
 
 	useEffect(() => {
-		if (book.extension.match(EBOOK_EXTENSION)) {
+		if (isRetroExtension(book.extension || '')) {
+			navigate(paths.bookReader(book.id, { isRetro: true }), { replace: true })
+		} else if (book.extension.match(EBOOK_EXTENSION)) {
 			navigate(
 				paths.bookReader(book.id, {
 					epubcfi: book.readProgress?.epubcfi || null,

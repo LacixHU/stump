@@ -12,6 +12,7 @@ import { useAppContext } from '@/context'
 import paths from '@/paths'
 
 import { useSeriesContext } from '../../context'
+import SeriesSingleThumbnailSwitch from './SeriesSingleThumbnailSwitch'
 import SeriesTagEditor from './SeriesTagEditor'
 import SeriesThumbnailSelector from './SeriesThumbnailSelector'
 
@@ -121,6 +122,7 @@ export default function SeriesSettingsScene() {
 					</div>
 
 					<SeriesThumbnailSelector fragment={seriesById} />
+					<SeriesSingleThumbnailSwitch seriesId={seriesById.id} />
 				</div>
 
 				<div className="gap-y-2 flex w-full flex-col">

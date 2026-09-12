@@ -200,6 +200,15 @@ impl MediaMetadataMutation {
 		)
 		.await?;
 
+		let thumbs = ctx.data::<CoreContext>()?.config.get_thumbnails_dir();
+		let _ = stump_core::filesystem::metadata::maybe_apply_cover_from_candidate(
+			conn,
+			media_id.as_ref(),
+			candidate,
+			&thumbs,
+		)
+		.await;
+
 		let updated = metadata_fetch_record::Entity::find()
 			.filter(metadata_fetch_record::Column::MediaId.eq(media_id.to_string()))
 			.one(conn)

@@ -102,6 +102,33 @@ impl SeriesMutation {
 		Ok(model.into())
 	}
 
+	/// Show only the series thumbnail in grids (no stacked extra book covers).
+	#[graphql(guard = "PermissionGuard::one(UserPermission::EditThumbnails)")]
+	async fn update_series_use_single_thumbnail(
+		&self,
+		ctx: &Context<'_>,
+		id: ID,
+		enabled: bool,
+	) -> Result<Series> {
+		let core = ctx.data::<CoreContext>()?;
+		let AuthContext { user, .. } = ctx.data::<AuthContext>()?;
+		let conn = core.conn.as_ref();
+
+		let mut model = series::ModelWithMetadata::find_for_user(user)
+			.filter(series::Column::Id.eq(id.to_string()))
+			.into_model::<series::ModelWithMetadata>()
+			.one(conn)
+			.await?
+			.ok_or("Series not found")?;
+
+		let mut active: series::ActiveModel = model.series.clone().into();
+		active.use_single_thumbnail = Set(enabled);
+		active.updated_at = Set(Some(DateTimeWithTimeZone::from(Utc::now())));
+		model.series = active.update(conn).await?;
+
+		Ok(model.into())
+	}
+
 	/// Update the thumbnail for a series. This will replace the existing thumbnail with the the one
 	/// associated with the provided input (book). If the book does not have a thumbnail, one
 	/// will be generated based on the library's thumbnail configuration.

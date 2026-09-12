@@ -59,6 +59,7 @@ pub mod env_keys {
 	pub const PIPER_PATH_KEY: &str = "STUMP_PIPER_PATH";
 	pub const PIPER_VOICES_DIR_KEY: &str = "STUMP_PIPER_VOICES_DIR";
 	pub const PIPER_DEFAULT_VOICE_KEY: &str = "STUMP_PIPER_DEFAULT_VOICE";
+	pub const FIRMWARE_DIR_KEY: &str = "STUMP_FIRMWARE_DIR";
 	pub const SERVER_TTS_MAX_CHARS_KEY: &str = "STUMP_SERVER_TTS_MAX_CHARS";
 	pub const PDF_RENDER_DPI_KEY: &str = "STUMP_PDF_RENDER_DPI";
 	pub const PDF_MAX_DIMENSION_KEY: &str = "STUMP_PDF_MAX_DIMENSION";
@@ -309,6 +310,12 @@ pub struct StumpConfig {
 	#[env_key(PIPER_DEFAULT_VOICE_KEY)]
 	pub piper_default_voice: Option<String>,
 
+	/// Directory containing user-supplied emulator firmware/BIOS (e.g. Amiga Kickstart).
+	/// Never bundle ROMs; default is `{config_dir}/firmware` when unset.
+	#[default_value(None)]
+	#[env_key(FIRMWARE_DIR_KEY)]
+	pub firmware_dir: Option<String>,
+
 	/// Maximum characters accepted per server TTS request.
 	#[default_value(DEFAULT_SERVER_TTS_MAX_CHARS)]
 	#[env_key(SERVER_TTS_MAX_CHARS_KEY)]
@@ -415,6 +422,7 @@ impl StumpConfig {
 		let avatars_dir = self.get_avatars_dir();
 		let emojis_dir = self.get_emojis_dir();
 		let pdf_cache_dir = self.get_pdf_cache_dir();
+		let firmware_dir = self.get_firmware_dir();
 		if !cache_dir.exists() {
 			std::fs::create_dir(cache_dir).unwrap();
 		}
@@ -429,6 +437,9 @@ impl StumpConfig {
 		}
 		if !pdf_cache_dir.exists() {
 			std::fs::create_dir_all(pdf_cache_dir).unwrap();
+		}
+		if !firmware_dir.exists() {
+			std::fs::create_dir_all(firmware_dir).unwrap();
 		}
 
 		// Save configuration to Stump.toml
@@ -488,6 +499,14 @@ impl StumpConfig {
 			.as_ref()
 			.map(PathBuf::from)
 			.unwrap_or_else(|| self.get_config_dir().join("tts").join("voices"))
+	}
+
+	/// Directory for user-supplied emulator firmware. Falls back to `{config_dir}/firmware`.
+	pub fn get_firmware_dir(&self) -> PathBuf {
+		self.firmware_dir
+			.as_ref()
+			.map(PathBuf::from)
+			.unwrap_or_else(|| self.get_config_dir().join("firmware"))
 	}
 
 	/// Resolved Piper binary path, or `"piper"` when unset (PATH lookup).
@@ -624,6 +643,7 @@ mod tests {
 				piper_path: None,
 				piper_voices_dir: None,
 				piper_default_voice: None,
+				firmware_dir: None,
 				server_tts_max_chars: Some(DEFAULT_SERVER_TTS_MAX_CHARS),
 				pdf_render_dpi: Some(DEFAULT_PDF_RENDER_DPI),
 				pdf_max_dimension: Some(DEFAULT_PDF_MAX_DIMENSION),
@@ -704,6 +724,7 @@ mod tests {
 						piper_path: None,
 						piper_voices_dir: None,
 						piper_default_voice: None,
+						firmware_dir: None,
 						server_tts_max_chars: DEFAULT_SERVER_TTS_MAX_CHARS,
 						pdf_render_dpi: DEFAULT_PDF_RENDER_DPI,
 						pdf_max_dimension: DEFAULT_PDF_MAX_DIMENSION,

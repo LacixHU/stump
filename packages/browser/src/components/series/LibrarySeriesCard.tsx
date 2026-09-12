@@ -14,6 +14,7 @@ export type LibrarySeriesCardData = {
 	status: FileStatus | string
 	thumbnail: ImageRef
 	media: Array<{ thumbnail: ImageRef }>
+	useSingleThumbnail?: boolean
 }
 
 type Props = {
@@ -40,7 +41,9 @@ const LibrarySeriesCard = memo(function LibrarySeriesCard({ data }: Props) {
 		return () => observer.disconnect()
 	}, [])
 
-	const thumbnailData = [data.thumbnail, ...data.media.map((m) => m.thumbnail)]
+	const thumbnailData = data.useSingleThumbnail
+		? [data.thumbnail]
+		: [data.thumbnail, ...data.media.map((m) => m.thumbnail)]
 	const bookLabel = pluralizeStat(
 		'book',
 		data.descendantMediaCount != null && data.descendantMediaCount > data.mediaCount

@@ -31,6 +31,14 @@ export class MediaAPI extends APIBase {
 	}
 
 	/**
+	 * The URL for fetching a retro disk/tape image for in-browser play
+	 * (library access only; does not require DownloadFile)
+	 */
+	playFileURL(id: string): string {
+		return this.withServiceURL(mediaURL(`/${id}/play-file`))
+	}
+
+	/**
 	 * The URL for fetching a page of a media entity
 	 */
 	bookPageURL(mediaID: string, page: number, params?: ScaledDimensionResizeInput): string {

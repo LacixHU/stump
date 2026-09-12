@@ -9,6 +9,7 @@ type BookReaderParams = {
 	page?: number
 	isEpub?: boolean
 	isPdf?: boolean
+	isRetro?: boolean
 	epubcfi?: string | null
 	isAnimated?: boolean
 	isStreaming?: boolean
@@ -53,13 +54,26 @@ const pathsInternal = {
 	bookOverview: (id: string) => `/books/${id}`,
 	bookReader: (
 		id: string,
-		{ isEpub, isPdf, epubcfi, isAnimated, page, isStreaming, isIncognito }: BookReaderParams = {},
+		{
+			isEpub,
+			isPdf,
+			isRetro,
+			epubcfi,
+			isAnimated,
+			page,
+			isStreaming,
+			isIncognito,
+		}: BookReaderParams = {},
 	) => {
 		const baseUrl = pathsInternal.bookOverview(id)
 		const searchParams = new URLSearchParams()
 
 		if (isIncognito) {
 			searchParams.append('incognito', 'true')
+		}
+
+		if (isRetro) {
+			return `${baseUrl}/retro-player?${searchParams.toString()}`
 		}
 
 		if (isEpub || !!epubcfi) {

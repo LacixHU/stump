@@ -20,7 +20,14 @@ pub use types::{
 	SearchQuery,
 };
 
-use providers::{ComicVineClient, HardcoverClient};
+use providers::{
+	ComicVineClient, HardcoverClient, Lemon64Client, LemonAmigaClient,
+	WikipediaCoverClient, WorldOfSpectrumClient,
+};
+
+pub use providers::wikipedia::{
+	download_cover_bytes, lookup_wikipedia_game_cover, sanitize_game_title,
+};
 
 pub fn create_provider(
 	provider_type: &str,
@@ -29,6 +36,11 @@ pub fn create_provider(
 	match provider_type {
 		"COMIC_VINE" => Ok(Box::new(ComicVineClient::new(api_token, None))),
 		"HARDCOVER" => Ok(Box::new(HardcoverClient::new(api_token, None))),
+		// Public HTML sources — no token required (api_token ignored)
+		"LEMON64" => Ok(Box::new(Lemon64Client::new())),
+		"WORLD_OF_SPECTRUM" => Ok(Box::new(WorldOfSpectrumClient::new())),
+		"LEMON_AMIGA" => Ok(Box::new(LemonAmigaClient::new())),
+		"WIKIPEDIA" => Ok(Box::new(WikipediaCoverClient::new())),
 		_ => Err(MetadataProviderError::UnsupportedProvider(
 			provider_type.to_string(),
 		)),

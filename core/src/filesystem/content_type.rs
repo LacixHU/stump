@@ -27,6 +27,8 @@ pub enum ContentType {
 	WEBP,
 	GIF,
 	TXT,
+	/// Retro computer disk/tape image (C64, Spectrum, Amiga, etc.)
+	RETRO,
 	#[default]
 	UNKNOWN,
 }
@@ -86,8 +88,25 @@ impl ContentType {
 			"webp" => ContentType::WEBP,
 			"gif" => ContentType::GIF,
 			"txt" => ContentType::TXT,
+			// Retro disk/tape images — extension-first; infer usually fails
+			"d64" | "t64" | "prg" | "g64" | "tap" | "tzx" | "z80" | "sna" | "adf"
+			| "adz" => ContentType::RETRO,
 			_ => temporary_content_workarounds(extension),
 		}
+	}
+
+	/// Extensions treated as retro computer media (disk/tape images).
+	pub fn retro_extensions() -> &'static [&'static str] {
+		&[
+			"d64", "t64", "prg", "g64", "tap", "tzx", "z80", "sna", "adf", "adz",
+		]
+	}
+
+	/// Returns true if the extension is a supported retro disk/tape format.
+	pub fn is_retro_extension(extension: &str) -> bool {
+		Self::retro_extensions()
+			.iter()
+			.any(|ext| ext.eq_ignore_ascii_case(extension))
 	}
 
 	/// Infer the MIME type of a file using the [`infer`] crate. If the MIME type cannot be inferred,
@@ -139,6 +158,11 @@ impl ContentType {
 			infer_mime_from_bytes(bytes).map(|mime| ContentType::from(mime.as_str()));
 		let from_ext = ContentType::from_extension(extension);
 
+		// Retro formats: extension always wins (infer is unreliable for disk images)
+		if from_ext.is_retro() {
+			return from_ext;
+		}
+
 		match (from_bytes, from_ext) {
 			// if the ext is more semantically correct (e.g., ebooks are zips but should be identified more specifically)
 			// then we prefer that over the byte detection.
@@ -176,6 +200,8 @@ impl ContentType {
 	/// Infer the MIME type of a [Path] using the [infer] crate. If the MIME type cannot be inferred,
 	/// then the extension of the path is used to determine the content type.
 	///
+	/// Retro disk/tape images prefer extension over `infer` (which usually fails or mislabels them).
+	///
 	/// ### Example
 	/// ```no_run
 	/// use stump_core::filesystem::ContentType;
@@ -186,16 +212,19 @@ impl ContentType {
 	/// assert_eq!(content_type, ContentType::PNG);
 	/// ```
 	pub fn from_path(path: &Path) -> ContentType {
+		let extension = path
+			.extension()
+			.unwrap_or_default()
+			.to_str()
+			.unwrap_or_default();
+		let from_ext = ContentType::from_extension(extension);
+		if from_ext.is_retro() {
+			return from_ext;
+		}
+
 		infer_mime(path)
 			.map(|mime| ContentType::from(mime.as_str()))
-			.unwrap_or_else(|| {
-				ContentType::from_extension(
-					path.extension()
-						.unwrap_or_default()
-						.to_str()
-						.unwrap_or_default(),
-				)
-			})
+			.unwrap_or(from_ext)
 	}
 
 	/// Returns the string representation of the MIME type.
@@ -310,6 +339,11 @@ impl ContentType {
 		self == &ContentType::EPUB_ZIP
 	}
 
+	/// Returns true if the content type is a retro computer disk/tape image.
+	pub fn is_retro(&self) -> bool {
+		self == &ContentType::RETRO
+	}
+
 	/// Returns the file extension of the content type. If the content type is unknown, then an
 	/// empty string is returned.
 	pub fn extension(&self) -> &str {
@@ -331,6 +365,8 @@ impl ContentType {
 			ContentType::AVIF => "avif",
 			ContentType::GIF => "gif",
 			ContentType::TXT => "txt",
+			// Generic; actual extension varies (d64, adf, etc.)
+			ContentType::RETRO => "",
 			ContentType::UNKNOWN => "",
 		}
 	}
@@ -360,6 +396,16 @@ impl From<&str> for ContentType {
 			"image/avif" => ContentType::AVIF,
 			"image/gif" => ContentType::GIF,
 			"text/plain" => ContentType::TXT,
+			"application/x-d64"
+			| "application/x-t64"
+			| "application/x-c64-prg"
+			| "application/x-g64"
+			| "application/x-tap"
+			| "application/x-tzx"
+			| "application/x-z80"
+			| "application/x-sna"
+			| "application/x-adf"
+			| "application/x-adz" => ContentType::RETRO,
 			_ => ContentType::UNKNOWN,
 		}
 	}
@@ -385,6 +431,7 @@ impl std::fmt::Display for ContentType {
 			ContentType::WEBP => write!(f, "image/webp"),
 			ContentType::GIF => write!(f, "image/gif"),
 			ContentType::TXT => write!(f, "text/plain"),
+			ContentType::RETRO => write!(f, "application/octet-stream"),
 			ContentType::UNKNOWN => write!(f, "unknown"),
 		}
 	}
@@ -434,6 +481,7 @@ impl TryFrom<ContentType> for image::ImageFormat {
 			ContentType::RAR => Err(unsupported_error("ContentType::RAR")),
 			ContentType::COMIC_RAR => Err(unsupported_error("ContentType::COMIC_RAR")),
 			ContentType::TXT => Err(unsupported_error("ContentType::TXT")),
+			ContentType::RETRO => Err(unsupported_error("ContentType::RETRO")),
 			ContentType::UNKNOWN => Err(unsupported_error("ContentType::UNKNOWN")),
 		}
 	}
@@ -464,6 +512,10 @@ mod tests {
 		assert_eq!(ContentType::from_extension("opf"), ContentType::XML);
 		assert_eq!(ContentType::from_extension("ncx"), ContentType::XML);
 		assert_eq!(ContentType::from_extension("unknown"), ContentType::UNKNOWN);
+		assert_eq!(ContentType::from_extension("d64"), ContentType::RETRO);
+		assert_eq!(ContentType::from_extension("adf"), ContentType::RETRO);
+		assert_eq!(ContentType::from_extension("tzx"), ContentType::RETRO);
+		assert_eq!(ContentType::from_extension("tap"), ContentType::RETRO);
 	}
 
 	#[test]
@@ -615,7 +667,17 @@ mod tests {
 		assert!(!ContentType::RAR.is_image());
 		assert!(!ContentType::COMIC_RAR.is_image());
 		assert!(!ContentType::TXT.is_image());
+		assert!(!ContentType::RETRO.is_image());
 		assert!(!ContentType::UNKNOWN.is_image());
+	}
+
+	#[test]
+	fn test_content_type_is_retro() {
+		assert!(ContentType::RETRO.is_retro());
+		assert!(ContentType::is_retro_extension("d64"));
+		assert!(ContentType::is_retro_extension("ADF"));
+		assert!(!ContentType::is_retro_extension("cbz"));
+		assert!(!ContentType::PDF.is_retro());
 	}
 
 	#[test]

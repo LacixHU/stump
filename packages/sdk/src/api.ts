@@ -6,6 +6,7 @@ import { cacheKeys } from './constants'
 import {
 	AuthAPI,
 	EpubAPI,
+	FirmwareAPI,
 	JwtTokenPair,
 	LibraryAPI,
 	MediaAPI,
@@ -500,6 +501,13 @@ export class Api {
 	 */
 	get media(): MediaAPI {
 		return new MediaAPI(this)
+	}
+
+	/**
+	 * Get an instance for the FirmwareAPI (emulator BIOS under STUMP_FIRMWARE_DIR)
+	 */
+	get firmware(): FirmwareAPI {
+		return new FirmwareAPI(this)
 	}
 
 	get opds(): OPDSV2API {

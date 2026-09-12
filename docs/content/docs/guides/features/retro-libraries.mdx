@@ -1,0 +1,94 @@
+---
+title: Retro computer libraries
+description: Catalog and play C64, ZX Spectrum, and Amiga disk/tape images in the browser
+---
+
+# Retro computer libraries
+
+Stump can catalog single-file disk and tape images for classic computers and play them in the browser via WASM emulators. The server only serves files and optional firmware bytes—it does **not** run emulators or stream video.
+
+## Supported formats (MVP)
+
+| Platform     | Extensions                                         |
+| ------------ | -------------------------------------------------- |
+| Commodore 64 | `d64`, `t64`, `prg`, `g64`, `tap` (with path hint) |
+| ZX Spectrum  | `tzx`, `z80`, `sna`, `tap` (with path hint)        |
+| Amiga        | `adf`, `adz`                                       |
+
+These extensions are registered globally (like PDF). Create a library with type **Retro** so auto-metadata (when enabled) targets the right providers.
+
+## Folder layout
+
+Prefer nested folders (library pattern **Nested** is the default when you pick Retro):
+
+```text
+/Retro/
+  C64/Last Ninja/Last Ninja Side A.d64
+  C64/Last Ninja/Last Ninja Side B.d64
+  Spectrum/Manic Miner/manic.tap
+  Amiga/Lemmings/Lemmings.adf
+```
+
+Each game folder becomes a **series**; each disk/tape file becomes **media**. Multi-disk games share one series.
+
+### Ambiguous `.tap` files
+
+`.tap` is used by both C64 and Spectrum. Resolution order:
+
+1. Path segments containing `c64` / `commodore` → C64; `spectrum` / `zx` / `sinclair` → Spectrum
+2. Else inherit platform from other media in the series
+3. Else default to **C64** (name folders clearly to avoid this)
+
+## C64 emulator
+
+In-browser C64 play uses **[c64-ready](https://www.npmjs.com/package/c64-ready)** (MIT; WASM based on c64.js / lvllvl). Assets are served from `/retro/c64/` (`c64.wasm`, audio worklet).
+
+Supported load types in this core: **`.d64`**, **`.prg`**, **`.crt`** (`.t64`/`.g64` are treated as disk-like when possible). Click the canvas for keyboard focus; default input mode is mixed joystick + keyboard.
+
+## Play vs download
+
+| Action                                        | Permission                                   |
+| --------------------------------------------- | -------------------------------------------- |
+| **Play** (`GET /api/v2/media/{id}/play-file`) | Library access only (same as reading a page) |
+| **Download** (`GET /api/v2/media/{id}/file`)  | `DownloadFile`                               |
+
+`play-file` only allows retro extensions (defense in depth so non-download users cannot pull EPUBs/CBZs through that path).
+
+## Amiga firmware (Kickstart)
+
+Amiga emulation needs user-supplied Kickstart ROMs. Never commit or bundle BIOS files.
+
+1. Set `STUMP_FIRMWARE_DIR` (default: `{config_dir}/firmware`).
+2. Place required Kickstart files as documented by the pinned Amiga WASM build (e.g. `kick33180.A500`, `kick34005.A500`).
+3. The player fetches them via `GET /api/v2/firmware/{file_name}` (authenticated; basename only—no path traversal).
+
+If firmware is missing, the catalog still works; Play shows setup instructions.
+
+## Covers / thumbnails
+
+Retro files have no internal pages, so Stump **cannot** generate a cover from the disk image itself.
+
+**Automatic covers work when you provide a local image next to the game:**
+
+| Location                     | Filenames                                                                                                              |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Same folder as the disk/tape | `{game name}.jpg` / `.png` / `.webp`, or `cover.jpg`, `folder.jpg`, `poster.jpg`, `front.jpg`, `box.jpg`, `boxart.jpg` |
+| Parent (series) folder       | same `cover` / `folder` / … names                                                                                      |
+
+Then run a library **scan** (or thumbnail generation). Stump copies/resizes the sidecar into the thumbnail store.
+
+If no sidecar is found, Stump searches Wikipedia via the MediaWiki API in [Category:Video game covers](https://en.wikipedia.org/wiki/Category:Video_game_covers) (and platform subcategories such as Commodore 64 / ZX Spectrum / Amiga). A matching cover is downloaded and stored as the thumbnail.
+
+Sidecar files always win over Wikipedia. Many Wikipedia covers are fair-use; only use this for your own library. Manual upload on the book manage page still works.
+
+## Save states
+
+Save states are stored in the browser (IndexedDB), keyed by user and media. They are not synced to the server.
+
+## Legal
+
+You must supply your own game images and BIOS/firmware. Stump does not distribute copyrighted ROMs or disk images.
+
+## OPDS
+
+OPDS entries for retro media expose **file acquisition** only (no page stream links). Page-based OPDS reading does not apply when `pages = -1`.

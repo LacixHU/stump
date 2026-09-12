@@ -1,5 +1,6 @@
 export * from './auth-api'
 export * from './epub-api'
+export * from './firmware-api'
 export * from './library-api'
 export * from './media-api'
 export * from './opds-api'

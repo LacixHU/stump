@@ -744,7 +744,21 @@ impl JobLifecycle for MetadataFetchJob {
 					)
 					.await
 					{
-						Ok(()) => output.auto_applied = 1,
+						Ok(()) => {
+							output.auto_applied = 1;
+							let thumbs = ctx.config().get_thumbnails_dir();
+							if let Err(e) = apply::maybe_apply_cover_from_candidate(
+								conn, &media_id, &candidate, &thumbs,
+							)
+							.await
+							{
+								tracing::warn!(
+									media_id,
+									error = ?e,
+									"Cover apply after media match failed"
+								);
+							}
+						},
 						Err(e) => {
 							logs.push(
 								JobExecuteLog::error(format!(

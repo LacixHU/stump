@@ -301,7 +301,8 @@
 					"MANHWA": "Manhwa",
 					"WEB_NOVEL": "Web Novels",
 					"WEBTOON": "Webtoons",
-					"MIXED": "Mixed"
+					"MIXED": "Mixed",
+					"RETRO": "Retro computers"
 				}
 			},
 			"defaultLibraryView": {
@@ -2887,6 +2888,7 @@
 		"incognitoMode": "Incognito mode",
 		"nativePdfViewer": "Native PDF viewer",
 		"markAsRead": "Mark as read",
+		"markComplete": "Mark complete",
 		"clearProgress": "Clear progress",
 		"deleteHistory": "Delete history",
 		"manage": "Manage",
@@ -2894,6 +2896,7 @@
 		"download": "Download",
 		"read": "Read",
 		"readAgain": "Read again",
+		"play": "Play",
 		"toasts": {
 			"failedCompletion": "Failed to update book completion status",
 			"failedDeleteSession": "Failed to delete current session",

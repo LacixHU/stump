@@ -1,5 +1,5 @@
 import { Label, NativeSelect, Text } from '@stump/components'
-import { LibraryType } from '@stump/graphql'
+import { LibraryPattern, LibraryType } from '@stump/graphql'
 import { useLocaleContext } from '@stump/i18n'
 import { useFormContext } from 'react-hook-form'
 
@@ -18,7 +18,13 @@ export default function LibraryTypeSelect() {
 					value: option,
 					label: t(getKey(`options.${option}`)),
 				}))}
-				{...form.register('libraryType')}
+				{...form.register('libraryType', {
+					onChange: (e) => {
+						if (e.target.value === LibraryType.Retro) {
+							form.setValue('libraryPattern', LibraryPattern.Nested)
+						}
+					},
+				})}
 			/>
 			<Text size="xs" variant="muted">
 				{t(getKey('description'))}
@@ -34,6 +40,7 @@ const OPTIONS = [
 	LibraryType.Manga,
 	LibraryType.Manhwa,
 	LibraryType.Mixed,
+	LibraryType.Retro,
 	LibraryType.WebNovel,
 	LibraryType.Webtoon,
 ]

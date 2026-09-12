@@ -1,4 +1,6 @@
 import { constants as zlibConstants } from 'node:zlib'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
@@ -11,6 +13,8 @@ import tsconfigPaths from 'vite-plugin-tsconfig-paths'
 // https://www.npmjs.com/package/vite-plugin-node-polyfills
 import { name, version } from './package.json'
 
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+
 // https://vitejs.dev/config/
 export default defineConfig({
 	build: {
@@ -18,10 +22,26 @@ export default defineConfig({
 		emptyOutDir: true,
 		manifest: true,
 		outDir: '../dist',
+		rollupOptions: {
+			// Native/node-only deps pulled by c64-ready headless path — never bundle
+			external: ['@roamhq/wrtc', 'wrtc'],
+		},
 	},
 	clearScreen: false,
 	define: {
 		pkgJson: { name, version },
+	},
+	optimizeDeps: {
+		exclude: ['@roamhq/wrtc'],
+		include: ['react', 'react-dom', 'react/jsx-runtime'],
+	},
+	resolve: {
+		// Nested deps (lucide-react, etc.) can ship a different React and break hooks
+		dedupe: ['react', 'react-dom'],
+		alias: {
+			react: path.join(rootDir, 'node_modules/react'),
+			'react-dom': path.join(rootDir, 'node_modules/react-dom'),
+		},
 	},
 	plugins: [
 		tailwindcss(),
@@ -58,6 +78,7 @@ export default defineConfig({
 					/^\/opds(?:\/|$)/,
 					/^\/kobo(?:\/|$)/,
 					/^\/koreader(?:\/|$)/,
+					/^\/retro(?:\/|$)/,
 				],
 				maximumFileSizeToCacheInBytes: 6 * 1024 * 1024, // 6MB
 			},
