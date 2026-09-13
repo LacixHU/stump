@@ -12,11 +12,15 @@ export const AuthImage = forwardRef<HTMLImageElement, Props>(({ token, src, ...p
 
 	const doFetch = useCallback(
 		async (url: string) => {
-			const response = await sdk.axios.get(url, { responseType: 'arraybuffer' })
-			const blob = new Blob([response.data], {
-				type: contentHeader(response.headers['content-type']),
-			})
-			return blob
+			try {
+				const response = await sdk.axios.get(url, { responseType: 'arraybuffer' })
+				const blob = new Blob([response.data], {
+					type: contentHeader(response.headers['content-type']),
+				})
+				return blob
+			} catch {
+				return new Blob([], { type: 'application/octet-stream' })
+			}
 		},
 		[sdk.axios],
 	)

@@ -1,23 +1,177 @@
-import type { EmulatorMountOptions, RetroEmulatorHandle, RetroEmulatorModule } from './types'
+import {
+	BASIC_START,
+	type C64Program,
+	firstD64Program,
+	firstT64Program,
+	isD64Size,
+	looksLikeT64,
+	programFromPrg,
+} from './c64-images'
+import type {
+	EmulatorMountOptions,
+	RetroDiskSpeed,
+	RetroEmulatorHandle,
+	RetroEmulatorModule,
+} from './types'
 
 /** Served from packages/browser/public/retro/c64 (copied from c64-ready). */
 const C64_ASSET_BASE = '/retro/c64'
 const WASM_URL = `${C64_ASSET_BASE}/c64.wasm`
 const WORKLET_URL = `${C64_ASSET_BASE}/audio-worklet-processor.js`
 
+/** What we were handed, before any unwrapping. */
+type C64Container = 'prg' | 'd64' | 't64' | 'crt' | 'snapshot'
+/** What c64-ready knows how to mount. */
 type C64LoadType = 'prg' | 'd64' | 'crt' | 'snapshot'
 
-function inferLoadType(byteLength: number, hintName?: string): C64LoadType {
+const FRAME_MS = 1000 / 50
+/** Wall-clock budget per animation frame for catch-up emulation while warping. */
+const WARP_BUDGET_MS = 12
+const WARP_MAX_FRAMES = 24
+/** c1541_getStatus: 1 = idle, 2 = motor running / transfer in progress. */
+const DRIVE_BUSY = 2
+
+const SCREEN_RAM = 0x0400
+const SCREEN_CELLS = 1000
+/** "READY." in screen codes — the KERNAL is done and the keyboard buffer is live. */
+const READY_PROMPT = [0x12, 0x05, 0x01, 0x04, 0x19, 0x2e]
+const KEYBOARD_BUFFER_LENGTH = 0x00c6
+const KEYBOARD_BUFFER = 0x0277
+const KEYBOARD_BUFFER_MAX = 8
+
+/** BASIC's end-of-program / start-of-variables pointers (VARTAB, ARYTAB, STREND). */
+const BASIC_POINTERS = [0x002d, 0x002f, 0x0031]
+/** Where variables start when no BASIC program is present. */
+const EMPTY_BASIC_END = 0x0803
+
+const BOOT_TIMEOUT_MS = 5000
+const KEYBOARD_DRAIN_TIMEOUT_MS = 2000
+const AUDIO_READY_TIMEOUT_MS = 5000
+const AUDIO_PRIME_ATTEMPTS = 8
+const AUDIO_PRIME_INTERVAL_MS = 250
+
+type FrameBufferLike = { width: number; height: number; data: Uint8Array; timestamp: number }
+
+/**
+ * The slice of c64-ready's C64Emulator we drive directly. Going through the
+ * emulator rather than C64Player lets us insert a disk without triggering the
+ * player's scripted `LOAD"*",8,1` and its fixed multi-second waits.
+ */
+type EmulatorHost = {
+	tick: (dTime: number) => void
+	onFrame?: (frame: FrameBufferLike) => void
+	loadGame: (options: { type: C64LoadType; data: Uint8Array }) => void
+	ramRead: (addr: number) => number
+	cpuRead: (addr: number) => number
+	cpuWrite: (addr: number, value: number) => void
+	wasm?: { exports?: { c1541_getStatus?: () => number } }
+}
+
+function inferContainer(byteLength: number, hintName?: string): C64Container {
 	const name = (hintName || '').toLowerCase()
 	if (name.endsWith('.prg')) return 'prg'
 	if (name.endsWith('.crt')) return 'crt'
-	if (name.endsWith('.d64') || name.endsWith('.t64') || name.endsWith('.g64')) return 'd64'
+	if (name.endsWith('.t64')) return 't64'
+	if (name.endsWith('.d64') || name.endsWith('.g64')) return 'd64'
 	if (name.endsWith('.c64') || name.endsWith('.s64') || name.endsWith('.snapshot')) {
 		return 'snapshot'
 	}
-	if (byteLength === 174848 || byteLength === 196608) return 'd64'
+	if (isD64Size(byteLength)) return 'd64'
 	if (byteLength < 65536) return 'prg'
 	return 'd64'
+}
+
+function toLoadType(container: C64Container): C64LoadType {
+	// A .t64 is a tape archive, not a disk — it only ever reaches the emulator
+	// as the PRG we pull out of it.
+	return container === 't64' ? 'prg' : container
+}
+
+/**
+ * The program to drop into memory, or null to let the emulated drive load it.
+ */
+function findAutostartProgram(
+	bytes: Uint8Array,
+	container: C64Container,
+	diskSpeed: RetroDiskSpeed,
+): C64Program | null {
+	// Tapes and bare programs never touch the drive, so disk speed does not apply
+	// to them — and for a tape there is no fallback either, since c64-ready has no
+	// way to mount a .t64.
+	if (container === 'prg') return programFromPrg(bytes)
+	if (container === 't64' || looksLikeT64(bytes)) return firstT64Program(bytes)
+	if (container !== 'd64' || diskSpeed !== 'instant') return null
+	// A disk we decline still loads the authentic way, so only take it over when
+	// RUN is certain to work.
+	const program = firstD64Program(bytes)
+	return program?.loadAddress === BASIC_START ? program : null
+}
+
+/**
+ * How to start a program already sitting in memory. Machine code has no BASIC
+ * line to RUN; by tape and PRG convention its entry point is its load address.
+ */
+function startCommand(program: C64Program): string {
+	return program.loadAddress === BASIC_START ? 'run\n' : `sys ${program.loadAddress}\n`
+}
+
+/**
+ * Point BASIC at an empty program. c64_loadPRG sets the variable pointers past
+ * whatever it just injected, which leaves them well outside BASIC RAM for a
+ * machine-code load — enough to upset the interpreter before it reaches our SYS.
+ */
+function clearBasicProgram(host: EmulatorHost): void {
+	host.cpuWrite(BASIC_START, 0)
+	host.cpuWrite(BASIC_START + 1, 0)
+	for (const pointer of BASIC_POINTERS) {
+		host.cpuWrite(pointer, EMPTY_BASIC_END & 0xff)
+		host.cpuWrite(pointer + 1, (EMPTY_BASIC_END >> 8) & 0xff)
+	}
+}
+
+function isAtBasicPrompt(host: EmulatorHost): boolean {
+	for (let cell = 0; cell <= SCREEN_CELLS - READY_PROMPT.length; cell += 1) {
+		let matched = true
+		for (let i = 0; i < READY_PROMPT.length; i += 1) {
+			if (host.ramRead(SCREEN_RAM + cell + i) !== READY_PROMPT[i]) {
+				matched = false
+				break
+			}
+		}
+		if (matched) return true
+	}
+	return false
+}
+
+/** Type into the KERNAL keyboard buffer, which only holds ten characters. */
+async function typeText(host: EmulatorHost, text: string): Promise<void> {
+	const bytes = [...text.toUpperCase()].map((char) => (char === '\n' ? 13 : char.charCodeAt(0)))
+	while (bytes.length > 0) {
+		await waitUntil(() => host.cpuRead(KEYBOARD_BUFFER_LENGTH) === 0, KEYBOARD_DRAIN_TIMEOUT_MS)
+		const chunk = bytes.splice(0, KEYBOARD_BUFFER_MAX)
+		host.cpuWrite(KEYBOARD_BUFFER_LENGTH, chunk.length)
+		chunk.forEach((byte, index) => host.cpuWrite(KEYBOARD_BUFFER + index, byte))
+	}
+}
+
+function delay(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function waitUntil(predicate: () => boolean, timeoutMs: number): Promise<boolean> {
+	return new Promise((resolve) => {
+		const deadline = performance.now() + timeoutMs
+		const poll = () => {
+			if (predicate()) {
+				resolve(true)
+			} else if (performance.now() >= deadline) {
+				resolve(false)
+			} else {
+				setTimeout(poll, 8)
+			}
+		}
+		poll()
+	})
 }
 
 /**
@@ -26,7 +180,20 @@ function inferLoadType(byteLength: number, hintName?: string): C64LoadType {
  */
 async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandle> {
 	const { canvas, image, fileName } = options
-	const loadType = inferLoadType(image.byteLength, fileName)
+	const container = inferContainer(image.byteLength, fileName)
+	const bytes = new Uint8Array(image)
+
+	let diskSpeed: RetroDiskSpeed = options.diskSpeed ?? 'instant'
+	// Injecting the program skips the emulated 1541 entirely: a disk load that
+	// costs ~2 emulated minutes becomes a memcpy.
+	let program = findAutostartProgram(bytes, container, diskSpeed)
+	let disk = container === 'd64' ? bytes : null
+
+	// There is no fallback for a tape: handing the raw container to the emulator
+	// would inject the .t64 header itself as if it were program bytes.
+	if (container === 't64' && !program) {
+		throw new Error('No program found in this tape image (.t64 directory is empty or damaged)')
+	}
 
 	const { CanvasRenderer, C64Player } = await import('c64-ready')
 
@@ -40,9 +207,11 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	const player = new C64Player({
 		wasmUrl: WASM_URL,
 		gameUrl: 'null',
-		gameData: image,
-		gameType: loadType,
-		gameSource: `stump-play-file.${loadType}`,
+		// When we autostart ourselves the player must boot to a bare prompt and
+		// leave the loading to us.
+		gameData: program ? undefined : bytes,
+		gameType: toLoadType(container),
+		gameSource: `stump-play-file.${container}`,
 		renderer,
 		audio: {
 			workletUrl: WORKLET_URL,
@@ -50,15 +219,122 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		},
 		onProgress: (percent, label) => {
 			renderer.setProgress(percent, label)
+			if (percent >= 100) renderer.hideLoader()
 		},
 	})
 
+	let host: EmulatorHost | null = null
+	let frameRaf = 0
+	let forceWarp = false
+
+	const isDriveBusy = () => host?.wasm?.exports?.c1541_getStatus?.() === DRIVE_BUSY
+
+	const origDetach = renderer.detach.bind(renderer)
+	renderer.detach = () => {
+		if (frameRaf) {
+			cancelAnimationFrame(frameRaf)
+			frameRaf = 0
+		}
+		origDetach()
+	}
+
+	renderer.attachTo = (emulator) => {
+		renderer.detach()
+		host = emulator as unknown as EmulatorHost
+		const runTick = emulator.tick.bind(emulator)
+		let skipRender = false
+		emulator.onFrame = (frame) => {
+			if (!skipRender) renderer.render(frame)
+		}
+
+		const loop = () => {
+			frameRaf = requestAnimationFrame(loop)
+			// debugger_update() advances at most two frames per call, so catching
+			// up means calling it repeatedly — bounded by wall clock so the tab
+			// stays responsive, and without painting frames nobody will see.
+			if (diskSpeed === 'instant' && (forceWarp || isDriveBusy())) {
+				const deadline = performance.now() + WARP_BUDGET_MS
+				skipRender = true
+				for (let i = 0; i < WARP_MAX_FRAMES && performance.now() < deadline; i += 1) {
+					runTick(FRAME_MS)
+				}
+				skipRender = false
+			}
+			runTick(FRAME_MS)
+		}
+		frameRaf = requestAnimationFrame(loop)
+	}
+
+	/** Boot to the BASIC prompt, drop the program straight into RAM, RUN it. */
+	const autostart = async (target: C64Program) => {
+		if (!host) return
+		forceWarp = true
+		try {
+			await waitUntil(() => (host ? isAtBasicPrompt(host) : false), BOOT_TIMEOUT_MS)
+			if (!host) return
+			// Keep the disk in the drive so multi-load games can still read from it.
+			if (disk) {
+				host.loadGame({ type: 'd64', data: disk })
+			}
+			host.loadGame({ type: 'prg', data: target.prg })
+			if (target.loadAddress !== BASIC_START) {
+				clearBasicProgram(host)
+			}
+			await typeText(host, startCommand(target))
+		} finally {
+			forceWarp = false
+		}
+	}
+
+	/**
+	 * Keep the audio pump primed.
+	 *
+	 * The worklet asks for samples exactly once and will not ask again until it
+	 * gets a reply, while the engine drops that request if the AudioContext is
+	 * still flagged suspended — and it stays flagged that way until an awaited
+	 * resume() updates it. A request lost in that window silences the SID for the
+	 * rest of the session. resume() ends by feeding the worklet, so retrying it
+	 * until the context really is running answers the pending request and
+	 * restarts the pump.
+	 */
+	const primeAudio = async () => {
+		await waitUntil(() => player.audio.ready, AUDIO_READY_TIMEOUT_MS)
+		for (let attempt = 0; attempt < AUDIO_PRIME_ATTEMPTS; attempt += 1) {
+			await player.audio.resume().catch(() => undefined)
+			if (!player.audio.suspended) return
+			await delay(AUDIO_PRIME_INTERVAL_MS)
+		}
+	}
+
+	const unlockAudio = () => {
+		void primeAudio()
+	}
+
+	const swallowKeyRepeat = (event: KeyboardEvent) => {
+		if (!event.repeat) return
+		event.preventDefault()
+		event.stopImmediatePropagation()
+	}
+
+	window.addEventListener('pointerdown', unlockAudio, true)
+	window.addEventListener('keydown', swallowKeyRepeat, true)
+	canvas.addEventListener('pointerdown', unlockAudio)
+
 	await player.start()
-	void player.audio.resume().catch(() => undefined)
+	if (program) {
+		await autostart(program)
+	}
+	renderer.hideLoader(0)
+	await player.audio.init().catch(() => undefined)
+	unlockAudio()
 	player.setInputMode('mixed')
+	player.setFastForwardSpeed(100)
 
 	return {
 		destroy: () => {
+			window.removeEventListener('pointerdown', unlockAudio, true)
+			window.removeEventListener('keydown', swallowKeyRepeat, true)
+			canvas.removeEventListener('pointerdown', unlockAudio)
 			void player.destroy()
 		},
 		saveState: async () => {
@@ -69,9 +345,47 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		loadState: async (data) => {
 			await player.loadGameData(data, 'snapshot', 'stump-save-state')
 		},
-		mountImage: async (nextImage) => {
-			const nextType = inferLoadType(nextImage.byteLength, fileName)
-			await player.loadGameData(nextImage, nextType, `stump-disk.${nextType}`)
+		mountImage: async (nextImage, nextFileName) => {
+			const nextBytes = new Uint8Array(nextImage)
+			const nextContainer = inferContainer(nextImage.byteLength, nextFileName || fileName)
+			disk = nextContainer === 'd64' ? nextBytes : null
+			program = findAutostartProgram(nextBytes, nextContainer, diskSpeed)
+
+			// Swapping a disk must not reset the machine — a game mid-run expects
+			// to find the next side in the drive, nothing more.
+			if (disk && host) {
+				host.loadGame({ type: 'd64', data: disk })
+				return
+			}
+			if (nextContainer === 't64' && !program) {
+				throw new Error('No program found in this tape image (.t64 directory is empty or damaged)')
+			}
+			if (program && host) {
+				// Unlike a disk side, a different tape or program is a different
+				// game: reset first so it starts from a clean prompt.
+				player.hardReset()
+				await autostart(program)
+				return
+			}
+			const nextType = toLoadType(nextContainer)
+			await player.loadGameData(nextBytes, nextType, `stump-disk.${nextType}`)
+		},
+		reset: () => {
+			player.hardReset()
+			canvas.focus()
+			if (program) {
+				void autostart(program)
+			}
+		},
+		setInputMode: (mode) => {
+			player.setInputMode(mode)
+		},
+		setJoystickPort: (port) => {
+			player.setKeyboardJoystickPort(port)
+		},
+		setDiskSpeed: (speed) => {
+			diskSpeed = speed
+			player.setFastForwardSpeed(100)
 		},
 	}
 }

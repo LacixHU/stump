@@ -102,6 +102,40 @@ fn generate_thumbnail_from_bytes(
 	Ok((thumbnail_buffer, thumbnail_path, true))
 }
 
+fn is_generic_cover_folder(name: &str) -> bool {
+	matches!(
+		name.to_ascii_lowercase().as_str(),
+		"c64"
+			| "commodore"
+			| "spectrum"
+			| "zx" | "amiga"
+			| "games" | "game"
+			| "retro" | "roms"
+			| "disks" | "tapes"
+	)
+}
+
+fn retro_cover_title_candidates(path: &Path, file_stem: &str) -> Vec<String> {
+	let mut titles = Vec::new();
+	if let Some(parent) = path
+		.parent()
+		.and_then(|p| p.file_name())
+		.and_then(|n| n.to_str())
+	{
+		let parent = metadata_integrations::sanitize_game_title(parent);
+		if parent.len() >= 2 && !is_generic_cover_folder(&parent) {
+			titles.push(parent);
+		}
+	}
+	let stem = metadata_integrations::sanitize_game_title(file_stem);
+	if stem.len() >= 2 {
+		titles.push(stem);
+	}
+	titles.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+	titles.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+	titles
+}
+
 async fn fetch_wikipedia_cover_bytes(book_path: &str) -> Result<Option<Vec<u8>>, String> {
 	use crate::filesystem::media::resolve_retro_platform;
 	use crate::filesystem::{FileParts, PathUtils};
@@ -113,27 +147,33 @@ async fn fetch_wikipedia_cover_bytes(book_path: &str) -> Result<Option<Vec<u8>>,
 		..
 	} = path.file_parts();
 	let platform = resolve_retro_platform(book_path, &extension);
-	let url = metadata_integrations::lookup_wikipedia_game_cover(
-		&file_stem,
-		Some(platform.as_str()),
-	)
-	.await
-	.map_err(|e| e.to_string())?;
 
-	let Some(url) = url else {
-		return Ok(None);
-	};
-
-	tracing::info!(
-		?book_path,
-		%url,
-		"Found Wikipedia video game cover"
-	);
-
-	let bytes = metadata_integrations::download_cover_bytes(&url)
+	for title in retro_cover_title_candidates(path, &file_stem) {
+		let url = metadata_integrations::lookup_wikipedia_game_cover(
+			&title,
+			Some(platform.as_str()),
+		)
 		.await
 		.map_err(|e| e.to_string())?;
-	Ok(Some(bytes))
+
+		let Some(url) = url else {
+			continue;
+		};
+
+		tracing::info!(
+			?book_path,
+			%title,
+			%url,
+			"Found Wikipedia video game cover"
+		);
+
+		let bytes = metadata_integrations::download_cover_bytes(&url)
+			.await
+			.map_err(|e| e.to_string())?;
+		return Ok(Some(bytes));
+	}
+
+	Ok(None)
 }
 
 /// Build a thumbnail from a local sidecar cover (retro disk/tape images).
@@ -170,6 +210,31 @@ pub async fn generate_book_thumbnail(
 	let file_name = filename.unwrap_or_else(|| book.id.clone());
 	let is_non_page = book.pages < 1;
 
+	let file_path = if let Some(stored_path) = &book.thumbnail_path {
+		PathBuf::from(stored_path.clone())
+	} else {
+		core_config.get_thumbnails_dir().join(format!(
+			"{}.{}",
+			file_name,
+			image_options.format.extension()
+		))
+	};
+
+	let existing_thumbnail = match fs::read(&file_path).await {
+		Ok(bytes) => Some(bytes),
+		Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+		Err(e) => {
+			tracing::error!(error = ?e, "IO error while reading existing thumbnail");
+			None
+		},
+	};
+
+	if !force_regen {
+		if let Some(thumbnail) = existing_thumbnail.clone() {
+			return Ok((thumbnail, file_path, false));
+		}
+	}
+
 	// Retro / non-page: sidecar first, then Wikipedia Category:Video game covers
 	let sidecar_cover = if is_non_page {
 		use crate::filesystem::media::find_sidecar_cover;
@@ -196,6 +261,28 @@ pub async fn generate_book_thumbnail(
 	};
 
 	if is_non_page && sidecar_cover.is_none() && wikipedia_cover_bytes.is_none() {
+		if !force_regen {
+			if let Some(thumbnail) = existing_thumbnail {
+				tracing::debug!(
+					media_id = %book.id,
+					"No new sidecar/Wikipedia cover; keeping existing thumbnail"
+				);
+				return Ok((thumbnail, file_path, false));
+			}
+		} else if existing_thumbnail.is_some() && file_name == book.id {
+			tracing::debug!(
+				media_id = %book.id,
+				"Force regen with no sidecar/Wikipedia cover; dropping stale thumbnail"
+			);
+			let _ = fs::remove_file(&file_path).await;
+			media::Entity::update_many()
+				.filter(media::Column::Id.eq(book.id.clone()))
+				.col_expr(media::Column::ThumbnailPath, Expr::cust("NULL"))
+				.col_expr(media::Column::ThumbnailMeta, Expr::cust("NULL"))
+				.col_expr(media::Column::UpdatedAt, Expr::value(Utc::now()))
+				.exec(conn)
+				.await?;
+		}
 		tracing::debug!(
 			media_id = %book.id,
 			pages = book.pages,
@@ -203,33 +290,6 @@ pub async fn generate_book_thumbnail(
 			"No sidecar or Wikipedia cover for non-page media; skip auto thumbnail"
 		);
 		return Err(ThumbnailGenerateError::NothingToGenerate);
-	}
-
-	let file_path = if let Some(stored_path) = &book.thumbnail_path {
-		PathBuf::from(stored_path.clone())
-	} else {
-		core_config.get_thumbnails_dir().join(format!(
-			"{}.{}",
-			file_name,
-			image_options.format.extension()
-		))
-	};
-
-	if let Err(e) = fs::metadata(&file_path).await {
-		// A `NotFound` error is expected here, but anything else is unexpected
-		if e.kind() != std::io::ErrorKind::NotFound {
-			tracing::error!(error = ?e, "IO error while checking for file existence?");
-		}
-	} else if !force_regen {
-		match fs::read(&file_path).await {
-			Ok(thumbnail) => return Ok((thumbnail, PathBuf::from(&file_path), false)),
-			Err(e) => {
-				// Realistically, this shouldn't happen if we can grab the metadata, but it isn't a
-				// big deal if it does. We can just regenerate the thumbnail in the event something
-				// is wrong with the file.
-				tracing::error!(error = ?e, "Failed to read thumbnail file from disk! Regenerating...");
-			},
-		}
 	}
 
 	let (tx, rx) = oneshot::channel();
@@ -440,6 +500,7 @@ async fn generate_series_thumbnail(
 		.select_only()
 		.columns(media::MediaThumbSelect::columns())
 		.filter(media::Column::SeriesId.eq(&series.id))
+		.order_by_asc(media::Column::Pages)
 		.order_by_asc(media::Column::Name)
 		.into_model::<media::MediaThumbSelect>()
 		.one(ctx.conn())
@@ -450,11 +511,12 @@ async fn generate_series_thumbnail(
 		return Err(ThumbnailGenerateError::NothingToGenerate);
 	};
 
-	copy_thumbnail_to_entity(
+	let is_retro_source = first_book.pages < 1;
+	let result = copy_thumbnail_to_entity(
 		&series.id,
 		first_book,
 		ctx,
-		options,
+		options.clone(),
 		|thumbnail_path, thumbnail_metadata| {
 			series::Entity::update_many()
 				.filter(series::Column::Id.eq(&series.id))
@@ -469,7 +531,22 @@ async fn generate_series_thumbnail(
 				.col_expr(series::Column::UpdatedAt, Expr::value(Utc::now()))
 		},
 	)
-	.await
+	.await;
+
+	if result.is_err() && options.force_regen && is_retro_source {
+		if let Some(path) = &series.thumbnail_path {
+			let _ = fs::remove_file(path).await;
+		}
+		series::Entity::update_many()
+			.filter(series::Column::Id.eq(&series.id))
+			.col_expr(series::Column::ThumbnailPath, Expr::cust("NULL"))
+			.col_expr(series::Column::ThumbnailMeta, Expr::cust("NULL"))
+			.col_expr(series::Column::UpdatedAt, Expr::value(Utc::now()))
+			.exec(ctx.conn())
+			.await?;
+	}
+
+	result
 }
 
 #[tracing::instrument(skip_all)]
@@ -507,6 +584,7 @@ async fn generate_library_thumbnail(
 		.inner_join(series::Entity)
 		.filter(series::Column::LibraryId.eq(&library.id))
 		.order_by_asc(series::Column::Name)
+		.order_by_asc(media::Column::Pages)
 		.order_by_asc(media::Column::Name)
 		.into_model::<media::MediaThumbSelect>()
 		.one(ctx.conn())
@@ -699,6 +777,7 @@ async fn get_series_thumbnail_candidate(
 ) -> Result<Option<Vec<u8>>, ThumbnailGenerateError> {
 	let Some(first_book) = media::Entity::find()
 		.filter(media::Column::SeriesId.eq(series.id.clone()))
+		.order_by_asc(media::Column::Pages)
 		.order_by_asc(media::Column::Name)
 		.into_model::<media::MediaThumbSelect>()
 		.one(ctx.conn())
@@ -789,6 +868,7 @@ async fn get_library_thumbnail_candidate(
 					.to_owned(),
 			),
 		)
+		.order_by_asc(media::Column::Pages)
 		.order_by_asc(media::Column::Name)
 		.into_model::<media::MediaThumbSelect>()
 		.one(ctx.conn())

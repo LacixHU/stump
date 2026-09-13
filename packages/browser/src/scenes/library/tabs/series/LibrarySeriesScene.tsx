@@ -3,6 +3,7 @@ import { usePrevious } from '@stump/components'
 import {
 	InterfaceLayout,
 	LibraryPattern,
+	LibraryType,
 	LibrarySeriesQuery,
 	LibrarySeriesQueryVariables,
 	OrderDirection,
@@ -201,6 +202,7 @@ export default function LibrarySeriesScene() {
 	} = useLibraryContext()
 	// Series-priority and Nested both use a folder tree; Collection-priority is flat tops.
 	const isHierarchical = config.libraryPattern !== LibraryPattern.CollectionBased
+	const isRetro = config.libraryType === LibraryType.Retro
 	const {
 		filters: seriesFilters,
 		ordering,
@@ -361,7 +363,11 @@ export default function LibrarySeriesScene() {
 							<DynamicCardGrid
 								count={nodes.length}
 								renderItem={(index) => (
-									<LibrarySeriesCard key={nodes[index]!.id} data={nodes[index]!} />
+									<LibrarySeriesCard
+										key={nodes[index]!.id}
+										data={nodes[index]!}
+										isRetro={isRetro}
+									/>
 								)}
 							/>
 						)}

@@ -1,7 +1,7 @@
 import { useGraphQLMutation, usePrefetchFiles } from '@stump/client'
 import { formatBytesSeparate } from '@stump/client'
 import { DropdownItemGroup } from '@stump/components/dropdown/DropdownMenu'
-import { extractErrorMessage, graphql, UserPermission } from '@stump/graphql'
+import { extractErrorMessage, graphql, LibraryType, UserPermission } from '@stump/graphql'
 import { formatHumanDurationSeparate, useLocaleContext } from '@stump/i18n'
 import { useQueryClient } from '@tanstack/react-query'
 import { ArrowUpRight, BookCheck, BookOpen, BookOpenCheck, Clock, HardDrive } from 'lucide-react'
@@ -35,7 +35,7 @@ export default function SeriesHeader() {
 			path,
 			stats,
 			childCount,
-			library: { id: libraryId },
+			library: { id: libraryId, config },
 		},
 	} = useSeriesContext()
 	const { t } = useLocaleContext()
@@ -98,6 +98,7 @@ export default function SeriesHeader() {
 
 	const canAccessFiles = checkPermission(UserPermission.FileExplorer)
 	const hasChildSeries = (childCount ?? 0) > 0
+	const isRetro = config?.libraryType === LibraryType.Retro
 
 	const tabs = [
 		...(hasChildSeries
@@ -112,7 +113,7 @@ export default function SeriesHeader() {
 			: []),
 		{
 			isActive: !!location.pathname.match(/\/series\/[^/]+\/books(\/.*)?$/),
-			label: t('seriesHeader.tabs.books'),
+			label: t(isRetro ? 'seriesHeader.tabs.games' : 'seriesHeader.tabs.books'),
 			onHover: () => prefetchSeriesBooks(id, { filter: [], orderBy: DEFAULT_MEDIA_ORDER_BY, path }),
 			to: 'books',
 		},

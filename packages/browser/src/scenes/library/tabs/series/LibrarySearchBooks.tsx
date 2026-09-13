@@ -1,5 +1,6 @@
 ﻿import { useGraphQL, useSDK } from '@stump/client'
 import { Heading, Text } from '@stump/components'
+import { LibraryType } from '@stump/graphql'
 import { useLocaleContext } from '@stump/i18n'
 
 import { BookCard } from '@/components/book'
@@ -9,6 +10,8 @@ import { Link } from '@/context'
 import { usePaths } from '@/paths'
 import { libraryBooksQuery } from '@/scenes/library/tabs/books/LibraryBooksScene'
 
+import { useLibraryContext } from '../../context'
+
 type Props = {
 	libraryId: string
 	search: string
@@ -16,6 +19,10 @@ type Props = {
 
 export default function LibrarySearchBooks({ libraryId, search }: Props) {
 	const { t } = useLocaleContext()
+	const {
+		library: { config },
+	} = useLibraryContext()
+	const isRetro = config.libraryType === LibraryType.Retro
 	const { sdk } = useSDK()
 	const paths = usePaths()
 	const searchFilter = useSearchMediaFilter(search)
@@ -50,9 +57,16 @@ export default function LibrarySearchBooks({ libraryId, search }: Props) {
 		<div className="gap-3 px-4 pt-4 flex flex-col">
 			<div className="gap-3 flex items-end justify-between">
 				<div>
-					<Heading size="sm">{t('seriesHeader.tabs.books')}</Heading>
+					<Heading size="sm">
+						{t(isRetro ? 'seriesHeader.tabs.games' : 'seriesHeader.tabs.books')}
+					</Heading>
 					<Text size="sm" variant="muted">
-						{t('librarySeriesScene.searchBooks.count', { count: books.length })}
+						{t(
+							isRetro
+								? 'librarySeriesScene.searchBooks.countGames'
+								: 'librarySeriesScene.searchBooks.count',
+							{ count: books.length },
+						)}
 					</Text>
 				</div>
 				{books.length >= 20 && (

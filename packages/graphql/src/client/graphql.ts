@@ -6411,7 +6411,7 @@ export type SeriesLayoutQueryVariables = Exact<{
 }>;
 
 
-export type SeriesLayoutQuery = { __typename?: 'Query', seriesById?: { __typename?: 'Series', id: string, path: string, resolvedName: string, resolvedDescription?: string | null, childCount: number, descendantMediaCount: number, createdAt: any, updatedAt?: any | null, library: { __typename?: 'Library', id: string, name: string }, ancestors: Array<{ __typename?: 'Series', id: string, resolvedName: string }>, children: Array<{ __typename?: 'Series', id: string, resolvedName: string, mediaCount: number, childCount: number, descendantMediaCount: number, percentageCompleted: number, status: FileStatus, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } }>, stats: { __typename?: 'SeriesStats', bookCount: number, completedBooks: number, inProgressBooks: number, totalBytes: number, totalReadingTimeSeconds: number }, tags: Array<{ __typename?: 'Tag', id: number, name: string }>, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } } | null };
+export type SeriesLayoutQuery = { __typename?: 'Query', seriesById?: { __typename?: 'Series', id: string, path: string, resolvedName: string, resolvedDescription?: string | null, childCount: number, descendantMediaCount: number, createdAt: any, updatedAt?: any | null, library: { __typename?: 'Library', id: string, name: string, config: { __typename?: 'LibraryConfig', libraryType: LibraryType } }, ancestors: Array<{ __typename?: 'Series', id: string, resolvedName: string }>, children: Array<{ __typename?: 'Series', id: string, resolvedName: string, mediaCount: number, childCount: number, descendantMediaCount: number, percentageCompleted: number, status: FileStatus, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } }>, stats: { __typename?: 'SeriesStats', bookCount: number, completedBooks: number, inProgressBooks: number, totalBytes: number, totalReadingTimeSeconds: number }, tags: Array<{ __typename?: 'Tag', id: number, name: string }>, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } } | null };
 
 export type SeriesLibrayLinkQueryVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -12435,6 +12435,9 @@ export const SeriesLayoutDocument = new TypedDocumentString(`
     library {
       id
       name
+      config {
+        libraryType
+      }
     }
     resolvedName
     resolvedDescription

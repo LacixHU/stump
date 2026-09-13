@@ -45,12 +45,44 @@ In-browser C64 play uses **[c64-ready](https://www.npmjs.com/package/c64-ready)*
 
 Supported load types in this core: **`.d64`**, **`.prg`**, **`.crt`** (`.t64`/`.g64` are treated as disk-like when possible). Click the canvas for keyboard focus; default input mode is mixed joystick + keyboard.
 
+### Controls
+
+- **Reset** (toolbar) performs a C64 hard reset, then restarts the game the same way it was started the first time. The inserted disk stays in the drive; it does not destroy the emulator.
+- **Settings** (toolbar) sets input mode (`mixed` / `keyboard` / `joystick`), joystick port (1 or 2), and disk speed. Click the canvas once if audio is muted (browser autoplay).
+  - **Instant** (default) reads the first program out of the `.d64` directory and writes it straight into C64 memory, so a game that would take one to two minutes to load off the emulated 1541 starts in well under a second. The disk stays in the drive, so games that load further data during play still work — those transfers are warped instead (roughly 10x; gameplay itself stays at original C64 speed). Disks whose first file is not a BASIC-startable program fall back to a normal warped `LOAD"*",8,1`.
+  - **Authentic** is real 1541 timing, with no warping and no injection.
+  - Disk speed does not apply to `.t64` tapes or bare `.prg` files: there is no drive involved, so they are always written straight into memory. The program is started with `RUN` when it loads at `$0801`, and with `SYS <load address>` otherwise — which is how most machine-code tape rips start.
+- On-screen controls show on touch/narrow screens, or while editing the overlay. Desktop fullscreen with a keyboard does not show them.
+- Users with **Manage library** can **Edit overlay** (Settings): pick any C64 key or joystick control from the on-screen keyboard and drag them into place. Save writes series-folder `controls.json`.
+- The disk list **inserts** a new image into the running session (no reboot, no auto `LOAD`/`RUN`). Use this for multi-disk games.
+
+Optional overlay layout lives in a series-folder `controls.json` next to the disks:
+
+```json
+{
+	"keys": [
+		{ "id": "up", "x": 0.16, "y": 0.7 },
+		{ "id": "fire", "x": 0.88, "y": 0.82 },
+		{ "id": "runstop", "x": 0.42, "y": 0.92 }
+	]
+}
+```
+
+`x` / `y` are 0–1 fractions of the playfield. Older `{ "extraKeys": ["f1"] }` files still work (defaults plus extras). `restore` is not functional in this WASM build.
+
+| Action                                  | Permission      |
+| --------------------------------------- | --------------- |
+| `GET /api/v2/media/{id}/retro-controls` | Library access  |
+| `PUT /api/v2/media/{id}/retro-controls` | `ManageLibrary` |
+
 ## Play vs download
 
-| Action                                        | Permission                                   |
-| --------------------------------------------- | -------------------------------------------- |
-| **Play** (`GET /api/v2/media/{id}/play-file`) | Library access only (same as reading a page) |
-| **Download** (`GET /api/v2/media/{id}/file`)  | `DownloadFile`                               |
+| Action                                                     | Permission                                   |
+| ---------------------------------------------------------- | -------------------------------------------- |
+| **Play** (`GET /api/v2/media/{id}/play-file`)              | Library access only (same as reading a page) |
+| **Overlay keys** (`GET /api/v2/media/{id}/retro-controls`) | Library access only                          |
+| **Save overlay** (`PUT /api/v2/media/{id}/retro-controls`) | `ManageLibrary`                              |
+| **Download** (`GET /api/v2/media/{id}/file`)               | `DownloadFile`                               |
 
 `play-file` only allows retro extensions (defense in depth so non-download users cannot pull EPUBs/CBZs through that path).
 

@@ -19,9 +19,10 @@ export type LibrarySeriesCardData = {
 
 type Props = {
 	data: LibrarySeriesCardData
+	isRetro?: boolean
 }
 
-const LibrarySeriesCard = memo(function LibrarySeriesCard({ data }: Props) {
+const LibrarySeriesCard = memo(function LibrarySeriesCard({ data, isRetro }: Props) {
 	const containerRef = useRef<HTMLDivElement>(null)
 	const [width, setWidth] = useState<number | null>(null)
 
@@ -45,7 +46,7 @@ const LibrarySeriesCard = memo(function LibrarySeriesCard({ data }: Props) {
 		? [data.thumbnail]
 		: [data.thumbnail, ...data.media.map((m) => m.thumbnail)]
 	const bookLabel = pluralizeStat(
-		'book',
+		isRetro ? 'game' : 'book',
 		data.descendantMediaCount != null && data.descendantMediaCount > data.mediaCount
 			? data.descendantMediaCount
 			: data.mediaCount,

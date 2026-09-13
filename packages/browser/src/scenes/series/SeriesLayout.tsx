@@ -20,6 +20,9 @@ const query = graphql(`
 			library {
 				id
 				name
+				config {
+					libraryType
+				}
 			}
 			resolvedName
 			resolvedDescription

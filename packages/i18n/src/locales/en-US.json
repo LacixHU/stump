@@ -602,6 +602,7 @@
 	"libraryHeader": {
 		"tabs": {
 			"books": "Books",
+			"games": "Games",
 			"series": "Series",
 			"files": "Files"
 		}
@@ -986,7 +987,8 @@
 	},
 	"librarySeriesScene": {
 		"searchBooks": {
-			"count": "{{count}} matching books"
+			"count": "{{count}} matching books",
+			"countGames": "{{count}} matching games"
 		}
 	},
 	"seriesOverviewScene": {
@@ -999,6 +1001,7 @@
 		"tabs": {
 			"series": "Series",
 			"books": "Books",
+			"games": "Games",
 			"files": "Files"
 		},
 		"subSeries": {
@@ -2844,6 +2847,21 @@
 		"appearance": "Appearance",
 		"enterFullscreen": "Enter fullscreen",
 		"exitFullscreen": "Exit fullscreen",
+		"retro": {
+			"reset": "Reset",
+			"settings": "Settings",
+			"inputMode": "Input mode",
+			"inputModeMixed": "Mixed",
+			"inputModeKeyboard": "Keyboard",
+			"inputModeJoystick": "Joystick",
+			"joystickPort": "Joystick port",
+			"port1": "Port 1",
+			"port2": "Port 2",
+			"editOverlay": "Edit overlay",
+			"diskSpeed": "Disk speed",
+			"diskSpeedInstant": "Instant",
+			"diskSpeedAuthentic": "Authentic"
+		},
 		"addBookmark": "Add bookmark",
 		"removeBookmark": "Remove bookmark",
 		"readAloud": "Read aloud",

@@ -22,7 +22,9 @@ pub struct ImageDimensions {
 	Debug, Clone, SimpleObject, Deserialize, Serialize, PartialEq, Eq, FromJsonQueryResult,
 )]
 pub struct ImageColor {
+	#[serde(default)]
 	pub color: String,
+	#[serde(default)]
 	pub percentage: Decimal,
 }
 
@@ -38,9 +40,13 @@ pub struct ImageColor {
 	FromJsonQueryResult,
 )]
 pub struct ImageMetadata {
+	#[serde(default)]
 	pub average_color: Option<String>,
+	#[serde(default)]
 	pub colors: Vec<ImageColor>,
+	#[serde(default)]
 	pub thumbhash: Option<String>,
+	#[serde(default)]
 	pub dimensions: Option<ImageDimensions>,
 }
 

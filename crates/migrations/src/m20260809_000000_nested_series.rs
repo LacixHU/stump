@@ -6,14 +6,16 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
 	async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-		manager
-			.alter_table(
-				Table::alter()
-					.table(Series::Table)
-					.add_column(ColumnDef::new(Series::ParentSeriesId).text().null())
-					.to_owned(),
-			)
-			.await?;
+		if !manager.has_column("series", "parent_series_id").await? {
+			manager
+				.alter_table(
+					Table::alter()
+						.table(Series::Table)
+						.add_column(ColumnDef::new(Series::ParentSeriesId).text().null())
+						.to_owned(),
+				)
+				.await?;
+		}
 
 		manager
 			.create_index(

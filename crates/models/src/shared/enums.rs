@@ -364,6 +364,7 @@ pub enum LibraryViewMode {
 	db_type = "String(StringLen::None)"
 )]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[graphql(rename_items = "SCREAMING_SNAKE_CASE")]
 pub enum LibraryType {
 	Comic,
 	Manga,

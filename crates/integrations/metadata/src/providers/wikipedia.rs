@@ -46,6 +46,10 @@ impl WikipediaCoverClient {
 			return Ok(None);
 		}
 
+		if let Some(url) = self.lookup_article_cover(&cleaned).await? {
+			return Ok(Some(url));
+		}
+
 		let category = cover_category_for_platform(platform);
 		let mut file_title = self.search_cover_file(&cleaned, Some(category)).await?;
 		if file_title.is_none() {
@@ -56,6 +60,93 @@ impl WikipediaCoverClient {
 		};
 
 		self.fetch_thumb_url(&file_title).await
+	}
+
+	/// Infobox / lead images live on the article, not in Category:Video game covers.
+	async fn lookup_article_cover(&self, title: &str) -> MetadataResult<Option<String>> {
+		if let Some(url) = self.cover_from_article_title(title).await? {
+			return Ok(Some(url));
+		}
+
+		let mut hits = self.search_articles(title).await?;
+		if hits.is_empty() {
+			hits = self.search_articles(&format!("{title} video game")).await?;
+		}
+
+		for hit in hits.into_iter().take(5) {
+			if !titles_similar(title, &hit.title) {
+				continue;
+			}
+			if let Some(url) = self.cover_from_article_title(&hit.title).await? {
+				return Ok(Some(url));
+			}
+		}
+
+		Ok(None)
+	}
+
+	async fn cover_from_article_title(
+		&self,
+		title: &str,
+	) -> MetadataResult<Option<String>> {
+		let Some(summary) = self.fetch_page_summary(title).await? else {
+			return Ok(None);
+		};
+		if !is_video_game_page(&summary) {
+			return Ok(None);
+		}
+		let article = summary.title.as_deref().unwrap_or(title);
+		if !titles_similar(title, article) {
+			return Ok(None);
+		}
+		Ok(cover_url_from_summary(&summary))
+	}
+
+	async fn fetch_page_summary(
+		&self,
+		title: &str,
+	) -> MetadataResult<Option<PageSummary>> {
+		let url = summary_url(title)?;
+		let response = self
+			.http
+			.get(url)
+			.header(reqwest::header::ACCEPT, "application/json")
+			.send()
+			.await?;
+
+		if response.status() == reqwest::StatusCode::NOT_FOUND {
+			return Ok(None);
+		}
+		if !response.status().is_success() {
+			return Err(MetadataProviderError::Other(format!(
+				"Wikipedia summary HTTP {}",
+				response.status()
+			)));
+		}
+
+		Ok(Some(response.json().await?))
+	}
+
+	async fn search_articles(&self, title: &str) -> MetadataResult<Vec<SearchHit>> {
+		let url = api_url(&[
+			("action", "query"),
+			("list", "search"),
+			("srnamespace", "0"),
+			("srlimit", "5"),
+			("format", "json"),
+			("srsearch", title),
+		])?;
+		let response = self.http.get(url).send().await?;
+
+		if !response.status().is_success() {
+			return Err(MetadataProviderError::Other(format!(
+				"Wikipedia article search HTTP {}",
+				response.status()
+			)));
+		}
+
+		let body: SearchResponse = response.json().await?;
+		Ok(body.query.map(|q| q.search).unwrap_or_default())
 	}
 
 	async fn search_cover_file(
@@ -113,6 +204,10 @@ impl WikipediaCoverClient {
 			pages.into_values().find_map(|page| {
 				page.imageinfo.and_then(|infos| {
 					infos.into_iter().next().and_then(|info| {
+						let mime = info.mime.unwrap_or_default();
+						if !mime.starts_with("image/") {
+							return None;
+						}
 						info.thumburl.or(info.url).filter(|u| !u.is_empty())
 					})
 				})
@@ -124,6 +219,74 @@ impl WikipediaCoverClient {
 fn api_url(params: &[(&str, &str)]) -> MetadataResult<reqwest::Url> {
 	reqwest::Url::parse_with_params(API_URL, params)
 		.map_err(|e| MetadataProviderError::Other(e.to_string()))
+}
+
+const SUMMARY_URL: &str = "https://en.wikipedia.org/api/rest_v1/page/summary/";
+
+fn summary_url(title: &str) -> MetadataResult<reqwest::Url> {
+	let mut url = reqwest::Url::parse(SUMMARY_URL)
+		.map_err(|e| MetadataProviderError::Other(e.to_string()))?;
+	{
+		let mut segments = url.path_segments_mut().map_err(|_| {
+			MetadataProviderError::Other("invalid Wikipedia summary URL".into())
+		})?;
+		segments.pop_if_empty();
+		segments.push(&title.replace(' ', "_"));
+	}
+	Ok(url)
+}
+
+fn is_video_game_page(summary: &PageSummary) -> bool {
+	if summary
+		.page_type
+		.as_deref()
+		.is_some_and(|t| t.eq_ignore_ascii_case("disambiguation"))
+	{
+		return false;
+	}
+
+	let haystack = format!(
+		"{} {}",
+		summary.description.as_deref().unwrap_or(""),
+		summary.extract.as_deref().unwrap_or("")
+	)
+	.to_lowercase();
+
+	haystack.contains("video game")
+		|| haystack.contains("arcade game")
+		|| haystack.contains("computer game")
+}
+
+fn cover_url_from_summary(summary: &PageSummary) -> Option<String> {
+	summary
+		.originalimage
+		.as_ref()
+		.or(summary.thumbnail.as_ref())
+		.and_then(|img| img.source.clone())
+		.filter(|u| !u.is_empty())
+}
+
+fn normalize_title(s: &str) -> String {
+	s.to_lowercase()
+		.replace("mac", "mc")
+		.chars()
+		.filter(|c| c.is_ascii_alphanumeric())
+		.collect()
+}
+
+fn titles_similar(query: &str, article: &str) -> bool {
+	let q = normalize_title(query);
+	let a = normalize_title(article);
+	if q.len() < 2 || a.len() < 2 {
+		return false;
+	}
+	if a == q {
+		return true;
+	}
+	if q.len() >= 8 && (a.contains(&q) || q.contains(&a)) {
+		return true;
+	}
+	strsim::normalized_levenshtein(&q, &a) >= 0.72
 }
 
 impl Default for WikipediaCoverClient {
@@ -198,17 +361,49 @@ pub fn cover_category_for_platform(platform: Option<&str>) -> &'static str {
 	}
 }
 
+const TITLE_STOPWORDS: &[&str] = &["of", "the", "and", "a", "an", "for", "to", "in"];
+
+fn significant_title_tokens(query: &str) -> Vec<String> {
+	query
+		.to_lowercase()
+		.split_whitespace()
+		.filter(|t| t.len() > 2 && !TITLE_STOPWORDS.contains(t))
+		.map(str::to_string)
+		.collect()
+}
+
+fn is_rejected_file_title(title: &str) -> bool {
+	let t = title.to_lowercase();
+	t.ends_with(".pdf")
+		|| t.ends_with(".djvu")
+		|| t.contains("entertainer")
+		|| t.contains("magazine")
+		|| t.contains("newsletter")
+}
+
 fn pick_best_file_title(query: &str, hits: Vec<SearchHit>) -> Option<String> {
 	if hits.is_empty() {
 		return None;
 	}
-	let q = query.to_lowercase();
-	let tokens: Vec<&str> = q.split_whitespace().filter(|t| t.len() > 1).collect();
+	let tokens = significant_title_tokens(query);
+	if tokens.is_empty() {
+		return None;
+	}
 	hits.into_iter()
 		.filter(|h| h.ns == 6 || h.title.to_lowercase().starts_with("file:"))
+		.filter(|h| !is_rejected_file_title(&h.title))
+		.filter(|h| {
+			let title = h.title.to_lowercase();
+			tokens.iter().all(|t| title.contains(t))
+		})
 		.max_by_key(|h| {
 			let title = h.title.to_lowercase();
-			tokens.iter().filter(|t| title.contains(**t)).count()
+			let mut score =
+				tokens.iter().filter(|t| title.contains(t.as_str())).count() * 10;
+			if title.contains("cover") {
+				score += 3;
+			}
+			score
 		})
 		.map(|h| h.title)
 }
@@ -308,6 +503,22 @@ struct SearchHit {
 }
 
 #[derive(Debug, Deserialize)]
+struct PageSummary {
+	#[serde(rename = "type")]
+	page_type: Option<String>,
+	title: Option<String>,
+	description: Option<String>,
+	extract: Option<String>,
+	thumbnail: Option<SummaryImage>,
+	originalimage: Option<SummaryImage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SummaryImage {
+	source: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 struct ImageInfoResponse {
 	query: Option<ImageInfoQuery>,
 }
@@ -326,6 +537,7 @@ struct ImagePage {
 struct ImageInfo {
 	url: Option<String>,
 	thumburl: Option<String>,
+	mime: Option<String>,
 }
 
 #[cfg(test)]
@@ -372,5 +584,62 @@ mod tests {
 			pick_best_file_title("Uridium", hits).as_deref(),
 			Some("File:Uridium cover art (Commodore 64).jpg")
 		);
+	}
+
+	#[test]
+	fn test_pick_rejects_magazine_pdf() {
+		let hits = vec![
+			SearchHit {
+				ns: 6,
+				title: "File:Computer Entertainer 5-11.pdf".into(),
+			},
+			SearchHit {
+				ns: 6,
+				title: "File:Unrelated cover video game.png".into(),
+			},
+		];
+		assert!(pick_best_file_title("Wizard of Wor", hits).is_none());
+	}
+
+	#[test]
+	fn test_pick_requires_significant_tokens() {
+		let hits = vec![SearchHit {
+			ns: 6,
+			title: "File:Wizard of Wor cover.jpg".into(),
+		}];
+		assert_eq!(
+			pick_best_file_title("Wizard of Wor", hits).as_deref(),
+			Some("File:Wizard of Wor cover.jpg")
+		);
+	}
+
+	#[test]
+	fn test_titles_similar_handles_misspellings() {
+		assert!(titles_similar("Wizard of Wor", "Wizard of Wor"));
+		assert!(titles_similar(
+			"Zack MacKraken and the alien mindbenders",
+			"Zak McKracken and the Alien Mindbenders"
+		));
+		assert!(!titles_similar("Zack", "Zack Snyder"));
+	}
+
+	#[test]
+	fn test_is_video_game_page() {
+		assert!(is_video_game_page(&PageSummary {
+			page_type: Some("standard".into()),
+			title: Some("Wizard of Wor".into()),
+			description: Some("1981 video game".into()),
+			extract: None,
+			thumbnail: None,
+			originalimage: None,
+		}));
+		assert!(!is_video_game_page(&PageSummary {
+			page_type: Some("disambiguation".into()),
+			title: Some("Wor".into()),
+			description: None,
+			extract: Some("Wor may refer to".into()),
+			thumbnail: None,
+			originalimage: None,
+		}));
 	}
 }

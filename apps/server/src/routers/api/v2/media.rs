@@ -4,7 +4,7 @@ use axum::{
 	middleware,
 	response::IntoResponse,
 	routing::get,
-	Extension, Router,
+	Extension, Json, Router,
 };
 use graphql::data::AuthContext;
 use models::{
@@ -29,6 +29,12 @@ use crate::{
 
 pub(crate) fn mount(app_state: AppState) -> Router<AppState> {
 	Router::new()
+		.route(
+			"/media/{id}/retro-controls",
+			get(get_media_retro_controls)
+				.put(put_media_retro_controls)
+				.post(put_media_retro_controls),
+		)
 		.nest(
 			"/media/{id}",
 			Router::new()
@@ -58,6 +64,25 @@ pub(crate) async fn get_media_play_file(
 	headers: HeaderMap,
 ) -> APIResult<impl IntoResponse> {
 	serve_media::serve_media_play_file(req, headers, ctx.conn.as_ref(), id).await
+}
+
+/// Optional series-folder overlay keys for the retro player (library access).
+pub(crate) async fn get_media_retro_controls(
+	Path(id): Path<String>,
+	State(ctx): State<AppState>,
+	Extension(req): Extension<AuthContext>,
+) -> APIResult<impl IntoResponse> {
+	serve_media::serve_retro_controls(req, ctx.conn.as_ref(), id).await
+}
+
+/// Save series-folder overlay layout (ManageLibrary).
+pub(crate) async fn put_media_retro_controls(
+	Path(id): Path<String>,
+	State(ctx): State<AppState>,
+	Extension(req): Extension<AuthContext>,
+	Json(body): Json<serve_media::RetroControlsBody>,
+) -> APIResult<impl IntoResponse> {
+	serve_media::save_retro_controls(req, ctx.conn.as_ref(), id, body).await
 }
 
 pub(crate) async fn get_media_thumbnail(

@@ -1,7 +1,7 @@
 import { formatBytesSeparate, usePrefetchFiles } from '@stump/client'
-import { UserPermission } from '@stump/graphql'
+import { LibraryType, UserPermission } from '@stump/graphql'
 import { formatHumanDurationSeparate, useLocaleContext } from '@stump/i18n'
-import { BookCheck, BookOpen, Clock, HardDrive, Layers } from 'lucide-react'
+import { BookCheck, BookOpen, Clock, Gamepad2, HardDrive, Layers } from 'lucide-react'
 import { useState } from 'react'
 import { useLocation } from 'react-router'
 
@@ -34,6 +34,7 @@ export default function LibraryHeader() {
 	const canAccessFiles = checkPermission(UserPermission.FileExplorer)
 	const canManageLibrary = checkPermission(UserPermission.ManageLibrary)
 	const hideSeriesView = config?.hideSeriesView ?? false
+	const isRetro = config?.libraryType === LibraryType.Retro
 
 	const formattedSize = stats?.totalBytes ? formatBytesSeparate(stats.totalBytes) : null
 	const formattedTime = stats?.totalReadingTimeSeconds
@@ -53,7 +54,7 @@ export default function LibraryHeader() {
 			: []),
 		{
 			isActive: !!location.pathname.match(/\/libraries\/[^/]+\/books(\/.*)?$/),
-			label: t('libraryHeader.tabs.books'),
+			label: t(isRetro ? 'libraryHeader.tabs.games' : 'libraryHeader.tabs.books'),
 			onHover: () => prefetchBooks(id),
 			to: 'books',
 		},
@@ -82,7 +83,7 @@ export default function LibraryHeader() {
 					: []),
 				{
 					key: 'inProgressBooks',
-					icon: BookOpen,
+					icon: isRetro ? Gamepad2 : BookOpen,
 					value: stats.inProgressBooks,
 				},
 				{

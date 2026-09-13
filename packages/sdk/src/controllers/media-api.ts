@@ -39,6 +39,23 @@ export class MediaAPI extends APIBase {
 	}
 
 	/**
+	 * URL for optional series-folder overlay keys (`controls.json`) for the retro player
+	 */
+	retroControlsURL(id: string): string {
+		return this.withServiceURL(mediaURL(`/${id}/retro-controls`))
+	}
+
+	async saveRetroControls(
+		id: string,
+		keys: Array<{ id: string; x: number; y: number }>,
+	): Promise<{ keys: Array<{ id: string; x: number; y: number }> }> {
+		const { data } = await this.axios.post<{
+			keys: Array<{ id: string; x: number; y: number }>
+		}>(mediaURL(`/${id}/retro-controls`), { keys })
+		return data
+	}
+
+	/**
 	 * The URL for fetching a page of a media entity
 	 */
 	bookPageURL(mediaID: string, page: number, params?: ScaledDimensionResizeInput): string {

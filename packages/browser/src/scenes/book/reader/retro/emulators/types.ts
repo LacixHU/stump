@@ -1,5 +1,7 @@
 import type { RetroPlatform } from '@stump/client'
 
+export type RetroDiskSpeed = 'authentic' | 'instant'
+
 export type EmulatorMountOptions = {
 	canvas: HTMLCanvasElement
 	image: ArrayBuffer
@@ -7,7 +9,11 @@ export type EmulatorMountOptions = {
 	fileName?: string
 	/** Optional firmware buffers keyed by expected filename (Amiga) */
 	firmware?: Record<string, ArrayBuffer>
+	/** Initial disk/tape speed preference; decides whether loading is emulated or skipped */
+	diskSpeed?: RetroDiskSpeed
 }
+
+export type RetroInputMode = 'mixed' | 'keyboard' | 'joystick'
 
 export type RetroEmulatorHandle = {
 	/** Stop audio/raf and free resources */
@@ -16,8 +22,13 @@ export type RetroEmulatorHandle = {
 	saveState?: () => Promise<ArrayBuffer | null>
 	/** Optional: restore save state */
 	loadState?: (data: ArrayBuffer) => Promise<void>
-	/** Optional: hot-swap disk image; may reboot */
-	mountImage?: (image: ArrayBuffer) => Promise<void>
+	/** Optional: insert a new disk/tape without destroying the session */
+	mountImage?: (image: ArrayBuffer, fileName?: string) => Promise<void>
+	/** Optional: hard-reset the machine (disk stays inserted) */
+	reset?: () => void
+	setInputMode?: (mode: RetroInputMode) => void
+	setJoystickPort?: (port: 1 | 2) => void
+	setDiskSpeed?: (speed: RetroDiskSpeed) => void
 }
 
 export type RetroEmulatorModule = {

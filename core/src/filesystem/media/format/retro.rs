@@ -198,6 +198,222 @@ pub fn find_sidecar_cover(media_path: &Path) -> Option<PathBuf> {
 	None
 }
 
+pub const RETRO_CONTROLS_FILENAME: &str = "controls.json";
+pub const RETRO_CONTROLS_MAX_BYTES: u64 = 16 * 1024;
+
+const RETRO_CONTROL_EXTRA_KEYS: &[&str] = &[
+	"commodore",
+	"ctrl",
+	"f1",
+	"f3",
+	"f5",
+	"f7",
+	"restore",
+	"instdel",
+	"home",
+	"shift",
+];
+
+const RETRO_OVERLAY_SPECIAL_IDS: &[&str] = &[
+	"up",
+	"down",
+	"left",
+	"right",
+	"fire",
+	"runstop",
+	"space",
+	"return",
+	"commodore",
+	"ctrl",
+	"shift",
+	"shiftright",
+	"restore",
+	"instdel",
+	"home",
+	"f1",
+	"f2",
+	"f3",
+	"f4",
+	"f5",
+	"f6",
+	"f7",
+	"f8",
+	"pound",
+	"at",
+	"star",
+	"plus",
+	"minus",
+	"equals",
+	"colon",
+	"semicolon",
+	"comma",
+	"period",
+	"slash",
+	"arrowleft",
+	"arrowup",
+	"cursorup",
+	"cursordown",
+	"cursorleft",
+	"cursorright",
+];
+
+const MAX_OVERLAY_KEYS: usize = 80;
+
+fn is_overlay_key_id(id: &str) -> bool {
+	if id.len() == 1 {
+		let b = id.as_bytes()[0];
+		return b.is_ascii_lowercase() || b.is_ascii_digit();
+	}
+	RETRO_OVERLAY_SPECIAL_IDS.contains(&id)
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct RetroOverlayKey {
+	pub id: String,
+	pub x: f64,
+	pub y: f64,
+}
+
+fn json_f64(value: &serde_json::Value) -> Option<f64> {
+	value
+		.as_f64()
+		.or_else(|| value.as_i64().map(|n| n as f64))
+		.or_else(|| value.as_u64().map(|n| n as f64))
+}
+
+fn overlay_key(id: &str, x: f64, y: f64) -> RetroOverlayKey {
+	RetroOverlayKey {
+		id: id.to_string(),
+		x,
+		y,
+	}
+}
+
+fn default_base_overlay() -> Vec<RetroOverlayKey> {
+	vec![
+		overlay_key("up", 0.16, 0.70),
+		overlay_key("left", 0.06, 0.82),
+		overlay_key("right", 0.26, 0.82),
+		overlay_key("down", 0.16, 0.94),
+		overlay_key("fire", 0.88, 0.82),
+		overlay_key("runstop", 0.42, 0.92),
+		overlay_key("space", 0.56, 0.92),
+		overlay_key("return", 0.70, 0.92),
+	]
+}
+
+/// Series-folder `controls.json` next to the disk/tape (same directory as the media file).
+///
+/// Canonicalizes and requires the file stay under the media parent (rejects symlink escape).
+pub fn find_series_controls_json(media_path: &Path) -> Option<PathBuf> {
+	let parent = media_path.parent()?;
+	let candidate = parent.join(RETRO_CONTROLS_FILENAME);
+	if !candidate.is_file() {
+		return None;
+	}
+
+	let parent_canon = parent.canonicalize().ok()?;
+	let file_canon = candidate.canonicalize().ok()?;
+	if file_canon.starts_with(&parent_canon) {
+		Some(file_canon)
+	} else {
+		None
+	}
+}
+
+/// Parse `{ "extraKeys": ["f1", ...] }` and keep allowlisted unique keys (lowercase).
+pub fn parse_retro_extra_keys(bytes: &[u8]) -> Vec<String> {
+	let Ok(value) = serde_json::from_slice::<serde_json::Value>(bytes) else {
+		return Vec::new();
+	};
+	let Some(arr) = value.get("extraKeys").and_then(|v| v.as_array()) else {
+		return Vec::new();
+	};
+
+	let mut out = Vec::new();
+	for item in arr {
+		let Some(raw) = item.as_str() else {
+			continue;
+		};
+		let key = raw.to_ascii_lowercase();
+		if RETRO_CONTROL_EXTRA_KEYS.contains(&key.as_str())
+			&& !out.iter().any(|k| k == &key)
+		{
+			out.push(key);
+		}
+	}
+	out
+}
+
+/// Write target for series-folder `controls.json` (parent of the media file).
+pub fn series_controls_json_write_path(media_path: &Path) -> Option<PathBuf> {
+	let parent = media_path.parent()?;
+	if let Ok(parent_canon) = parent.canonicalize() {
+		return Some(parent_canon.join(RETRO_CONTROLS_FILENAME));
+	}
+	if parent.is_dir() {
+		return Some(parent.join(RETRO_CONTROLS_FILENAME));
+	}
+	None
+}
+
+/// Clamp and allowlist overlay key placements.
+pub fn sanitize_retro_overlay_keys(keys: &[RetroOverlayKey]) -> Vec<RetroOverlayKey> {
+	let mut out = Vec::new();
+	for key in keys.iter().take(MAX_OVERLAY_KEYS) {
+		let id = key.id.to_ascii_lowercase();
+		if !is_overlay_key_id(&id) {
+			continue;
+		}
+		if out.iter().any(|k: &RetroOverlayKey| k.id == id) {
+			continue;
+		}
+		out.push(RetroOverlayKey {
+			id,
+			x: key.x.clamp(0.0, 1.0),
+			y: key.y.clamp(0.0, 1.0),
+		});
+	}
+	out
+}
+
+/// Parse overlay layout from `controls.json`.
+///
+/// Prefers `{ "keys": [{ "id", "x", "y" }] }`. Falls back to default d-pad/face
+/// plus `{ "extraKeys": [...] }` for older files.
+pub fn parse_retro_controls(bytes: &[u8]) -> Vec<RetroOverlayKey> {
+	let Ok(value) = serde_json::from_slice::<serde_json::Value>(bytes) else {
+		return Vec::new();
+	};
+
+	if let Some(arr) = value.get("keys").and_then(|v| v.as_array()) {
+		let parsed: Vec<RetroOverlayKey> = arr
+			.iter()
+			.filter_map(|item| {
+				let id = item.get("id")?.as_str()?.to_string();
+				let x = json_f64(item.get("x")?)?;
+				let y = json_f64(item.get("y")?)?;
+				Some(RetroOverlayKey { id, x, y })
+			})
+			.collect();
+		return sanitize_retro_overlay_keys(&parsed);
+	}
+
+	let extras = parse_retro_extra_keys(bytes);
+	if extras.is_empty() {
+		return Vec::new();
+	}
+
+	let mut keys = default_base_overlay();
+	for (i, id) in extras.into_iter().enumerate() {
+		if keys.iter().any(|k| k.id == id) {
+			continue;
+		}
+		keys.push(overlay_key(&id, 0.12 + (i as f64) * 0.12, 0.58));
+	}
+	sanitize_retro_overlay_keys(&keys)
+}
+
 pub struct RetroProcessor;
 
 impl FileProcessor for RetroProcessor {
@@ -456,5 +672,76 @@ mod tests {
 		let named = dir.path().join("cover.jpg");
 		std::fs::write(&named, b"jpg").unwrap();
 		assert_eq!(find_sidecar_cover(&media), Some(named));
+	}
+
+	#[test]
+	fn test_find_series_controls_json_sibling_only() {
+		let dir = tempfile::tempdir().unwrap();
+		let game = dir.path().join("Last Ninja");
+		std::fs::create_dir(&game).unwrap();
+		let media = game.join("Side A.d64");
+		std::fs::write(&media, b"disk").unwrap();
+		assert!(find_series_controls_json(&media).is_none());
+
+		let controls = game.join("controls.json");
+		std::fs::write(&controls, br#"{"extraKeys":["f1"]}"#).unwrap();
+		let found = find_series_controls_json(&media).unwrap();
+		assert_eq!(found, controls.canonicalize().unwrap());
+
+		let outside = dir.path().join("controls.json");
+		std::fs::write(&outside, br#"{"extraKeys":["ctrl"]}"#).unwrap();
+		std::fs::remove_file(&controls).unwrap();
+		assert!(find_series_controls_json(&media).is_none());
+	}
+
+	#[test]
+	fn test_parse_retro_extra_keys_allowlist() {
+		assert!(parse_retro_extra_keys(b"not json").is_empty());
+		assert!(parse_retro_extra_keys(br#"{"extraKeys":"f1"}"#).is_empty());
+		assert_eq!(
+			parse_retro_extra_keys(
+				br#"{"extraKeys":["F1","nope","ctrl","f1","commodore"]}"#
+			),
+			vec![
+				"f1".to_string(),
+				"ctrl".to_string(),
+				"commodore".to_string()
+			]
+		);
+	}
+
+	#[test]
+	fn test_parse_retro_controls_keys_and_fallback() {
+		assert!(parse_retro_controls(b"nope").is_empty());
+		let positioned = parse_retro_controls(
+			br#"{"keys":[{"id":"Fire","x":1.5,"y":-1},{"id":"nope","x":0.2,"y":0.2}]}"#,
+		);
+		assert_eq!(
+			positioned,
+			vec![RetroOverlayKey {
+				id: "fire".to_string(),
+				x: 1.0,
+				y: 0.0,
+			}]
+		);
+
+		let fallback = parse_retro_controls(br#"{"extraKeys":["f1"]}"#);
+		assert!(fallback.iter().any(|k| k.id == "up"));
+		assert!(fallback.iter().any(|k| k.id == "f1"));
+
+		let letters = parse_retro_controls(br#"{"keys":[{"id":"a","x":0.2,"y":0.3}]}"#);
+		assert_eq!(letters[0].id, "a");
+	}
+
+	#[test]
+	fn test_series_controls_json_write_path() {
+		let dir = tempfile::tempdir().unwrap();
+		let media = dir.path().join("game.d64");
+		std::fs::write(&media, b"disk").unwrap();
+		let path = series_controls_json_write_path(&media).unwrap();
+		assert_eq!(
+			path,
+			dir.path().canonicalize().unwrap().join("controls.json")
+		);
 	}
 }

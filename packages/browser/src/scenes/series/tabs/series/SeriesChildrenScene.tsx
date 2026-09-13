@@ -2,6 +2,7 @@ import { PREFETCH_STALE_TIME, useGraphQL, useSDK } from '@stump/client'
 import { Heading, Text, usePrevious } from '@stump/components'
 import {
 	InterfaceLayout,
+	LibraryType,
 	OrderDirection,
 	SeriesFilterInput,
 	SeriesModelOrdering,
@@ -157,6 +158,7 @@ function getQueryKey(
 export default function SeriesChildrenScene() {
 	const { t } = useLocaleContext()
 	const { series } = useSeriesContext()
+	const isRetro = series.library.config?.libraryType === LibraryType.Retro
 	const {
 		filters: seriesFilters,
 		ordering,
@@ -296,7 +298,7 @@ export default function SeriesChildrenScene() {
 								renderItem={(index) => {
 									if (index < childSeries.length) {
 										const child = childSeries[index]!
-										return <LibrarySeriesCard key={child.id} data={child} />
+										return <LibrarySeriesCard key={child.id} data={child} isRetro={isRetro} />
 									}
 									const book = books[index - childSeries.length]!
 									return <BookCard key={book.id} fragment={book} />

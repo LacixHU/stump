@@ -18,4 +18,10 @@ export async function loadEmulator(platform: RetroPlatform): Promise<RetroEmulat
 	}
 }
 
-export type { RetroEmulatorHandle, RetroEmulatorModule, EmulatorMountOptions } from './types'
+export type {
+	EmulatorMountOptions,
+	RetroDiskSpeed,
+	RetroEmulatorHandle,
+	RetroEmulatorModule,
+	RetroInputMode,
+} from './types'

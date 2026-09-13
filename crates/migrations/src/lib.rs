@@ -22,6 +22,7 @@ mod m20260311_000000_scheduled_jobs_redesign;
 mod m20260404_185829_add_name_indexes;
 mod m20260406_000000_add_kobo_sync_sessions;
 mod m20260505_231341_jwt_secrets;
+mod m20260513_000000_add_series_parent_id;
 mod m20260519_192218_reading_sessions_v2;
 mod m20260523_220757_rename_registered_reading_devices;
 mod m20260525_165704_roundness_preference;
@@ -62,6 +63,7 @@ impl MigratorTrait for Migrator {
 			Box::new(m20260404_185829_add_name_indexes::Migration),
 			Box::new(m20260406_000000_add_kobo_sync_sessions::Migration),
 			Box::new(m20260505_231341_jwt_secrets::Migration),
+			Box::new(m20260513_000000_add_series_parent_id::Migration),
 			Box::new(m20260519_192218_reading_sessions_v2::Migration),
 			Box::new(m20260523_220757_rename_registered_reading_devices::Migration),
 			Box::new(m20260525_165704_roundness_preference::Migration),

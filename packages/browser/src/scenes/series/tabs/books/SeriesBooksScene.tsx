@@ -1,6 +1,12 @@
 import { PREFETCH_STALE_TIME, useGraphQL, useSDK } from '@stump/client'
 import { usePrevious } from '@stump/components'
-import { graphql, InterfaceLayout, MediaFilterInput, MediaOrderBy } from '@stump/graphql'
+import {
+	graphql,
+	InterfaceLayout,
+	LibraryType,
+	MediaFilterInput,
+	MediaOrderBy,
+} from '@stump/graphql'
 import { useQueryClient } from '@tanstack/react-query'
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { Helmet } from 'react-helmet'
@@ -160,6 +166,7 @@ function getQueryKey(
 
 function SeriesBooksScene() {
 	const { series } = useSeriesContext()
+	const isRetro = series.library.config?.libraryType === LibraryType.Retro
 	const {
 		filters: mediaFilters,
 		ordering,
@@ -333,13 +340,21 @@ function SeriesBooksScene() {
 								<GenericEmptyState
 									title={
 										Object.keys(filters || {}).length > 0
-											? 'No books match your search'
-											: "It doesn't look like there are any books here"
+											? isRetro
+												? 'No games match your search'
+												: 'No books match your search'
+											: isRetro
+												? "It doesn't look like there are any games here"
+												: "It doesn't look like there are any books here"
 									}
 									subtitle={
 										Object.keys(filters || {}).length > 0
-											? 'Try removing some filters to see more books'
-											: 'Do you have any books in your library?'
+											? isRetro
+												? 'Try removing some filters to see more games'
+												: 'Try removing some filters to see more books'
+											: isRetro
+												? 'Do you have any games in your library?'
+												: 'Do you have any books in your library?'
 									}
 								/>
 							</div>
