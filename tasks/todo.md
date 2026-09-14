@@ -643,3 +643,58 @@ and both touch input surfaces were hard-wired to the C64.
 - JSSpeccy is GPL-3.0 in an MIT repo. It is vendored unmodified with its licence next to it,
   and nothing but `spectrum.ts` touches it, but that is a real constraint on redistributing a
   Stump build and on upstreaming this branch.
+
+---
+
+# Fix: C64 player silent
+
+Two independent reasons the C64 could play without a sound, both of them in how the audio is
+reached rather than in the emulation. The SID was rendering correctly the whole time.
+
+## 1. AudioWorklet does not exist off a secure origin
+
+`AudioWorklet` is a secure-context feature. Stump runs with `tls_enabled = false`, so the
+worklet exists at `http://localhost:10801` and nowhere else -- open the same server by IP or
+machine name, which is how every other device on the LAN reaches it, and `ctx.audioWorklet`
+is `undefined`. c64-ready's `AudioEngine.init()` wraps everything in a `try/catch` that
+"silently degrades", so `addModule` throwing left `ready = false`, no node, no error, and a
+perfectly running picture with no sound at all -- for every game.
+
+- [x] `c64.ts`: when the page cannot have a worklet, pull the SID through a
+      `ScriptProcessorNode` instead. Deprecated, main-thread, and exactly what c64.js did
+      before worklets existed -- but it has no secure-context requirement.
+- [x] The context is opened at 44100, the rate c64-ready already tells the SID to render at,
+      so the two never have to agree about anything.
+- Scope: the capability is checked, not the failure. A worklet that exists but fails to load
+  (a 404, say) still ends in silence; that has never happened here and the check stays honest
+  about what it is testing.
+- The Spectrum is unaffected: JSSpeccy uses a `ScriptProcessorNode` already.
+
+## 2. Nothing unlocked the audio for a keyboard-only session
+
+The `AudioContext` is created while the emulator boots, which is not a user gesture, so it is
+born `suspended` whenever the page has no sticky activation -- opening the player URL
+directly, or reloading on it. Only `pointerdown` was listened for, and a C64 is played on the
+keyboard, so a session that never happened to click stayed silent for as long as it lasted.
+
+- [x] `c64.ts` and `spectrum.ts`: unlock on `keydown` as well as `pointerdown`
+- [x] Skip the retry loop once the context is running, so a key press per frame does not
+      start a fresh 2 s prime loop each time
+
+## Verified (headless Chrome over CDP, real modules, real disks)
+
+| scenario                        | before                                    | after                                                   |
+| ------------------------------- | ----------------------------------------- | ------------------------------------------------------- |
+| `http://<lan-ip>`, click first  | `ready=false`, 0 samples out, SID at 0.37 | 300 pulls, 116 carrying audio, peak 0.52                |
+| `http://localhost`, click first | 117 worklet feeds with audio              | unchanged; fallback never engages                       |
+| keyboard only, no click ever    | context `suspended`, 0 samples out        | first key press starts it, 108 of 150 pulls carry audio |
+
+- `jest src/scenes/book/reader/retro` -- 68 passed, 4 suites. Lint and types clean.
+- Also checked and clean: C64 -> Spectrum -> C64 in one page (each closes its own context),
+  two overlapping `create()` calls, worklet and wasm served 200 from `/retro/c64/`.
+
+## Not a bug (found while hunting)
+
+- **Wizard of Wor goes quiet ~10 s in.** The SID's own buffer is zero from then on, and the
+  stock c64-ready player does the same with that disk, so it is the cracktro's tune ending.
+  Uridium plays continuously for 100 s+.

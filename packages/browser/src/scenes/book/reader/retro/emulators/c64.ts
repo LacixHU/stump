@@ -56,6 +56,10 @@ const KEYBOARD_DRAIN_TIMEOUT_MS = 2000
 const AUDIO_READY_TIMEOUT_MS = 5000
 const AUDIO_PRIME_ATTEMPTS = 8
 const AUDIO_PRIME_INTERVAL_MS = 250
+/** What c64-ready asks its own AudioContext for, and what it tells the SID to render at. */
+const AUDIO_SAMPLE_RATE = 44100
+/** The SID's circular buffer, and so the largest chunk a pull can answer with. */
+const SID_BUFFER_SAMPLES = 4096
 
 type FrameBufferLike = { width: number; height: number; data: Uint8Array; timestamp: number }
 
@@ -71,6 +75,7 @@ type EmulatorHost = {
 	ramRead: (addr: number) => number
 	cpuRead: (addr: number) => number
 	cpuWrite: (addr: number, value: number) => void
+	getSidBuffer: () => Float32Array | null
 	wasm?: { exports?: { c1541_getStatus?: () => number } }
 }
 
@@ -182,6 +187,51 @@ function waitUntil(predicate: () => boolean, timeoutMs: number): Promise<boolean
 }
 
 /**
+ * Whether this page is allowed an AudioWorklet at all.
+ *
+ * Worklets are a secure-context feature, so on a Stump served over plain HTTP they exist
+ * at `localhost` and nowhere else — reach the same server by IP or machine name, which is
+ * how every other device on the LAN reaches it, and `audioWorklet` is simply not there.
+ * c64-ready catches the failure and plays on in silence, so we have to notice for it.
+ */
+function canUseAudioWorklet(): boolean {
+	return typeof AudioContext !== 'undefined' && 'audioWorklet' in AudioContext.prototype
+}
+
+/**
+ * Pull the SID through a ScriptProcessorNode instead of the worklet.
+ *
+ * Deprecated, and it runs on the main thread — but it carries no secure-context
+ * requirement, and reading the SID's buffer from it is exactly what c64.js did before
+ * worklets existed. The context is asked for the rate the SID is already rendering at, so
+ * neither side has to be told about the other.
+ */
+function createSidPump(host: EmulatorHost): { resume: () => void; destroy: () => void } {
+	const context = new AudioContext({ sampleRate: AUDIO_SAMPLE_RATE })
+	const node = context.createScriptProcessor(SID_BUFFER_SAMPLES, 0, 1)
+
+	node.onaudioprocess = (event) => {
+		const output = event.outputBuffer.getChannelData(0)
+		const samples = host.getSidBuffer()
+		if (samples && samples.length >= output.length) {
+			output.set(samples.subarray(0, output.length))
+		} else {
+			output.fill(0)
+		}
+	}
+	node.connect(context.destination)
+
+	return {
+		resume: () => void context.resume().catch(() => undefined),
+		destroy: () => {
+			node.onaudioprocess = null
+			node.disconnect()
+			void context.close().catch(() => undefined)
+		},
+	}
+}
+
+/**
  * C64 emulator via c64-ready (WASM, MIT; based on c64.js / lvllvl).
  * Fully dynamic import so React/main bundle never share its graph.
  */
@@ -233,6 +283,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	let host: EmulatorHost | null = null
 	let frameRaf = 0
 	let forceWarp = false
+	let sidPump: { resume: () => void; destroy: () => void } | null = null
 
 	const isDriveBusy = () => host?.wasm?.exports?.c1541_getStatus?.() === DRIVE_BUSY
 
@@ -324,7 +375,18 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		}
 	}
 
+	/**
+	 * Any gesture lifts the autoplay block, but only a pointer was ever listened for
+	 * — and a C64 is played on the keyboard. Open the player straight on its URL, or
+	 * reload it there, and a session that never happens to click stays silent for as
+	 * long as it lasts.
+	 */
 	const unlockAudio = () => {
+		if (sidPump) {
+			sidPump.resume()
+			return
+		}
+		if (player.audio.ready && !player.audio.suspended) return
 		void primeAudio()
 	}
 
@@ -335,6 +397,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	}
 
 	window.addEventListener('pointerdown', unlockAudio, true)
+	window.addEventListener('keydown', unlockAudio, true)
 	window.addEventListener('keydown', swallowKeyRepeat, true)
 	canvas.addEventListener('pointerdown', unlockAudio)
 
@@ -343,7 +406,11 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		await autostart(program)
 	}
 	renderer.hideLoader(0)
-	await player.audio.init().catch(() => undefined)
+	if (canUseAudioWorklet()) {
+		await player.audio.init().catch(() => undefined)
+	} else if (host) {
+		sidPump = createSidPump(host)
+	}
 	unlockAudio()
 	player.setInputMode('mixed')
 	player.setFastForwardSpeed(100)
@@ -351,8 +418,11 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	return {
 		destroy: () => {
 			window.removeEventListener('pointerdown', unlockAudio, true)
+			window.removeEventListener('keydown', unlockAudio, true)
 			window.removeEventListener('keydown', swallowKeyRepeat, true)
 			canvas.removeEventListener('pointerdown', unlockAudio)
+			sidPump?.destroy()
+			sidPump = null
 			void player.destroy()
 		},
 		saveState: async () => {

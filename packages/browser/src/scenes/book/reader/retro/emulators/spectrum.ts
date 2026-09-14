@@ -355,7 +355,13 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	// Alt-tabbing away mid-jump must not leave the key down for the rest of the session.
 	const onBlur = () => releaseAll()
 
+	/**
+	 * Any gesture lifts the autoplay block, and a Spectrum is played on the keyboard:
+	 * a session that reaches the player without ever clicking would otherwise stay
+	 * silent for as long as it lasts.
+	 */
 	const unlockAudio = () => {
+		if (audioContext?.state === 'running') return
 		void audioContext?.resume().catch(() => undefined)
 	}
 
@@ -363,6 +369,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	window.addEventListener('keyup', onKeyUp)
 	window.addEventListener('blur', onBlur)
 	window.addEventListener('pointerdown', unlockAudio, true)
+	window.addEventListener('keydown', unlockAudio, true)
 
 	const blobUrls: string[] = []
 
@@ -402,6 +409,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			window.removeEventListener('keyup', onKeyUp)
 			window.removeEventListener('blur', onBlur)
 			window.removeEventListener('pointerdown', unlockAudio, true)
+			window.removeEventListener('keydown', unlockAudio, true)
 			restoreAudioContext()
 			emulator.exit()
 			host.remove()
