@@ -114,13 +114,22 @@ impl WikipediaCoverClient {
 			.send()
 			.await?;
 
-		if response.status() == reqwest::StatusCode::NOT_FOUND {
+		let status = response.status();
+		// Wikipedia rejects titles it considers malformed with 400/403 rather than 404
+		// (e.g. a stem that still carries a `[Sir 13]` release tag). None of those mean
+		// "retry" -- they mean this candidate simply has no page. 429 is the exception:
+		// it is a client error we *do* want to surface as a failure.
+		if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+			return Err(MetadataProviderError::Other(
+				"Wikipedia summary HTTP 429 (rate limited)".to_string(),
+			));
+		}
+		if status.is_client_error() {
 			return Ok(None);
 		}
-		if !response.status().is_success() {
+		if !status.is_success() {
 			return Err(MetadataProviderError::Other(format!(
-				"Wikipedia summary HTTP {}",
-				response.status()
+				"Wikipedia summary HTTP {status}"
 			)));
 		}
 
@@ -337,8 +346,34 @@ pub async fn download_cover_bytes(url: &str) -> MetadataResult<Vec<u8>> {
 	Ok(response.bytes().await?.to_vec())
 }
 
+/// Remove bracketed release-group / dump tags from a filename stem, e.g. the
+/// `[Sir 13]` in `Operation Wolf [Sir 13]` or the `(1988)(Ocean)` in TOSEC-style
+/// names. These are never part of the real title and derail every search.
+fn strip_release_tags(raw: &str) -> String {
+	let mut out = String::with_capacity(raw.len());
+	let mut depth = 0usize;
+	for c in raw.chars() {
+		match c {
+			'[' | '(' | '{' => depth += 1,
+			']' | ')' | '}' => depth = depth.saturating_sub(1),
+			_ if depth == 0 => out.push(c),
+			_ => {},
+		}
+	}
+	out
+}
+
 pub fn sanitize_game_title(raw: &str) -> String {
-	let mut s = raw.replace('_', " ").replace('-', " ");
+	// Guard against a name that is *entirely* a tag: fall back to treating the
+	// brackets as plain separators rather than returning nothing.
+	let stripped = strip_release_tags(raw);
+	let base = if stripped.trim().len() >= 2 {
+		stripped
+	} else {
+		raw.replace(['[', ']', '(', ')', '{', '}'], " ")
+	};
+
+	let mut s = base.replace(['_', '-'], " ");
 	for suffix in [
 		" side a", " side b", " side 1", " side 2", " disk 1", " disk 2", " disk 3",
 		" disc 1", " disc 2", " tape 1", " tape 2",
@@ -549,6 +584,31 @@ mod tests {
 		assert_eq!(sanitize_game_title("Uridium_Side_A"), "Uridium");
 		assert_eq!(sanitize_game_title("Elite disk 1"), "Elite");
 		assert_eq!(sanitize_game_title("Last Ninja"), "Last Ninja");
+	}
+
+	#[test]
+	fn test_sanitize_strips_release_tags() {
+		// The tag that made the Operation Wolf lookup fail outright
+		assert_eq!(
+			sanitize_game_title("Operation Wolf [Sir 13]"),
+			"Operation Wolf"
+		);
+		// TOSEC-style names
+		assert_eq!(
+			sanitize_game_title("Turrican (1990)(Rainbow Arts)"),
+			"Turrican"
+		);
+		assert_eq!(
+			sanitize_game_title("The Last Ninja {cr TCF}"),
+			"The Last Ninja"
+		);
+		// Tags combined with the separators we already handled
+		assert_eq!(sanitize_game_title("Zamzara-TCF"), "Zamzara TCF");
+		assert_eq!(sanitize_game_title("Uridium_[Hewson]_Side_A"), "Uridium");
+		// A name that is nothing but a tag falls back to the bare words
+		assert_eq!(sanitize_game_title("[Bosszu]"), "Bosszu");
+		// Unbalanced brackets must not swallow the title
+		assert_eq!(sanitize_game_title("Wizard of Wor ]"), "Wizard of Wor");
 	}
 
 	#[test]

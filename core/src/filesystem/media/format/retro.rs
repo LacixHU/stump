@@ -214,7 +214,11 @@ const RETRO_CONTROL_EXTRA_KEYS: &[&str] = &[
 	"shift",
 ];
 
+/// Placeable overlay controls that are not a single character. `joystick` is the odd one
+/// out: it is not a key at all but the one stick the player slides a finger across, which
+/// the client resolves into the four direction keys as the finger moves.
 const RETRO_OVERLAY_SPECIAL_IDS: &[&str] = &[
+	"joystick",
 	"up",
 	"down",
 	"left",
@@ -291,11 +295,8 @@ fn overlay_key(id: &str, x: f64, y: f64) -> RetroOverlayKey {
 
 fn default_base_overlay() -> Vec<RetroOverlayKey> {
 	vec![
-		overlay_key("up", 0.16, 0.70),
-		overlay_key("left", 0.06, 0.82),
-		overlay_key("right", 0.26, 0.82),
-		overlay_key("down", 0.16, 0.94),
-		overlay_key("fire", 0.88, 0.82),
+		overlay_key("joystick", 0.15, 0.74),
+		overlay_key("fire", 0.88, 0.78),
 		overlay_key("runstop", 0.42, 0.92),
 		overlay_key("space", 0.56, 0.92),
 		overlay_key("return", 0.70, 0.92),
@@ -726,8 +727,12 @@ mod tests {
 		);
 
 		let fallback = parse_retro_controls(br#"{"extraKeys":["f1"]}"#);
-		assert!(fallback.iter().any(|k| k.id == "up"));
+		assert!(fallback.iter().any(|k| k.id == "joystick"));
 		assert!(fallback.iter().any(|k| k.id == "f1"));
+
+		let stick =
+			parse_retro_controls(br#"{"keys":[{"id":"Joystick","x":0.2,"y":0.8}]}"#);
+		assert_eq!(stick[0].id, "joystick");
 
 		let letters = parse_retro_controls(br#"{"keys":[{"id":"a","x":0.2,"y":0.3}]}"#);
 		assert_eq!(letters[0].id, "a");

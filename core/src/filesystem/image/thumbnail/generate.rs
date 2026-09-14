@@ -136,7 +136,11 @@ fn retro_cover_title_candidates(path: &Path, file_stem: &str) -> Vec<String> {
 	titles
 }
 
-async fn fetch_wikipedia_cover_bytes(book_path: &str) -> Result<Option<Vec<u8>>, String> {
+/// Try each title candidate in turn, returning the first cover we can actually
+/// download. A candidate that errors (a junk filename Wikipedia rejects, a transient
+/// HTTP failure) must not prevent the remaining -- usually cleaner -- candidates from
+/// being tried, so failures are logged and skipped rather than propagated.
+async fn fetch_wikipedia_cover_bytes(book_path: &str) -> Option<Vec<u8>> {
 	use crate::filesystem::media::resolve_retro_platform;
 	use crate::filesystem::{FileParts, PathUtils};
 
@@ -149,15 +153,23 @@ async fn fetch_wikipedia_cover_bytes(book_path: &str) -> Result<Option<Vec<u8>>,
 	let platform = resolve_retro_platform(book_path, &extension);
 
 	for title in retro_cover_title_candidates(path, &file_stem) {
-		let url = metadata_integrations::lookup_wikipedia_game_cover(
+		let url = match metadata_integrations::lookup_wikipedia_game_cover(
 			&title,
 			Some(platform.as_str()),
 		)
 		.await
-		.map_err(|e| e.to_string())?;
-
-		let Some(url) = url else {
-			continue;
+		{
+			Ok(Some(url)) => url,
+			Ok(None) => continue,
+			Err(e) => {
+				tracing::debug!(
+					?book_path,
+					%title,
+					error = %e,
+					"Wikipedia cover lookup failed for candidate; trying the next one"
+				);
+				continue;
+			},
 		};
 
 		tracing::info!(
@@ -167,13 +179,21 @@ async fn fetch_wikipedia_cover_bytes(book_path: &str) -> Result<Option<Vec<u8>>,
 			"Found Wikipedia video game cover"
 		);
 
-		let bytes = metadata_integrations::download_cover_bytes(&url)
-			.await
-			.map_err(|e| e.to_string())?;
-		return Ok(Some(bytes));
+		match metadata_integrations::download_cover_bytes(&url).await {
+			Ok(bytes) => return Some(bytes),
+			Err(e) => {
+				tracing::warn!(
+					?book_path,
+					%title,
+					%url,
+					error = %e,
+					"Failed to download Wikipedia cover; trying the next candidate"
+				);
+			},
+		}
 	}
 
-	Ok(None)
+	None
 }
 
 /// Build a thumbnail from a local sidecar cover (retro disk/tape images).
@@ -244,18 +264,7 @@ pub async fn generate_book_thumbnail(
 	};
 
 	let wikipedia_cover_bytes = if is_non_page && sidecar_cover.is_none() {
-		match fetch_wikipedia_cover_bytes(&book_path).await {
-			Ok(Some(bytes)) => Some(bytes),
-			Ok(None) => None,
-			Err(e) => {
-				tracing::warn!(
-					media_id = %book.id,
-					error = %e,
-					"Wikipedia cover lookup failed"
-				);
-				None
-			},
-		}
+		fetch_wikipedia_cover_bytes(&book_path).await
 	} else {
 		None
 	};
@@ -1033,5 +1042,42 @@ pub async fn safely_generate_placeholder_batch(
 		output,
 		logs,
 		subtasks: vec![],
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn candidates(path: &str) -> Vec<String> {
+		let path = Path::new(path);
+		let stem = path.file_stem().unwrap().to_str().unwrap();
+		retro_cover_title_candidates(path, stem)
+	}
+
+	#[test]
+	fn release_tags_do_not_survive_into_candidates() {
+		// Previously this produced "Operation Wolf [Sir 13]", which Wikipedia answers
+		// with a 403 that aborted the whole lookup before the clean folder name was tried
+		assert_eq!(
+			candidates(r"F:\Retro\C64\Operation Wolf\Operation Wolf [Sir 13].d64"),
+			vec!["Operation Wolf".to_string()]
+		);
+	}
+
+	#[test]
+	fn stem_and_folder_both_offered_when_they_differ() {
+		assert_eq!(
+			candidates(r"F:\Retro\C64\Zamzara\Zamzara-TCF.d64"),
+			vec!["Zamzara TCF".to_string(), "Zamzara".to_string()]
+		);
+	}
+
+	#[test]
+	fn generic_parent_folders_are_skipped() {
+		assert_eq!(
+			candidates(r"F:\Retro\roms\Uridium.d64"),
+			vec!["Uridium".to_string()]
+		);
 	}
 }

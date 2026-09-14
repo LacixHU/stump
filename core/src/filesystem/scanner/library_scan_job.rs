@@ -10,7 +10,12 @@ use models::{
 		library, library_config, library_scan_record, media, metadata_provider_config,
 		scanned_directory, series,
 	},
-	shared::enums::FileStatus,
+	shared::{
+		enums::{FileStatus, LibraryType},
+		image_processor_options::{
+			FitWithinResize, ImageProcessorOptions, ImageResizeMethod,
+		},
+	},
 };
 use sea_orm::{
 	prelude::*,
@@ -47,6 +52,19 @@ use super::{
 	},
 	walk_library, walk_series, ScanOptions, WalkedLibrary, WalkedSeries, WalkerCtx,
 };
+
+/// The thumbnail options used for retro libraries that have no explicit thumbnail
+/// config. Covers come from a sidecar image or Wikipedia, both already cover-sized,
+/// so this only caps the occasional oversized original.
+fn retro_cover_image_options() -> ImageProcessorOptions {
+	ImageProcessorOptions {
+		resize_method: Some(ImageResizeMethod::FitWithin(FitWithinResize {
+			width: 512,
+			height: 512,
+		})),
+		..Default::default()
+	}
+}
 
 /// The task variants that are used to scan a library
 #[derive(Serialize, Deserialize)]
@@ -309,7 +327,21 @@ impl JobLifecycle for LibraryScanJob {
 			tracing::error!(error = ?error, "Failed to handle scan completion");
 		}
 
-		match image_options {
+		let library_type = self
+			.config
+			.as_ref()
+			.map(|c| c.library_type)
+			.unwrap_or_default();
+
+		// Retro books have no pages to render a thumbnail from: their covers come from a
+		// sidecar image or a Wikipedia lookup, both of which only run as part of thumbnail
+		// generation. Without a fallback, a retro library with no explicit thumbnail config
+		// would never pick up covers for newly scanned games.
+		let thumbnail_options = image_options.or_else(|| {
+			(library_type == LibraryType::Retro).then(retro_cover_image_options)
+		});
+
+		match thumbnail_options {
 			Some(options) if did_create || did_update => {
 				tracing::trace!("Thumbnail generation job should be enqueued");
 				let params = ThumbnailGenerationJobParams::books_in_library(
@@ -351,12 +383,6 @@ impl JobLifecycle for LibraryScanJob {
 				tracing::error!(?e, "Failed to enqueue placeholder generation follow-up");
 			}
 		}
-
-		let library_type = self
-			.config
-			.as_ref()
-			.map(|c| c.library_type)
-			.unwrap_or_default();
 
 		let has_relevant_provider = metadata_provider_config::Entity::find()
 			.filter(metadata_provider_config::Column::Enabled.eq(true))

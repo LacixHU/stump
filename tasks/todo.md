@@ -419,3 +419,142 @@ in `retro/keys.ts` where both surfaces share it.
 that are not this change: `isFullscreen` is assigned by the `fullscreenchange` effect and
 never read, and the `react-compiler` rule objects to the `exhaustive-deps` disable on the
 mount-once effect. Both want their own change.
+
+# One virtual joystick instead of four direction buttons
+
+## Problem
+
+The touch overlay drew `up` / `down` / `left` / `right` as four separate round buttons.
+Each one is its own press target, so changing direction means lifting a finger and
+finding the next button — a diagonal means two fingers, and a fast turn in a game like
+_Last Ninja_ or _Boulder Dash_ is simply not playable. The player wanted one control that
+a single finger holds and slides across, the way every other touch game works.
+
+## Decisions
+
+- **`joystick` is a placement, not a key.** It joins `controls.json` under the same
+  `{ id, x, y }` shape as everything else, so layouts, the editor, dragging and the
+  server allow-list all keep working unchanged. It is the one id that never reaches
+  `keySpec`: the stick resolves itself into the four direction keys as the finger moves,
+  and those are what the emulator sees. This keeps the vocabulary honest — `keys.ts` now
+  distinguishes `OverlayKeyId` (things that dispatch a key) from `OverlayControlId`
+  (things that can be placed).
+- **Direction is angle, not distance.** Past a 24% dead zone the offset vector is
+  normalized before the thresholds are applied, so a small throw and a full-stretch throw
+  point the same way. Without that, a finger just past the dead zone hits no threshold at
+  all and the stick goes dead in the most-used part of its travel.
+- **Cardinals are twice as wide as diagonals** (threshold 0.5 = a 60° pure window against
+  30° for each corner). Most C64 games are four-way, where a stray diagonal is a missed
+  jump; the eight-way games still reach the corners without effort. A diagonal holds both
+  directions at once, exactly as a real stick closes two switches.
+- **Pointer capture is what makes it feel continuous.** The stream keeps arriving after
+  the finger leaves the base, so a hard throw does not silently disengage.
+- **Old layouts are not rewritten.** A saved `controls.json` holding the four separate
+  buttons still renders them. Silently collapsing them would have made it impossible to
+  ever place a discrete direction button again, since the next load would collapse it
+  back. Both defaults (client `DEFAULT_OVERLAY_KEYS` and server `default_base_overlay`)
+  now ship the stick, and `up`/`down`/`left`/`right` stay in the editor palette for
+  layouts that want them.
+- **Drag behaviour was factored out.** `usePlacementDrag` is now shared by the stick and
+  the buttons, so edit mode moves and clamps both identically rather than by two copies
+  of the same arithmetic.
+
+## Changes
+
+- `packages/browser/src/scenes/book/reader/retro/keys.ts` — `JOYSTICK_ID`,
+  `OverlayControlId`, `OVERLAY_CONTROL_IDS`, `JoystickDirection`, `OVERLAY_CONTROL_LABELS`.
+- `packages/browser/src/scenes/book/reader/retro/OnScreenControls.tsx` — `Thumbstick`,
+  the exported pure `joystickDirections`, `usePlacementDrag`, new defaults.
+- `core/src/filesystem/media/format/retro.rs` — `joystick` in the allow-list and in the
+  default overlay.
+- `docs/content/docs/guides/features/retro-libraries.mdx`, plus a new
+  `__tests__/OnScreenControls.test.tsx`.
+
+## Review
+
+### Also fixed along the way
+
+A control unmounted while held — overlay hidden, disk swapped, player navigating away —
+left its key down inside the emulator forever. Both the stick and the buttons now release
+on unmount. This was already true of the buttons before this change; it is a three-line
+fix in the same component and a covered case in the new tests.
+
+### Verified
+
+- `yarn jest src/scenes/book/reader/retro` — 47 passed (14 new). The new suite covers the
+  direction maths directly and drives a rendered stick through a slide, asserting the
+  exact `keydown`/`keyup` stream: one finger sliding up→right emits `ArrowUp` down/up then
+  `ArrowRight` down/up with no gap, a diagonal holds two, moves that do not change
+  direction emit nothing, and edit mode drags instead of dispatching.
+- `cargo test -p stump_core --lib retro` — 13 passed, including a saved `joystick` round
+  trip and the updated fallback default.
+- `eslint` clean on every file touched. `RetroPlayerScene.tsx` is still red for the two
+  pre-existing problems noted in the previous section; neither is this change.
+
+---
+
+# Retro cover art never found for new games
+
+Reported against `F:\Retro`: "Operation Wolf" and "Zamzara" were added but got no cover.
+
+## Diagnosis
+
+Three separate problems, only one of which was visible.
+
+- [x] **Nothing was ever attempted.** Every scan on 2026-09-14 logged
+      `No thumbnail generation job will be enqueued`. `finalize` in `library_scan_job.rs` only
+      enqueued thumbnail generation when the library had an explicit `thumbnail_config`; this
+      library has none. The covers the older games do have came from `thumbnail_generation`
+      jobs run by hand on 09-13 — every file in `~/.stump/thumbnails` is dated 09-13.
+- [x] **Operation Wolf would have failed anyway.** Candidates are sorted longest-first, so
+      the stem `Operation Wolf [Sir 13]` was tried before the clean folder name.
+      `sanitize_game_title` stripped `_`, `-` and disk/side suffixes but not bracketed release
+      tags. Wikipedia answers `/page/summary/Operation_Wolf_%5BSir_13%5D` with **403**, not
+      404 (reproduced twice: `{"status":403,"type":"Internal error"}`). `fetch_page_summary`
+      only special-cased `NOT_FOUND`, so 403 became an `Err`, and the `?` in
+      `fetch_wikipedia_cover_bytes` propagated it out of the loop — the clean `Operation Wolf`
+      candidate was never tried. The article has a usable cover
+      (`Operation_Wolf_Poster.png`, 200 / `image/png` / 173 KB).
+- [x] **Zamzara is a true negative.** No en.wikipedia article (only _Jukka Tapanimäki_ and
+      _List of Evercade games_ mention it), 0 hits for
+      `incategory:"Commodore 64 game covers" Zamzara`, 0 for the `Zamzara cover video game`
+      fallback. Needs a sidecar image; no code fix possible.
+
+## Changes
+
+- [x] `wikipedia.rs` — `strip_release_tags` removes `[...]`, `(...)` and `{...}` groups
+      before the existing sanitising, with a fallback for names that are _entirely_ a tag.
+- [x] `wikipedia.rs` — `fetch_page_summary` treats any client error except 429 as "no
+      page" rather than a hard failure. 429 stays an error because it genuinely means retry.
+- [x] `generate.rs` — the candidate loop logs and skips a failing candidate instead of
+      aborting. Download failures skip too. Signature dropped from
+      `Result<Option<Vec<u8>>, String>` to `Option<Vec<u8>>`, which is what it now is, and the
+      caller lost its dead error arm.
+- [x] `library_scan_job.rs` — a `LibraryType::Retro` library with no `thumbnail_config`
+      now falls back to `retro_cover_image_options()` (fit-within 512x512) so new games pick
+      up covers on scan. Non-retro libraries are unchanged: a library that deliberately has no
+      thumbnail config still gets none. The duplicate `library_type` binding was hoisted.
+
+## Review
+
+### Verified
+
+- `cargo test -p metadata_integrations --lib` — 35 passed. New
+  `test_sanitize_strips_release_tags` covers the `[Sir 13]` case, TOSEC `(1990)(Rainbow
+Arts)`, `{cr TCF}`, tag-only names, and unbalanced brackets.
+- `cargo test -p stump_core --lib` — 211 passed (was 208), 3 new tests in `generate.rs`
+  asserting `Operation Wolf [Sir 13].d64` now yields exactly `["Operation Wolf"]`.
+- Live API checks against en.wikipedia confirmed the 403, the Operation Wolf cover
+  download, and Zamzara's three empty result sets.
+- `cargo clippy` clean on both touched crates; `cargo fmt` applied.
+
+### Pre-existing failures, not this change
+
+Confirmed by stashing these three files and re-running:
+
+- `kobo::entity::tests` — 7 failures (`Option::unwrap()` on `None`).
+- `stump_desktop` does not compile (`E0599` `load` on `Result`, `E0308`).
+
+### Still needs a sidecar
+
+`F:\Retro\C64\Zamzara\cover.jpg` — Wikipedia has nothing for it.

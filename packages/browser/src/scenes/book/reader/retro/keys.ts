@@ -90,6 +90,27 @@ export const OVERLAY_KEY_IDS = [
 
 export type OverlayKeyId = (typeof OVERLAY_KEY_IDS)[number]
 
+/**
+ * The virtual joystick is a placement like any other in `controls.json`, but it is not a
+ * key: one finger sliding across it holds whichever of the four direction keys the
+ * current angle calls for, so the stick itself never reaches `keySpec`.
+ */
+export const JOYSTICK_ID = 'joystick'
+
+export type OverlayControlId = OverlayKeyId | typeof JOYSTICK_ID
+
+/** Everything that may be placed on the overlay: the key vocabulary plus the stick. */
+export const OVERLAY_CONTROL_IDS = [JOYSTICK_ID, ...OVERLAY_KEY_IDS] as const
+
+export function isJoystick(id: OverlayControlId): id is typeof JOYSTICK_ID {
+	return id === JOYSTICK_ID
+}
+
+/** The directions the stick can hold, including both halves of a diagonal. */
+export const JOYSTICK_DIRECTIONS = ['up', 'down', 'left', 'right'] as const
+
+export type JoystickDirection = (typeof JOYSTICK_DIRECTIONS)[number]
+
 export type KeySpec = { key: string; code: string }
 
 export function keySpec(id: OverlayKeyId): KeySpec {
@@ -255,6 +276,12 @@ export const OVERLAY_LABELS: Record<OverlayKeyId, string> = {
 	'7': '7',
 	'8': '8',
 	'9': '9',
+}
+
+/** Labels for everything placeable, including the stick (which has no key of its own). */
+export const OVERLAY_CONTROL_LABELS: Record<OverlayControlId, string> = {
+	...OVERLAY_LABELS,
+	[JOYSTICK_ID]: 'Joystick',
 }
 
 /** Modifier state to stamp onto a synthetic event. */

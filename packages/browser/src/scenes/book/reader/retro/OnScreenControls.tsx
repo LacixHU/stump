@@ -1,15 +1,24 @@
 import { Button, cn } from '@stump/components'
-import { type PointerEvent, type RefObject, useCallback, useRef } from 'react'
+import { type PointerEvent, type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 
-import { dispatchKey, OVERLAY_KEY_IDS, OVERLAY_LABELS, type OverlayKeyId } from './keys'
+import {
+	dispatchKey,
+	isJoystick,
+	JOYSTICK_ID,
+	type JoystickDirection,
+	OVERLAY_CONTROL_IDS,
+	OVERLAY_CONTROL_LABELS,
+	type OverlayControlId,
+	type OverlayKeyId,
+} from './keys'
 
 export type OverlayKeyPlacement = {
-	id: OverlayKeyId
+	id: OverlayControlId
 	x: number
 	y: number
 }
 
-const EDITOR_ROWS: OverlayKeyId[][] = [
+const EDITOR_ROWS: OverlayControlId[][] = [
 	[
 		'arrowleft',
 		'1',
@@ -48,21 +57,31 @@ const EDITOR_ROWS: OverlayKeyId[][] = [
 	['shift', 'z', 'x', 'c', 'v', 'b', 'n', 'm', 'comma', 'period', 'slash', 'shiftright'],
 	['space'],
 	['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'restore'],
-	['up', 'down', 'left', 'right', 'fire', 'cursorup', 'cursordown', 'cursorleft', 'cursorright'],
+	[
+		JOYSTICK_ID,
+		'fire',
+		'up',
+		'down',
+		'left',
+		'right',
+		'cursorup',
+		'cursordown',
+		'cursorleft',
+		'cursorright',
+	],
 ]
 
 export const DEFAULT_OVERLAY_KEYS: OverlayKeyPlacement[] = [
-	{ id: 'up', x: 0.16, y: 0.7 },
-	{ id: 'left', x: 0.06, y: 0.82 },
-	{ id: 'right', x: 0.26, y: 0.82 },
-	{ id: 'down', x: 0.16, y: 0.94 },
-	{ id: 'fire', x: 0.88, y: 0.82 },
+	{ id: JOYSTICK_ID, x: 0.15, y: 0.74 },
+	{ id: 'fire', x: 0.88, y: 0.78 },
 	{ id: 'runstop', x: 0.42, y: 0.92 },
 	{ id: 'space', x: 0.56, y: 0.92 },
 	{ id: 'return', x: 0.7, y: 0.92 },
 ]
 
-const ALLOW = OVERLAY_KEY_IDS as readonly string[]
+const ALLOW = OVERLAY_CONTROL_IDS as readonly string[]
+
+const clamp01 = (value: number) => Math.min(1, Math.max(0, value))
 
 export function resolveOverlayLayout(data: unknown): OverlayKeyPlacement[] {
 	if (!data || typeof data !== 'object' || !('keys' in data)) {
@@ -83,25 +102,244 @@ export function resolveOverlayLayout(data: unknown): OverlayKeyPlacement[] {
 		const y = typeof rec.y === 'number' ? rec.y : Number(rec.y)
 		if (!Number.isFinite(x) || !Number.isFinite(y)) continue
 		out.push({
-			id: id as OverlayKeyId,
-			x: Math.min(1, Math.max(0, x)),
-			y: Math.min(1, Math.max(0, y)),
+			id: id as OverlayControlId,
+			x: clamp01(x),
+			y: clamp01(y),
 		})
 	}
 	return out.length ? out : DEFAULT_OVERLAY_KEYS
 }
 
-type PadButtonProps = {
+type PlacementProps = {
 	placement: OverlayKeyPlacement
 	editing: boolean
-	onMove?: (id: OverlayKeyId, x: number, y: number) => void
+	onMove?: (id: OverlayControlId, x: number, y: number) => void
 	onReleased?: () => void
 	containerRef: RefObject<HTMLDivElement | null>
 }
 
-function PadButton({ placement, editing, onMove, onReleased, containerRef }: PadButtonProps) {
-	const held = useRef(false)
+/**
+ * Edit mode turns every control into a drag handle: the pointer stream repositions it
+ * within the playfield instead of reaching the emulator. Shared by the buttons and the
+ * stick so both move -- and clamp -- identically.
+ */
+function usePlacementDrag(
+	id: OverlayControlId,
+	containerRef: RefObject<HTMLDivElement | null>,
+	onMove?: (id: OverlayControlId, x: number, y: number) => void,
+) {
 	const dragging = useRef(false)
+
+	const begin = useCallback(() => {
+		dragging.current = true
+	}, [])
+
+	const end = useCallback(() => {
+		dragging.current = false
+	}, [])
+
+	const drag = useCallback(
+		(e: PointerEvent<HTMLElement>) => {
+			if (!dragging.current) return
+			const box = containerRef.current?.getBoundingClientRect()
+			if (!box || box.width <= 0 || box.height <= 0) return
+			onMove?.(
+				id,
+				clamp01((e.clientX - box.left) / box.width),
+				clamp01((e.clientY - box.top) / box.height),
+			)
+		},
+		[containerRef, id, onMove],
+	)
+
+	return { begin, drag, end }
+}
+
+/** Fraction of the base radius the finger must clear before any direction engages. */
+const JOYSTICK_DEAD_ZONE = 0.24
+
+/**
+ * How far the knob rides from the centre at full deflection, as a fraction of the base
+ * radius. Sized so the knob comes to rest flush with the inside of the ring.
+ */
+const JOYSTICK_TRAVEL = 0.55
+
+/**
+ * Cosine of the half-angle of a cardinal window. At 0.5 a pure direction spans 60 degrees
+ * against a 30 degree diagonal: most C64 games are four-way, where a stray diagonal is a
+ * missed jump, and the ones that do want eight-way still reach the corners easily.
+ */
+const JOYSTICK_DIAGONAL_THRESHOLD = 0.5
+
+/**
+ * Which directions a finger at (`dx`, `dy`) from the centre of a stick of `radius` holds.
+ * A diagonal is two directions at once, exactly as a real stick closes two switches.
+ */
+export function joystickDirections(dx: number, dy: number, radius: number): JoystickDirection[] {
+	const distance = Math.hypot(dx, dy)
+	if (distance <= 0 || distance < radius * JOYSTICK_DEAD_ZONE) return []
+
+	const nx = dx / distance
+	const ny = dy / distance
+	const out: JoystickDirection[] = []
+	if (ny <= -JOYSTICK_DIAGONAL_THRESHOLD) out.push('up')
+	if (ny >= JOYSTICK_DIAGONAL_THRESHOLD) out.push('down')
+	if (nx <= -JOYSTICK_DIAGONAL_THRESHOLD) out.push('left')
+	if (nx >= JOYSTICK_DIAGONAL_THRESHOLD) out.push('right')
+	return out
+}
+
+const JOYSTICK_HINTS: Array<{ direction: JoystickDirection; glyph: string; className: string }> = [
+	{ className: 'top-1 left-1/2 -translate-x-1/2', direction: 'up', glyph: '▲' },
+	{ className: 'bottom-1 left-1/2 -translate-x-1/2', direction: 'down', glyph: '▼' },
+	{ className: 'top-1/2 left-1.5 -translate-y-1/2', direction: 'left', glyph: '◀' },
+	{ className: 'top-1/2 right-1.5 -translate-y-1/2', direction: 'right', glyph: '▶' },
+]
+
+/**
+ * One stick standing in for the four direction keys: press anywhere on the base and
+ * slide, and it keeps re-resolving which directions are held as the finger moves, without
+ * ever asking for a lift. Pointer capture keeps the stream coming even once the finger
+ * wanders off the base, which is what makes a fast turn feel continuous rather than like
+ * four buttons being stabbed in sequence.
+ */
+function Thumbstick({ placement, editing, onMove, onReleased, containerRef }: PlacementProps) {
+	const baseRef = useRef<HTMLDivElement>(null)
+	const held = useRef<JoystickDirection[]>([])
+	const engaged = useRef(false)
+	const { begin, drag, end } = usePlacementDrag(placement.id, containerRef, onMove)
+	const [knob, setKnob] = useState({ x: 0, y: 0 })
+	const [active, setActive] = useState<JoystickDirection[]>([])
+
+	const hold = useCallback((next: JoystickDirection[]) => {
+		for (const direction of held.current) {
+			if (!next.includes(direction)) dispatchKey(direction, false)
+		}
+		for (const direction of next) {
+			if (!held.current.includes(direction)) dispatchKey(direction, true)
+		}
+		held.current = next
+		setActive(next)
+	}, [])
+
+	// A stick torn down mid-throw -- overlay hidden, disk swapped -- would otherwise leave
+	// its directions held down inside the emulator.
+	useEffect(() => () => hold([]), [hold])
+
+	const track = useCallback(
+		(e: PointerEvent<HTMLDivElement>) => {
+			const box = baseRef.current?.getBoundingClientRect()
+			if (!box) return
+			const radius = Math.min(box.width, box.height) / 2
+			if (radius <= 0) return
+
+			const dx = e.clientX - (box.left + box.width / 2)
+			const dy = e.clientY - (box.top + box.height / 2)
+			const distance = Math.hypot(dx, dy)
+			const travel = radius * JOYSTICK_TRAVEL
+			const scale = distance > travel ? travel / distance : 1
+
+			setKnob({ x: dx * scale, y: dy * scale })
+			hold(joystickDirections(dx, dy, radius))
+		},
+		[hold],
+	)
+
+	const press = useCallback(
+		(e: PointerEvent<HTMLDivElement>) => {
+			e.preventDefault()
+			e.stopPropagation()
+			e.currentTarget.setPointerCapture(e.pointerId)
+			if (editing) {
+				begin()
+				return
+			}
+			engaged.current = true
+			track(e)
+		},
+		[begin, editing, track],
+	)
+
+	const move = useCallback(
+		(e: PointerEvent<HTMLDivElement>) => {
+			if (editing) {
+				drag(e)
+				return
+			}
+			if (!engaged.current) return
+			track(e)
+		},
+		[drag, editing, track],
+	)
+
+	const release = useCallback(
+		(e: PointerEvent<HTMLDivElement>) => {
+			e.preventDefault()
+			e.stopPropagation()
+			if (editing) {
+				end()
+				return
+			}
+			if (!engaged.current) return
+			engaged.current = false
+			setKnob({ x: 0, y: 0 })
+			hold([])
+			onReleased?.()
+		},
+		[editing, end, hold, onReleased],
+	)
+
+	return (
+		<div
+			ref={baseRef}
+			role="group"
+			aria-label={OVERLAY_CONTROL_LABELS[placement.id]}
+			className={cn(
+				'sm:h-32 sm:w-32 h-28 w-28 border-white/30 bg-white/10 backdrop-blur-sm pointer-events-auto absolute z-20 -translate-x-1/2 -translate-y-1/2 touch-none rounded-full border select-none',
+				editing && 'ring-brand/80 ring-2',
+			)}
+			style={{ left: `${placement.x * 100}%`, top: `${placement.y * 100}%` }}
+			onPointerDown={press}
+			onPointerMove={move}
+			onPointerUp={release}
+			onPointerCancel={release}
+			onContextMenu={(e) => e.preventDefault()}
+		>
+			{JOYSTICK_HINTS.map(({ className, direction, glyph }) => (
+				<span
+					key={direction}
+					aria-hidden
+					className={cn(
+						'absolute text-[9px] leading-none',
+						className,
+						active.includes(direction) ? 'text-white' : 'text-white/35',
+					)}
+				>
+					{glyph}
+				</span>
+			))}
+			<span
+				aria-hidden
+				className="sm:h-14 sm:w-14 h-12 w-12 border-white/40 bg-white/35 shadow-lg absolute top-1/2 left-1/2 rounded-full border"
+				style={{ transform: `translate(calc(-50% + ${knob.x}px), calc(-50% + ${knob.y}px))` }}
+			/>
+		</div>
+	)
+}
+
+function PadButton({ placement, editing, onMove, onReleased, containerRef }: PlacementProps) {
+	const held = useRef(false)
+	const { begin, drag, end } = usePlacementDrag(placement.id, containerRef, onMove)
+	const keyId = placement.id as OverlayKeyId
+
+	const lift = useCallback(() => {
+		if (!held.current) return
+		held.current = false
+		dispatchKey(keyId, false)
+	}, [keyId])
+
+	// Same reasoning as the stick: a button unmounted while down must not stay down.
+	useEffect(() => lift, [lift])
 
 	const press = useCallback(
 		(e: PointerEvent<HTMLButtonElement>) => {
@@ -109,28 +347,22 @@ function PadButton({ placement, editing, onMove, onReleased, containerRef }: Pad
 			e.stopPropagation()
 			e.currentTarget.setPointerCapture(e.pointerId)
 			if (editing) {
-				dragging.current = true
+				begin()
 				return
 			}
 			if (held.current) return
 			held.current = true
-			dispatchKey(placement.id, true)
+			dispatchKey(keyId, true)
 		},
-		[editing, placement.id],
+		[begin, editing, keyId],
 	)
 
 	const move = useCallback(
 		(e: PointerEvent<HTMLButtonElement>) => {
-			if (!editing || !dragging.current) return
-			const box = containerRef.current?.getBoundingClientRect()
-			if (!box || box.width <= 0 || box.height <= 0) return
-			onMove?.(
-				placement.id,
-				Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)),
-				Math.min(1, Math.max(0, (e.clientY - box.top) / box.height)),
-			)
+			if (!editing) return
+			drag(e)
 		},
-		[containerRef, editing, onMove, placement.id],
+		[drag, editing],
 	)
 
 	const release = useCallback(
@@ -138,15 +370,14 @@ function PadButton({ placement, editing, onMove, onReleased, containerRef }: Pad
 			e.preventDefault()
 			e.stopPropagation()
 			if (editing) {
-				dragging.current = false
+				end()
 				return
 			}
 			if (!held.current) return
-			held.current = false
-			dispatchKey(placement.id, false)
+			lift()
 			onReleased?.()
 		},
-		[editing, onReleased, placement.id],
+		[editing, end, lift, onReleased],
 	)
 
 	const wide = [
@@ -175,7 +406,7 @@ function PadButton({ placement, editing, onMove, onReleased, containerRef }: Pad
 			onPointerCancel={release}
 			onContextMenu={(e) => e.preventDefault()}
 		>
-			{OVERLAY_LABELS[placement.id]}
+			{OVERLAY_CONTROL_LABELS[placement.id]}
 		</button>
 	)
 }
@@ -200,13 +431,13 @@ export function OnScreenControls({
 	const containerRef = useRef<HTMLDivElement>(null)
 
 	const onMove = useCallback(
-		(id: OverlayKeyId, x: number, y: number) => {
+		(id: OverlayControlId, x: number, y: number) => {
 			onChangeKeys?.(keys.map((k) => (k.id === id ? { ...k, x, y } : k)))
 		},
 		[keys, onChangeKeys],
 	)
 
-	const toggle = (id: OverlayKeyId) => {
+	const toggle = (id: OverlayControlId) => {
 		if (keys.some((k) => k.id === id)) {
 			onChangeKeys?.(keys.filter((k) => k.id !== id))
 			return
@@ -234,7 +465,7 @@ export function OnScreenControls({
 										)}
 										onClick={() => toggle(id)}
 									>
-										{OVERLAY_LABELS[id]}
+										{OVERLAY_CONTROL_LABELS[id]}
 									</button>
 								)
 							})}
@@ -257,16 +488,27 @@ export function OnScreenControls({
 					</div>
 				</div>
 			) : null}
-			{keys.map((placement) => (
-				<PadButton
-					key={placement.id}
-					placement={placement}
-					editing={editing}
-					onMove={onMove}
-					onReleased={onReleased}
-					containerRef={containerRef}
-				/>
-			))}
+			{keys.map((placement) =>
+				isJoystick(placement.id) ? (
+					<Thumbstick
+						key={placement.id}
+						placement={placement}
+						editing={editing}
+						onMove={onMove}
+						onReleased={onReleased}
+						containerRef={containerRef}
+					/>
+				) : (
+					<PadButton
+						key={placement.id}
+						placement={placement}
+						editing={editing}
+						onMove={onMove}
+						onReleased={onReleased}
+						containerRef={containerRef}
+					/>
+				),
+			)}
 		</div>
 	)
 }
