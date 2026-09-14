@@ -3,9 +3,10 @@ pub mod pdf;
 pub mod rar;
 pub mod retro;
 pub mod zip;
-
 pub use retro::{
 	find_series_controls_json, find_sidecar_cover, parse_retro_controls,
-	parse_retro_extra_keys, resolve_retro_platform, sanitize_retro_overlay_keys,
-	series_controls_json_write_path, RetroOverlayKey, RETRO_CONTROLS_MAX_BYTES,
+	parse_retro_extra_keys, read_save_state, remove_save_state, remove_save_states,
+	resolve_retro_platform, sanitize_retro_overlay_keys, save_state_path,
+	series_controls_json_write_path, write_save_state, RetroOverlayKey,
+	RETRO_CONTROLS_MAX_BYTES, RETRO_SAVE_STATE_MAX_BYTES,
 };

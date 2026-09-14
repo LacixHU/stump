@@ -1,5 +1,6 @@
 use axum::{
-	extract::{Path, State},
+	body::Bytes,
+	extract::{DefaultBodyLimit, Path, State},
 	http::HeaderMap,
 	middleware,
 	response::IntoResponse,
@@ -15,7 +16,9 @@ use sea_orm::{prelude::*, sea_query::Query, QuerySelect};
 use stump_core::{
 	config::StumpConfig,
 	filesystem::{
-		get_saved_thumbnail, get_thumbnail, media::get_page_async, ContentType, FileError,
+		get_saved_thumbnail, get_thumbnail,
+		media::{get_page_async, RETRO_SAVE_STATE_MAX_BYTES},
+		ContentType, FileError,
 	},
 	Ctx,
 };
@@ -24,7 +27,7 @@ use crate::{
 	config::state::AppState,
 	errors::{APIError, APIResult},
 	middleware::auth::auth_middleware,
-	utils::{http::ImageResponse, serve_media},
+	utils::{http::ImageResponse, retro_save_state, serve_media},
 };
 
 pub(crate) fn mount(app_state: AppState) -> Router<AppState> {
@@ -34,6 +37,16 @@ pub(crate) fn mount(app_state: AppState) -> Router<AppState> {
 			get(get_media_retro_controls)
 				.put(put_media_retro_controls)
 				.post(put_media_retro_controls),
+		)
+		.route(
+			"/media/{id}/save-state",
+			get(get_media_save_state)
+				.put(put_media_save_state)
+				.delete(delete_media_save_state)
+				// Axum's implicit body limit is 2 MiB, which is under the size of an
+				// Amiga snapshot. Layered on the method router, not the parent, so the
+				// other media routes keep the default.
+				.layer(DefaultBodyLimit::max(RETRO_SAVE_STATE_MAX_BYTES)),
 		)
 		.nest(
 			"/media/{id}",
@@ -83,6 +96,34 @@ pub(crate) async fn put_media_retro_controls(
 	Json(body): Json<serve_media::RetroControlsBody>,
 ) -> APIResult<impl IntoResponse> {
 	serve_media::save_retro_controls(req, ctx.conn.as_ref(), id, body).await
+}
+
+/// Fetch the current user's save state for a retro book (library access).
+pub(crate) async fn get_media_save_state(
+	Path(id): Path<String>,
+	State(ctx): State<AppState>,
+	Extension(req): Extension<AuthContext>,
+) -> APIResult<impl IntoResponse> {
+	retro_save_state::get_save_state(req, ctx.conn.as_ref(), &ctx.config, id).await
+}
+
+/// Store the current user's save state for a retro book (library access).
+pub(crate) async fn put_media_save_state(
+	Path(id): Path<String>,
+	State(ctx): State<AppState>,
+	Extension(req): Extension<AuthContext>,
+	body: Bytes,
+) -> APIResult<impl IntoResponse> {
+	retro_save_state::put_save_state(req, ctx.conn.as_ref(), &ctx.config, id, body).await
+}
+
+/// Delete the current user's save state for a retro book (library access).
+pub(crate) async fn delete_media_save_state(
+	Path(id): Path<String>,
+	State(ctx): State<AppState>,
+	Extension(req): Extension<AuthContext>,
+) -> APIResult<impl IntoResponse> {
+	retro_save_state::delete_save_state(req, ctx.conn.as_ref(), &ctx.config, id).await
 }
 
 pub(crate) async fn get_media_thumbnail(

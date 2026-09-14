@@ -74,6 +74,9 @@ Optional overlay layout lives in a series-folder `controls.json` next to the dis
 | --------------------------------------- | --------------- |
 | `GET /api/v2/media/{id}/retro-controls` | Library access  |
 | `PUT /api/v2/media/{id}/retro-controls` | `ManageLibrary` |
+| `GET /api/v2/media/{id}/save-state`     | Library access  |
+| `PUT /api/v2/media/{id}/save-state`     | Library access  |
+| `DELETE /api/v2/media/{id}/save-state`  | Library access  |
 
 ## Play vs download
 
@@ -82,6 +85,7 @@ Optional overlay layout lives in a series-folder `controls.json` next to the dis
 | **Play** (`GET /api/v2/media/{id}/play-file`)              | Library access only (same as reading a page) |
 | **Overlay keys** (`GET /api/v2/media/{id}/retro-controls`) | Library access only                          |
 | **Save overlay** (`PUT /api/v2/media/{id}/retro-controls`) | `ManageLibrary`                              |
+| **Save state** (`*/api/v2/media/{id}/save-state`)          | Library access only (each user's own save)   |
 | **Download** (`GET /api/v2/media/{id}/file`)               | `DownloadFile`                               |
 
 `play-file` only allows retro extensions (defense in depth so non-download users cannot pull EPUBs/CBZs through that path).
@@ -115,7 +119,29 @@ Sidecar files always win over Wikipedia. Many Wikipedia covers are fair-use; onl
 
 ## Save states
 
-Save states are stored in the browser (IndexedDB), keyed by user and media. They are not synced to the server.
+A save state is the complete memory image of the emulated machine — CPU, RAM, and chip
+state — so restoring one drops you back exactly where you were, mid-level and all.
+
+Save states are stored **on the server**, one per user per game:
+
+- They follow you between devices and browsers. Save on the desktop, load on a tablet.
+- They are private. Each user has their own slot for a game; no one else can read or
+  overwrite it, and there is no shared or "server-wide" save.
+- They survive clearing site data, since nothing is kept in the browser.
+
+Use the **Save state** and **Load state** buttons in the player header. There is one slot
+per game: saving again replaces the previous snapshot. For a multi-disk game, the slot
+belongs to the book you opened, so swapping disks mid-game does not hide the save behind
+a different disk.
+
+Snapshots are written to `save_states/{media_id}/{user_id}.savestate` under the Stump
+config directory, with a small metadata row in the database. Deleting a library removes
+the snapshots belonging to its books. The server accepts snapshots up to **16 MiB**,
+which is comfortably above a C64 snapshot (a few hundred KiB) and an Amiga one
+(a few MiB).
+
+Save states depend on the emulator core supporting snapshots. The C64 core does; the
+Spectrum and Amiga shells do not yet, and the player will say so.
 
 ## Legal
 

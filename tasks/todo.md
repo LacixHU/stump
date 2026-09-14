@@ -1,3 +1,135 @@
+# Server-side retro save states
+
+## Problem
+
+Retro save states only ever land in the browser's IndexedDB
+(`packages/browser/src/scenes/book/reader/retro/saves.ts`, keyed
+`stump-retro-save:${userId}:${mediaId}:${slot}`). A save made on the desktop is invisible
+on a phone, is lost when site data is cleared, and is invisible to another browser on the
+same machine. On a server whose whole point is that the library lives on the server, the
+save state is the one piece of state that doesn't.
+
+## Decisions
+
+| Question                 | Decision                                                                |
+| ------------------------ | ----------------------------------------------------------------------- |
+| Visibility               | Private per user — one save per `(user, media)`                         |
+| Blob storage             | Files on disk under the config dir + a DB metadata row (no SQLite BLOB) |
+| Slots                    | A single auto slot — keeps today's Save / Load button behaviour         |
+| Existing IndexedDB saves | Dropped; `saves.ts` is deleted, the server is the only store            |
+
+## Plan
+
+### Server
+
+- [x] Migration `crates/migrations/src/m*_add_media_save_states.rs` — table
+      `media_save_states` (uuid PK, `user_id`/`media_id` FKs cascade, `size_bytes`,
+      `created_at`, `updated_at`) + unique index on `(user_id, media_id)`; register in
+      `crates/migrations/src/lib.rs`
+- [x] Entity `crates/models/src/entity/media_save_state.rs` (no GraphQL derives — REST
+      only); register in `entity/mod.rs` **and** `crates/tests/src/db.rs`
+- [x] `StumpConfig::get_save_states_dir()` → `{config_dir}/save_states`, created in
+      `write_config_dir()`; layout `save_states/{media_id}/{user_id}.savestate`
+- [x] `SAVE_STATE_MAX_BYTES` (16 MiB) beside `RETRO_CONTROLS_MAX_BYTES`
+- [x] `apps/server/src/utils/save_state.rs` — GET / PUT / DELETE handlers, library-access
+      auth + retro-extension guard, temp-write + atomic rename, orphan self-heal
+- [x] Routes on `apps/server/src/routers/api/v2/media.rs` with an explicit
+      `DefaultBodyLimit::max(SAVE_STATE_MAX_BYTES)` (repo sets no body limit today, so
+      axum's 2 MiB default would truncate Amiga snapshots)
+- [x] `remove_save_states()` called alongside `remove_thumbnails()` on library delete
+
+### Client
+
+- [x] `MediaAPI` methods: `saveStateURL`, `getRetroSaveState` (404 → null),
+      `putRetroSaveState`, `deleteRetroSaveState`
+- [x] Delete `retro/saves.ts`; rewrite `onSave`/`onLoad` in `RetroPlayerScene.tsx` against
+      the SDK, with an in-flight guard
+- [x] "Delete save state" entry in `retro/RetroPlayerSettings.tsx`
+
+### Docs + tests
+
+- [x] `docs/.../retro-libraries.mdx` — Save states section currently says the opposite;
+      add the routes to the endpoint table
+- [x] Integration tests `apps/server/tests/save_state/` (+ a `put_bytes` TestApp helper)
+
+## Review
+
+Save states now live on the server. `saves.ts` (IndexedDB) is gone; the player reads and
+writes `GET|PUT|DELETE /api/v2/media/{id}/save-state`, and the bytes land in
+`{config_dir}/save_states/{media_id}/{user_id}.savestate` with a `media_save_states` row
+alongside. One save per user per game, enforced by a unique index.
+
+### Deviations from the plan, and why
+
+- **Dropped the `X-Stump-Save-State-Updated-At` header.** The CORS layer
+  (`apps/server/src/config/cors.rs`) never calls `.expose_headers`, so a custom response
+  header is unreadable cross-origin — it would have worked in the same-origin production
+  build and silently read as `null` in Tauri and the dev client. Nothing in the UI needed
+  the timestamp anyway.
+- **No new `ContentType` variant.** Axum already types a `Vec<u8>` response as
+  `application/octet-stream`. Adding `OCTET_STREAM` to the core enum would have forced
+  edits at three exhaustive match sites for a string we already had.
+- **Saves key to the opened book, not `activeMediaId`.** The scene re-points
+  `activeMediaId` when you swap disks, so the old code saved under disk 2 and then found
+  nothing when you next opened the game at disk 1. Server-side that bug would have become
+  durable and cross-device. One game, one save.
+- **Find-then-write instead of an `ON CONFLICT` upsert.** Tests build their schema from
+  the entities, which emits columns but no standalone indexes — an upsert on the unique
+  index would have worked in production and failed in CI.
+- **`DefaultBodyLimit` sits on the method router**, not the parent, so `/thumbnail`,
+  `/page`, `/file` and `/play-file` keep axum's default rather than silently inheriting
+  16 MiB.
+- **No "Delete save state" UI.** The settings dropdown only renders while
+  `platform === 'c64' && status === 'playing'`, i.e. it is unreachable exactly when a user
+  would want to clear a bad save. The endpoint and SDK method exist and are tested; the UI
+  needs a reachable home and a confirmation step, which is its own change.
+
+### Two pre-existing problems found along the way
+
+- **The server test suite was fully red at HEAD** — 28 failures. `series::Entity` declares
+  `#[sea_orm(default_value = "false")]` on a `bool`, so the schema generated from the
+  entity defaults the column to the _string_ `'false'`, which then fails to decode as a
+  boolean. Migrations use a real boolean default, so only tests were affected. Fixed in
+  the fixture (`crates/tests/src/fake_data.rs`) by setting the column explicitly. The
+  suite is now 49/49 green. `library_config` has the same attribute pattern on two
+  columns and will bite the same way if anything ever decodes them.
+- **`TestApp` was writing into the developer's real `~/.stump`.** `Ctx::for_testing` uses
+  `StumpConfig::debug()`, whose `config_dir` is the actual home config directory. Any test
+  that touched the filesystem would have littered it. `TestApp` now owns a `TempDir` and
+  overrides `config_dir`.
+
+### Known gaps
+
+- **`crates/graphql/schema.graphql` is stale at HEAD** — `cargo dump-schema --check` fails
+  on drift from earlier commits (the `RETRO` library type, the new metadata providers,
+  `updateSeriesUseSingleThumbnail`, the PDF cache config fields). Nothing to do with save
+  states; the regenerated file was deliberately left out of this change.
+- **Orphaned snapshots on `deleteLibrary`.** Cleanup is hooked into `clean_library`, where
+  the deleted media ids are already in hand. `delete_library` relies on a DB cascade and
+  collects no ids — it carries a pre-existing `// TODO: delete thumbnails!` for exactly
+  the same gap, so save states leak there in the same way thumbnails already do.
+- **User deletion** cascades the rows away but leaves `{user_id}.savestate` files behind.
+- Snapshots are stored uncompressed. `flate2` is not in the workspace and
+  `CompressionStream` would add a browser fallback path; revisit if Amiga snapshots make
+  disk use painful.
+- `apps/desktop` does not compile at HEAD (a `tauri-plugin-store` API mismatch in
+  `store/app_store.rs`), unrelated and untouched.
+
+### Verified
+
+- `cargo test -p stump_server --test api_tests` — **49 passed, 0 failed** (8 of them new,
+  covering round-trip, replace, delete, per-user isolation, non-retro rejection, empty
+  body, and the stale-row self-heal).
+- `cargo migrate up` / `cargo rollback` / re-apply, against a throwaway database.
+- `cargo fmt --all --check` clean; `cargo clippy` reports nothing in the new files.
+- Prettier clean on both changed TypeScript files; ESLint clean apart from two
+  pre-existing errors in `RetroPlayerScene.tsx` that predate this change.
+- **Not yet done: the manual end-to-end.** Save/reload/Load in a real browser against a
+  real `.d64` is the only thing that proves the emulator half, and it needs a running
+  server and a game image.
+
+---
+
 # C64 games start slowly even with disk speed set to "Instant"
 
 ## Problem
@@ -166,3 +298,124 @@ Known, pre-existing and untouched: `packages/browser` cannot resolve `c64-ready`
 types (the package is `exports`-only and the tsconfig uses node10 resolution), so
 everything in `c64.ts` that comes from that import is implicitly `any`. Worth
 fixing separately — it would give the emulator glue real type checking.
+
+## Fix: C64 emulation/audio speed tied to display refresh rate
+
+**Symptom:** sound (and the whole machine) runs faster or slower than a real C64.
+
+**Cause:** the custom render loop in
+`packages/browser/src/scenes/book/reader/retro/emulators/c64.ts` called
+`runTick(FRAME_MS)` — a constant 20 ms — once per `requestAnimationFrame`.
+`C64Emulator.tick(dTime)` forwards straight to `debugger_update(dTime)`, which
+consumes _real elapsed milliseconds_ and releases a frame only once a full PAL
+frame is due (upstream's own `CanvasRenderer.attachTo` and the headless CLI both
+pass a wall-clock delta, the latter explicitly "to avoid long-term A/V drift").
+Passing a constant instead pinned the emulated machine to the panel:
+
+| display                | emulated rate | error    |
+| ---------------------- | ------------- | -------- |
+| 60 Hz                  | 60 fps        | +20%     |
+| 120 Hz                 | 120 fps       | +140%    |
+| 144 Hz                 | 144 fps       | +188%    |
+| throttled / hidden tab | < 50 fps      | too slow |
+
+The SID then produced samples at that same wrong rate while the audio worklet
+drained them at a fixed 44.1 kHz, so on top of the wrong tempo the ring buffer
+over- or under-ran continuously — the crackle and dropouts.
+
+**Fix:** feed `tick()` the real rAF delta, clamped to `MAX_DELTA_MS` (100 ms) so
+a hidden tab or a stalled main thread is dropped rather than sprinted through.
+The deliberate warp path still calls `runTick(FRAME_MS)` per iteration, since
+there each call means "advance exactly one frame".
+
+**Verification:** `tsc -p packages/browser` produces an identical error set
+before and after (all pre-existing — the `c64-ready` type-resolution issue noted
+above); `eslint` clean on the touched file.
+
+---
+
+# Virtual keyboard for the retro player
+
+## Problem
+
+The retro player has no way to reach most of the C64 keyboard. The on-screen overlay
+(`retro/OnScreenControls.tsx`) is a _joystick_ pad: a handful of free-floating round
+buttons an admin positions per game. A touch user cannot type `LOAD"$",8`, answer a
+game's "PRESS F1 TO START", or enter a text-adventure command at all, and a desktop user
+with no physical `£`, `↑` or `RUN/STOP` key is in the same position.
+
+## Decisions
+
+| Question        | Decision                                                                             |
+| --------------- | ------------------------------------------------------------------------------------ |
+| Where           | Docked below the canvas _inside_ the fullscreen element, not floating over it        |
+| Layout          | The authentic 66-key breadbin layout, per-platform data so Amiga/Spectrum can follow |
+| Shift           | Sticky one-shot + a real SHIFT LOCK cap, as on the machine                           |
+| Shifted legends | Printed on the cap (`!` over `1`, `CLR` over `HOME`, `F2` over `F1`)                 |
+| Who sees it     | Everyone — desktop and touch. It is a toggle, not a permission                       |
+
+## Plan
+
+- [x] `retro/keys.ts` — move `OVERLAY_KEY_IDS` / `OverlayKeyId` / `OVERLAY_LABELS` /
+      `keySpec` / `dispatchKey` out of `OnScreenControls.tsx` so both input surfaces share
+      one key vocabulary; `dispatchKey` grows a `shiftKey` option
+- [x] `retro/VirtualKeyboard.tsx` — layout data + cap rendering + sticky modifiers
+- [x] `RetroPlayerScene.tsx` — `Keyboard` toggle in the header, playfield becomes a flex
+      column so the keyboard docks under the canvas instead of covering it
+- [x] `reader.retro.virtualKeyboard` in `en-US.json`
+- [x] Docs: on-screen controls section of `retro-libraries.mdx`
+- [x] Unit tests for the layout invariants and the shift/latch dispatch
+
+## Review
+
+A `Keyboard` toggle in the player toolbar docks the C64's own keyboard under the canvas.
+It lives _inside_ the fullscreen element, so it survives fullscreen, and it is one panel
+for both desktop and touch — there is no mobile-only path.
+
+### How it reaches the emulator
+
+c64-ready listens on `window` and maps matrix keys off `event.key` but joystick keys off
+`event.code`, so every cap dispatches a synthetic `KeyboardEvent` with a deliberately
+bogus code (`C64_z`). A real `KeyZ` would be eaten as joystick fire in mixed mode and
+never reach the matrix. That trick already existed for the joystick overlay; it now lives
+in `retro/keys.ts` where both surfaces share it.
+
+### Decisions worth knowing
+
+- **Shift is a flag, not a held key.** `dispatchKey` stamps `shiftKey` on the event and
+  c64-ready presses matrix SHIFT itself. That is what makes the printed legends real —
+  `SHIFT`+`1` is `!`, `SHIFT`+`HOME` is `CLR`, `SHIFT`+`F1` is `F2`, `SHIFT`+`CRSR` ↓
+  is ↑ — with no code of ours, and it cannot leave SHIFT stuck the way a held keydown
+  could, because every unshifted keydown releases it again.
+- **`C=` and `CTRL` are genuinely held**, since they have no event flag. They are
+  released by the keystroke they modify, by a second tap, and on unmount — a panel
+  toggled off mid-chord must not leave a matrix key down for the rest of the session.
+- **One cap needed an override.** c64-ready keys its matrix off the _character_, so it
+  clears shift inside its `:` case and `SHIFT` + `:` would have typed a colon rather than
+  the `[` printed on the cap. `dispatchKey` therefore also accepts a raw `KeySpec`, and
+  that cap carries one. It is not a new entry in the shared vocabulary on purpose — that
+  list is mirrored by the server's `controls.json` allow-list
+  (`core/src/filesystem/media/format/retro.rs`), and a shifted legend is no reason to
+  make the two drift.
+- **The cursor cluster is two caps, not four.** The four-way version would have been
+  easier to tap, but Shift already reverses direction in the emulator's own mapping, so
+  the authentic pair costs nothing in capability.
+- **Rows are sized in cap units and stretched to fit** (16 units of main block + a
+  1.5-unit function column), with `clamp(20px, min(4.4vw, 6.2vh), 40px)` for height. One
+  rule covers a 1080p desktop, a landscape phone and fullscreen; a test asserts every row
+  totals 17.5 units, because a row that does not silently breaks the column alignment.
+- **The playfield became a flex column.** The keyboard docks under the canvas instead of
+  covering it, which also keeps the joystick overlay's percentage coordinates relative to
+  the canvas alone rather than to canvas-plus-keyboard.
+- **Overlay editing hides the keyboard.** Dragging a joystick button around while a
+  keyboard occupies the bottom third is nobody's intent.
+- **C64 only.** `LAYOUTS` is keyed by platform and the toolbar button is gated on
+  `hasVirtualKeyboard`, so the Amiga and Spectrum stubs get no button rather than a
+  keyboard that is not theirs. Adding one is a data change.
+
+### Pre-existing problems left alone
+
+`eslint` on `RetroPlayerScene.tsx` was already red at HEAD and still is, for two things
+that are not this change: `isFullscreen` is assigned by the `fullscreenchange` effect and
+never read, and the `react-compiler` rule objects to the `exhaustive-deps` disable on the
+mount-once effect. Both want their own change.

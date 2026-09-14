@@ -24,7 +24,14 @@ type C64Container = 'prg' | 'd64' | 't64' | 'crt' | 'snapshot'
 /** What c64-ready knows how to mount. */
 type C64LoadType = 'prg' | 'd64' | 'crt' | 'snapshot'
 
+/** One PAL frame. Only used to ask for a single frame's worth of emulation. */
 const FRAME_MS = 1000 / 50
+/**
+ * Longest real-time gap we hand the emulator in one go. A hidden tab, a stalled
+ * main thread or a debugger pause must not turn into a sprint through minutes of
+ * emulated time, so anything larger is treated as a single dropped frame.
+ */
+const MAX_DELTA_MS = 100
 /** Wall-clock budget per animation frame for catch-up emulation while warping. */
 const WARP_BUDGET_MS = 12
 const WARP_MAX_FRAMES = 24
@@ -247,8 +254,19 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			if (!skipRender) renderer.render(frame)
 		}
 
-		const loop = () => {
+		// tick() takes real elapsed milliseconds: the emulator accumulates them and
+		// releases a frame only once a full PAL frame is due. Feeding it a constant
+		// 20 ms per animation frame instead ties the machine to the display, so a
+		// 60 Hz panel runs it 20% fast and a 144 Hz one nearly three times fast —
+		// audible immediately, since the SID then produces samples faster than the
+		// 44.1 kHz worklet drains them.
+		let lastTimestamp = 0
+
+		const loop = (timestamp: number) => {
 			frameRaf = requestAnimationFrame(loop)
+			const elapsed = lastTimestamp ? timestamp - lastTimestamp : FRAME_MS
+			lastTimestamp = timestamp
+			const delta = elapsed > 0 && elapsed <= MAX_DELTA_MS ? elapsed : FRAME_MS
 			// debugger_update() advances at most two frames per call, so catching
 			// up means calling it repeatedly — bounded by wall clock so the tab
 			// stays responsive, and without painting frames nobody will see.
@@ -260,7 +278,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 				}
 				skipRender = false
 			}
-			runTick(FRAME_MS)
+			runTick(delta)
 		}
 		frameRaf = requestAnimationFrame(loop)
 	}

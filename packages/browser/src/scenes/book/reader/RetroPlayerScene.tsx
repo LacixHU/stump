@@ -1,9 +1,9 @@
 import {
 	isRetroExtension,
 	resolveRetroPlatform,
+	type RetroPlatform,
 	useSDK,
 	useSuspenseGraphQL,
-	type RetroPlatform,
 } from '@stump/client'
 import { Button, cn } from '@stump/components'
 import { TypedDocumentString, UserPermission } from '@stump/graphql'
@@ -26,11 +26,10 @@ import {
 import {
 	DEFAULT_OVERLAY_KEYS,
 	OnScreenControls,
-	resolveOverlayLayout,
 	type OverlayKeyPlacement,
+	resolveOverlayLayout,
 } from './retro/OnScreenControls'
 import { RetroPlayerSettings } from './retro/RetroPlayerSettings'
-import { loadRetroState, saveRetroState } from './retro/saves'
 
 /** Inline document: not yet in gql codegen map (graphql() would return {}). */
 type RetroPlayerSceneQuery = {
@@ -102,7 +101,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 	const paths = usePaths()
 	const { t } = useLocaleContext()
 	const { sdk } = useSDK()
-	const { user, checkPermission } = useAppContext()
+	const { checkPermission } = useAppContext()
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 	const playfieldRef = useRef<HTMLDivElement>(null)
 	const handleRef = useRef<RetroEmulatorHandle | null>(null)
@@ -289,32 +288,57 @@ function RetroPlayerScene({ id }: { id: string }) {
 		await startPlay(disk.id, disk.path || undefined, disk.extension || undefined)
 	}
 
+	// A snapshot round-trip is now a network call, so the buttons have to be re-entrancy
+	// safe -- two overlapping saves would race each other onto the same server slot.
+	const saveStateBusyRef = useRef(false)
+
 	const onSave = async () => {
-		if (!user?.id || !handleRef.current?.saveState) {
+		if (!handleRef.current?.saveState) {
 			toast.message('Save states not available for this emulator yet')
 			return
 		}
-		const data = await handleRef.current.saveState()
-		if (!data) {
-			toast.message('No save state produced')
-			return
+		if (saveStateBusyRef.current) return
+		saveStateBusyRef.current = true
+
+		try {
+			const data = await handleRef.current.saveState()
+			if (!data) {
+				toast.message('No save state produced')
+				return
+			}
+			// Note: keyed to the book that was opened, not `activeMediaId`. A multi-disk
+			// game is one game, so swapping to disk 2 must not hide the save behind a
+			// different media id.
+			await sdk.media.putSaveState(id, data)
+			toast.success('Save state saved to the server')
+		} catch (e) {
+			toast.error(saveStateErrorMessage(e, 'Failed to save state'))
+		} finally {
+			saveStateBusyRef.current = false
 		}
-		await saveRetroState(user.id, activeMediaId, 0, data)
-		toast.success('Save state stored in this browser')
 	}
 
 	const onLoad = async () => {
-		if (!user?.id || !handleRef.current?.loadState) {
+		if (!handleRef.current?.loadState) {
 			toast.message('Load state not available for this emulator yet')
 			return
 		}
-		const data = await loadRetroState(user.id, activeMediaId, 0)
-		if (!data) {
-			toast.message('No save in slot 0')
-			return
+		if (saveStateBusyRef.current) return
+		saveStateBusyRef.current = true
+
+		try {
+			const data = await sdk.media.getSaveState(id)
+			if (!data) {
+				toast.message('No save state stored for this game')
+				return
+			}
+			await handleRef.current.loadState(data)
+			toast.success('Save state loaded')
+		} catch (e) {
+			toast.error(saveStateErrorMessage(e, 'Failed to load state'))
+		} finally {
+			saveStateBusyRef.current = false
 		}
-		await handleRef.current.loadState(data)
-		toast.success('Save state loaded')
 	}
 
 	useEffect(() => {
@@ -521,4 +545,32 @@ function RetroPlayerScene({ id }: { id: string }) {
 			</div>
 		</div>
 	)
+}
+
+/**
+ * Pull a human message out of a failed save-state call.
+ *
+ * The GET is issued with `responseType: 'arraybuffer'`, so an error body arrives as
+ * bytes rather than parsed JSON and `response.data.message` is not available -- fall back
+ * to the status code in that case.
+ */
+function saveStateErrorMessage(error: unknown, fallback: string): string {
+	const response =
+		error && typeof error === 'object' && 'response' in error
+			? (error as { response?: { data?: { message?: string }; status?: number } }).response
+			: undefined
+
+	if (response?.status === 413) {
+		return 'Save state is too large for this server'
+	}
+
+	if (typeof response?.data?.message === 'string') {
+		return response.data.message
+	}
+
+	if (response?.status) {
+		return `${fallback} (${response.status})`
+	}
+
+	return error instanceof Error ? error.message : fallback
 }

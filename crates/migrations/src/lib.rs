@@ -35,6 +35,7 @@ mod m20260804_000000_smart_list_role_to_integer;
 mod m20260809_000000_nested_series;
 mod m20260810_000000_library_inclusions;
 mod m20260903_000000_series_use_single_thumbnail;
+mod m20260914_000000_add_media_save_states;
 
 pub struct Migrator;
 
@@ -76,6 +77,7 @@ impl MigratorTrait for Migrator {
 			Box::new(m20260809_000000_nested_series::Migration),
 			Box::new(m20260810_000000_library_inclusions::Migration),
 			Box::new(m20260903_000000_series_use_single_thumbnail::Migration),
+			Box::new(m20260914_000000_add_media_save_states::Migration),
 		]
 	}
 }

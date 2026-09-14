@@ -1,7 +1,7 @@
 import { ScaledDimensionResizeInput } from '@stump/graphql'
 
 import { APIBase } from '../base'
-import { createRouteURLHandler } from './utils'
+import { createRouteURLHandler, isAxiosError } from './utils'
 
 /**
  * The root route for the media API
@@ -53,6 +53,44 @@ export class MediaAPI extends APIBase {
 			keys: Array<{ id: string; x: number; y: number }>
 		}>(mediaURL(`/${id}/retro-controls`), { keys })
 		return data
+	}
+
+	/**
+	 * Fetch the current user's emulator save state for a book.
+	 *
+	 * Resolves to `null` when the server has no save state for this user and book, which
+	 * is the normal case for a game that has never been saved. Anything else -- an
+	 * offline server, an expired session -- still rejects, so callers can tell "nothing
+	 * saved yet" apart from "something went wrong".
+	 */
+	async getSaveState(id: string): Promise<ArrayBuffer | null> {
+		try {
+			const { data } = await this.axios.get<ArrayBuffer>(mediaURL(`/${id}/save-state`), {
+				responseType: 'arraybuffer',
+			})
+			return data
+		} catch (error) {
+			if (isAxiosError(error) && error.response?.status === 404) {
+				return null
+			}
+			throw error
+		}
+	}
+
+	/**
+	 * Store the current user's emulator save state for a book, replacing any previous one
+	 */
+	async putSaveState(id: string, data: ArrayBuffer): Promise<void> {
+		await this.axios.put(mediaURL(`/${id}/save-state`), data, {
+			headers: { 'Content-Type': 'application/octet-stream' },
+		})
+	}
+
+	/**
+	 * Delete the current user's emulator save state for a book
+	 */
+	async deleteSaveState(id: string): Promise<void> {
+		await this.axios.delete(mediaURL(`/${id}/save-state`))
 	}
 
 	/**

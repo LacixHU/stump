@@ -164,6 +164,12 @@ impl Series {
 				Some(lib_id) => sea_orm::Set(Some(lib_id.clone())),
 				None => sea_orm::NotSet,
 			},
+			// The entity declares `default_value = "false"`, which makes the schema
+			// generated from it default to the *string* `false`. That decodes back as
+			// TEXT rather than BOOLEAN, so set it explicitly rather than relying on the
+			// column default. (Migrations use a real boolean default, so this only bites
+			// the entity-generated test schema.)
+			use_single_thumbnail: sea_orm::Set(false),
 			..Default::default()
 		};
 

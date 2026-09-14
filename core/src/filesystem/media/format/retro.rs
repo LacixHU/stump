@@ -745,3 +745,126 @@ mod tests {
 		);
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Emulator save states
+// ---------------------------------------------------------------------------
+
+/// The largest snapshot the server will accept. A C64 snapshot is a few hundred KiB;
+/// an Amiga snapshot with 2 MB of chip RAM is several MiB. This is deliberately well
+/// above both so the cap only ever catches something pathological.
+///
+/// Note that axum applies an implicit 2 MiB body limit unless told otherwise, so any
+/// route accepting a save state must also layer `DefaultBodyLimit::max` with this value.
+pub const RETRO_SAVE_STATE_MAX_BYTES: usize = 16 * 1024 * 1024;
+
+const SAVE_STATE_EXTENSION: &str = "savestate";
+
+/// The directory holding every user's save state for one book.
+pub fn save_state_dir_for_media(save_states_dir: &Path, media_id: &str) -> PathBuf {
+	save_states_dir.join(media_id)
+}
+
+/// The path of one user's save state for one book.
+///
+/// Both ids come from the database (never straight off the URL), so no sanitization is
+/// performed here -- callers are responsible for having resolved the book through
+/// `media::Entity::find_for_user` first.
+pub fn save_state_path(save_states_dir: &Path, media_id: &str, user_id: &str) -> PathBuf {
+	save_state_dir_for_media(save_states_dir, media_id)
+		.join(user_id)
+		.with_extension(SAVE_STATE_EXTENSION)
+}
+
+/// Write a snapshot to disk, replacing any existing one.
+///
+/// The bytes go to a uniquely named temporary file first and are then renamed into
+/// place. A crash or a full disk part way through therefore leaves the previous save
+/// intact rather than a truncated snapshot that would hang the emulator on load. The
+/// temp name includes a UUID so two tabs saving at once cannot clobber each other's
+/// scratch file.
+pub async fn write_save_state(
+	save_states_dir: &Path,
+	media_id: &str,
+	user_id: &str,
+	bytes: &[u8],
+) -> Result<(), FileError> {
+	let dir = save_state_dir_for_media(save_states_dir, media_id);
+	tokio::fs::create_dir_all(&dir).await?;
+
+	let target = save_state_path(save_states_dir, media_id, user_id);
+	let temp = dir.join(format!(
+		"{user_id}.{}.tmp",
+		uuid::Uuid::new_v4().as_simple()
+	));
+
+	// Scoped so the handle is closed before the rename -- Windows will not rename a
+	// file that is still open.
+	{
+		use tokio::io::AsyncWriteExt;
+		let mut file = tokio::fs::File::create(&temp).await?;
+		file.write_all(bytes).await?;
+		file.sync_all().await?;
+	}
+
+	if let Err(error) = tokio::fs::rename(&temp, &target).await {
+		// Best effort: do not leave the scratch file behind if the rename failed.
+		let _ = tokio::fs::remove_file(&temp).await;
+		return Err(error.into());
+	}
+
+	Ok(())
+}
+
+/// Read a snapshot from disk. Returns `Ok(None)` when there is no file, which is the
+/// normal "this user has never saved this game" case and not an error.
+pub async fn read_save_state(
+	save_states_dir: &Path,
+	media_id: &str,
+	user_id: &str,
+) -> Result<Option<Vec<u8>>, FileError> {
+	let path = save_state_path(save_states_dir, media_id, user_id);
+	match tokio::fs::read(&path).await {
+		Ok(bytes) => Ok(Some(bytes)),
+		Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+		Err(error) => Err(error.into()),
+	}
+}
+
+/// Remove one user's save state for one book. Missing files are not an error.
+pub async fn remove_save_state(
+	save_states_dir: &Path,
+	media_id: &str,
+	user_id: &str,
+) -> Result<(), FileError> {
+	let path = save_state_path(save_states_dir, media_id, user_id);
+	match tokio::fs::remove_file(&path).await {
+		Ok(_) => Ok(()),
+		Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+		Err(error) => Err(error.into()),
+	}
+}
+
+/// Remove every user's save state for the given books. Used when media rows are really
+/// deleted (as opposed to soft-deleted), where the cascade takes the metadata rows but
+/// would otherwise leave the snapshots orphaned on disk.
+///
+/// Unlike thumbnail cleanup this does not have to scan the directory: the layout is one
+/// directory per book, so each id is a single `remove_dir_all`.
+pub async fn remove_save_states(
+	save_states_dir: &Path,
+	media_ids: &[String],
+) -> Result<(), FileError> {
+	for media_id in media_ids {
+		let dir = save_state_dir_for_media(save_states_dir, media_id);
+		match tokio::fs::remove_dir_all(&dir).await {
+			Ok(_) => (),
+			Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+			Err(error) => {
+				tracing::error!(?error, path = %dir.display(), "Failed to remove save states for media");
+			},
+		}
+	}
+
+	Ok(())
+}

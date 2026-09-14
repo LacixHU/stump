@@ -3,9 +3,11 @@ use std::sync::Arc;
 use axum_test::{TestResponse, TestServer};
 use sea_orm::DatabaseConnection;
 use serde_json::{json, Value};
+use stump_core::config::StumpConfig;
 use stump_core::{Ctx, StumpCore};
 use stump_server::config::session::get_session_layer;
 use stump_server::routers;
+use tempfile::TempDir;
 use tests::db::test_database;
 use tokio::sync::RwLock;
 
@@ -16,13 +18,25 @@ pub struct TestApp {
 	pub server: TestServer,
 	pub ctx: Arc<Ctx>,
 	pub access_token: RwLock<Option<String>>,
+	/// Kept alive so anything the server writes to disk (save states, thumbnails)
+	/// lands in a scratch directory that is removed when the test ends, rather than
+	/// in the developer own ~/.stump.
+	_config_dir: TempDir,
 }
 
 impl TestApp {
 	pub async fn new() -> Self {
 		let db = test_database().await;
 
-		let ctx = Ctx::for_testing(db);
+		// `StumpConfig::debug()` points `config_dir` at the real ~/.stump, so without this
+		// every test that writes a file would litter (and read from) the developer own
+		// config directory.
+		let config_dir = tempfile::tempdir().expect("failed to create temp config dir");
+		let mut config = StumpConfig::debug();
+		config.config_dir = config_dir.path().to_string_lossy().into_owned();
+
+		let mut ctx = Ctx::for_testing(db);
+		ctx.config = Arc::new(config);
 		let core = StumpCore::from_ctx(ctx);
 
 		core.init_server_config()
@@ -48,6 +62,7 @@ impl TestApp {
 			server,
 			ctx: app_state,
 			access_token: RwLock::new(None),
+			_config_dir: config_dir,
 		}
 	}
 
@@ -143,5 +158,15 @@ impl TestApp {
 			.await;
 
 		response
+	}
+
+	/// issue a PUT request with a raw binary body and auth headers
+	pub async fn put_bytes(&self, path: &str, body: Vec<u8>) -> TestResponse {
+		self.server
+			.put(path)
+			.add_header("Authorization", self.auth_header().await)
+			.content_type("application/octet-stream")
+			.bytes(body.into())
+			.await
 	}
 }

@@ -498,7 +498,14 @@ export function OnScreenControls({
 						</div>
 					))}
 					<div className="gap-2 flex justify-end">
-						<Button size="sm" variant="ghost" onClick={onCancel}>
+						{/* The panel is a fixed dark surface in both themes, so these cannot rely on
+						    the themed foreground color the way a ghost button normally would. */}
+						<Button
+							size="sm"
+							variant="ghost"
+							className="border-white/30 text-white hover:bg-white/15 hover:text-white border"
+							onClick={onCancel}
+						>
 							Cancel
 						</Button>
 						<Button size="sm" onClick={onSave}>

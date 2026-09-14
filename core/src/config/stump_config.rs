@@ -423,6 +423,7 @@ impl StumpConfig {
 		let emojis_dir = self.get_emojis_dir();
 		let pdf_cache_dir = self.get_pdf_cache_dir();
 		let firmware_dir = self.get_firmware_dir();
+		let save_states_dir = self.get_save_states_dir();
 		if !cache_dir.exists() {
 			std::fs::create_dir(cache_dir).unwrap();
 		}
@@ -440,6 +441,9 @@ impl StumpConfig {
 		}
 		if !firmware_dir.exists() {
 			std::fs::create_dir_all(firmware_dir).unwrap();
+		}
+		if !save_states_dir.exists() {
+			std::fs::create_dir_all(save_states_dir).unwrap();
 		}
 
 		// Save configuration to Stump.toml
@@ -491,6 +495,13 @@ impl StumpConfig {
 	/// Returns a `PathBuf` to the Stump custom emojis directory
 	pub fn get_emojis_dir(&self) -> PathBuf {
 		PathBuf::from(&self.config_dir).join("emojis")
+	}
+
+	/// Returns a `PathBuf` to the emulator save states directory. Snapshots are laid out
+	/// as `{save_states}/{media_id}/{user_id}.savestate`, which makes removing every save
+	/// for a book a single `remove_dir_all`.
+	pub fn get_save_states_dir(&self) -> PathBuf {
+		PathBuf::from(&self.config_dir).join("save_states")
 	}
 
 	/// Directory used for Piper voice models. Falls back to `{config_dir}/tts/voices`.

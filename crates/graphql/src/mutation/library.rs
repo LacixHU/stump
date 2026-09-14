@@ -22,7 +22,10 @@ use stump_core::filesystem::{
 		ImageProcessorOptionsExt, PlaceholderGenerationJobConfig,
 		PlaceholderGenerationJobScope, ThumbnailGenerationJobParams,
 	},
-	media::analysis::{AnalysisJobConfig, MediaAnalysisJobScope},
+	media::{
+		analysis::{AnalysisJobConfig, MediaAnalysisJobScope},
+		remove_save_states,
+	},
 	metadata::{MetadataFetchJobParams, MetadataFetchScope},
 	scanner::ScanOptions,
 };
@@ -102,6 +105,7 @@ impl LibraryMutation {
 			.ok_or("Library not found")?;
 
 		let thumbnails_dir = core.config.get_thumbnails_dir();
+		let save_states_dir = core.config.get_save_states_dir();
 
 		let txn = core.conn.as_ref().begin().await?;
 
@@ -159,6 +163,14 @@ impl LibraryMutation {
 				remove_thumbnails(&deleted_media_ids, &thumbnails_dir).await
 			{
 				tracing::error!(?error, "Failed to remove thumbnails for library media");
+			}
+
+			// The cascade takes the metadata rows with the media, but the snapshots
+			// on disk would otherwise be orphaned forever.
+			if let Err(error) =
+				remove_save_states(&save_states_dir, &deleted_media_ids).await
+			{
+				tracing::error!(?error, "Failed to remove save states for library media");
 			}
 		}
 
