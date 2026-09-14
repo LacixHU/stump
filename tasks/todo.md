@@ -558,3 +558,88 @@ Confirmed by stashing these three files and re-running:
 ### Still needs a sidecar
 
 `F:\Retro\C64\Zamzara\cover.jpg` — Wikipedia has nothing for it.
+
+# ZX Spectrum: pin an emulator, keyboard and on-screen controls
+
+Playing a Spectrum game showed the placeholder canvas ("WASM emulator not pinned yet"),
+and both touch input surfaces were hard-wired to the C64.
+
+## Plan
+
+- [x] Vendor JSSpeccy 3.2 (GPL-3.0, Matt Westcott) into `packages/browser/public/retro/spectrum/`
+      — prebuilt `jsspeccy.js` + worker + `jsspeccy-core.wasm` + ROMs + tape loaders, served by
+      the existing `/retro` static route. Licence + provenance recorded next to it.
+- [x] `emulators/spectrum.ts`: real module. Script-tag load (the bundle reads
+      `document.currentScript`), capture the emulator's Worker for key/matrix and tape
+      messages, drive snapshots through `openUrl` with a blob URL.
+- [x] `emulators/spectrum-keys.ts`: Spectrum keyboard matrix, physical `event.code` map and
+      overlay-id map, with the joystick scheme (QAOP / cursor / Sinclair) applied to the
+      stick. JSSpeccy has no Kempston, so the stick has to be keys.
+- [x] `keys.ts`: platform-aware vocabulary (`capsshift`, `symbolshift`, per-platform labels).
+- [x] `VirtualKeyboard.tsx`: per-layout modifier set, Spectrum 40-key layout.
+- [x] `OnScreenControls.tsx`: per-platform editor rows, labels and defaults.
+- [x] `RetroPlayerScene.tsx` / `RetroPlayerSettings.tsx`: chrome driven by what the handle
+      implements rather than `platform === 'c64'`; Spectrum gets machine + joystick scheme +
+      tape speed, no input mode / joystick port / save state.
+- [x] `core/.../retro.rs`: allow `capsshift` / `symbolshift` in `controls.json`.
+- [x] Docs + tests.
+
+## Known limits (JSSpeccy 3.2)
+
+- No Kempston joystick in the core (port 0x1f reads 0), so the on-screen stick maps to keys.
+- The bundle exposes no snapshot _writer_, so Spectrum has no save states; the scene already
+  degrades to "Save states not available for this emulator yet".
+
+## Review
+
+### What the player does now
+
+- `spectrum.ts` drives JSSpeccy through its Web Worker. The public `JSSpeccy()` API can open
+  a URL, switch machine and exit -- it cannot press a key, take tape bytes or reset -- so the
+  module takes a reference to the worker as it is constructed (`window.Worker` swapped for the
+  length of that one synchronous call) and talks the worker's own protocol.
+- Tapes are posted to the worker as bytes; the machine is then booted into a tape-loading
+  prompt by opening one of the bundled loader snapshots. Snapshots go the other way, through
+  `openUrl` with a blob URL and a `#image.z80` fragment, because the bundle picks its parser
+  off the URL's extension and the fetch that follows ignores the fragment by spec.
+- All input -- physical keyboard, the docked keyboard, the overlay -- is mapped to the
+  Spectrum key matrix in our own code and reference counted, so CAPS SHIFT being half of every
+  cursor key cannot be lifted out from under a cap that is also holding it.
+- Player chrome is now driven by what the handle implements rather than `platform === 'c64'`,
+  so the Spectrum gets machine, joystick-keys and loading-speed settings, and no save-state
+  buttons, without the scene knowing which machine it is talking to.
+
+### Verified
+
+- `jest src/scenes/book/reader/retro` -- 68 passed across 4 suites (was 47). The C64 suites
+  are unchanged and still pass, which is what says the shared surfaces did not regress.
+- `cargo test -p stump_core --lib ...retro` -- 12 passed, including the new allow-list test.
+- Lint and types clean on everything touched. Two pre-existing errors remain in
+  `RetroPlayerScene.tsx` (`isFullscreen` unused, a react-compiler complaint about the existing
+  eslint-disable); both are present at HEAD, confirmed by stashing.
+- **Ran for real in headless Chrome** (esbuild bundle of the actual module + a static server +
+  CDP), against `F:\Retro\ZX Spectrum\Manic Miner\Manic Miner - Alternate Cover.tzx`:
+  - every asset resolves under `/retro/spectrum/` (worker, core, five ROMs, loader snapshot)
+  - the tape loads instantly and reaches the title screen; a real Enter starts the game
+  - `handle.sendKey('right')` -- the overlay/keyboard path -- walks Willy across Central Cavern
+  - a `.szx` fed as the image is fetched as `blob:...#image.szx` and loads, with no errors
+  - `reset()` reloads the game; `destroy()` removes the emulator's canvas and un-hides ours
+- Authentic tape speed needed a fix found this way: the 128 ROM's own loader takes a trapped
+  load but never picks up the emulated tape's pulses, so real-time loading now boots through
+  the `usr0` loader (48K BASIC) instead. Confirmed by watching the border go pilot (red/cyan)
+  then data (blue/yellow) and the Manic Miner loading screen paint in line by line. The same
+  stall reproduces with upstream JSSpeccy's own auto-load path, so it is the core's quirk, not
+  the integration's.
+
+### Known limits
+
+- No save states for Spectrum: the bundle reads snapshots but cannot write one. The header
+  buttons are hidden rather than offered and then refused.
+- No Kempston: the core returns an idle port, so the on-screen stick presses keys and the
+  scheme (QAOP / cursor / Sinclair) is a setting.
+- `.szx` is understood by the player but is not a catalogued retro extension, so no library
+  will hand one to it. Adding it means touching the scanner, content types and OPDS lists --
+  deliberately left out of this change.
+- JSSpeccy is GPL-3.0 in an MIT repo. It is vendored unmodified with its licence next to it,
+  and nothing but `spectrum.ts` touches it, but that is a real constraint on redistributing a
+  Stump build and on upstreaming this branch.

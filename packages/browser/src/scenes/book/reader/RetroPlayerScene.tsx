@@ -18,13 +18,21 @@ import { useAppContext } from '@/context'
 import { usePaths } from '@/paths'
 
 import {
+	describeCapabilities,
+	hasSettings,
+	NO_CAPABILITIES,
+	type RetroPlayerCapabilities,
+} from './retro/capabilities'
+import {
 	loadEmulator,
 	type RetroDiskSpeed,
 	type RetroEmulatorHandle,
 	type RetroInputMode,
 } from './retro/emulators'
+import { type Dispatchable, dispatchKey, type KeyModifiers } from './retro/keys'
 import {
-	DEFAULT_OVERLAY_KEYS,
+	defaultOverlayKeys,
+	hasOverlayControls,
 	OnScreenControls,
 	type OverlayKeyPlacement,
 	resolveOverlayLayout,
@@ -121,9 +129,15 @@ function RetroPlayerScene({ id }: { id: string }) {
 	const [inputMode, setInputMode] = useState<RetroInputMode>('mixed')
 	const [joystickPort, setJoystickPort] = useState<1 | 2>(2)
 	const [diskSpeed, setDiskSpeed] = useState<RetroDiskSpeed>(DEFAULT_DISK_SPEED)
-	const [overlayKeys, setOverlayKeys] = useState<OverlayKeyPlacement[]>(DEFAULT_OVERLAY_KEYS)
-	const [draftOverlayKeys, setDraftOverlayKeys] =
-		useState<OverlayKeyPlacement[]>(DEFAULT_OVERLAY_KEYS)
+	const [machine, setMachine] = useState<string | undefined>(undefined)
+	const [joystickScheme, setJoystickScheme] = useState<string | undefined>(undefined)
+	const [capabilities, setCapabilities] = useState<RetroPlayerCapabilities>(NO_CAPABILITIES)
+	const [overlayKeys, setOverlayKeys] = useState<OverlayKeyPlacement[]>(() =>
+		defaultOverlayKeys('c64'),
+	)
+	const [draftOverlayKeys, setDraftOverlayKeys] = useState<OverlayKeyPlacement[]>(() =>
+		defaultOverlayKeys('c64'),
+	)
 	const [editingOverlay, setEditingOverlay] = useState(false)
 	const [isFullscreen, setIsFullscreen] = useState(false)
 	const [showKeyboard, setShowKeyboard] = useState(false)
@@ -154,6 +168,21 @@ function RetroPlayerScene({ id }: { id: string }) {
 	const stopEmulator = useCallback(() => {
 		handleRef.current?.destroy()
 		handleRef.current = null
+		setCapabilities(NO_CAPABILITIES)
+	}, [])
+
+	/**
+	 * How the two touch surfaces reach the machine. c64-ready listens for `KeyboardEvent`s
+	 * on `window`, so a synthetic event is enough for it; an emulator that takes input
+	 * through an API of its own says so with `sendKey`.
+	 */
+	const sendKey = useCallback((target: Dispatchable, down: boolean, modifiers?: KeyModifiers) => {
+		const handle = handleRef.current
+		if (handle?.sendKey) {
+			handle.sendKey(target, down, modifiers)
+			return
+		}
+		dispatchKey(target, down, modifiers)
 	}, [])
 
 	const fetchImage = useCallback(
@@ -173,17 +202,17 @@ function RetroPlayerScene({ id }: { id: string }) {
 	)
 
 	const fetchControls = useCallback(
-		async (mediaId: string) => {
+		async (mediaId: string, forPlatform: RetroPlatform) => {
 			try {
 				const res = await fetch(sdk.media.retroControlsURL(mediaId), { credentials: 'include' })
 				if (!res.ok) {
-					setOverlayKeys(DEFAULT_OVERLAY_KEYS)
+					setOverlayKeys(defaultOverlayKeys(forPlatform))
 					return
 				}
 				const data: unknown = await res.json()
-				setOverlayKeys(resolveOverlayLayout(data))
+				setOverlayKeys(resolveOverlayLayout(data, forPlatform))
 			} catch {
-				setOverlayKeys(DEFAULT_OVERLAY_KEYS)
+				setOverlayKeys(defaultOverlayKeys(forPlatform))
 			}
 		},
 		[sdk],
@@ -247,11 +276,14 @@ function RetroPlayerScene({ id }: { id: string }) {
 				setInputMode('mixed')
 				setJoystickPort(2)
 				setDiskSpeed(DEFAULT_DISK_SPEED)
+				setCapabilities(describeCapabilities(handle))
+				setMachine(handle.machine)
+				setJoystickScheme(handle.joystickScheme)
 				setStatus('playing')
-				if (resolved === 'c64') {
-					void fetchControls(mediaId)
+				if (hasOverlayControls(resolved)) {
+					void fetchControls(mediaId, resolved)
 				} else {
-					setOverlayKeys(DEFAULT_OVERLAY_KEYS)
+					setOverlayKeys([])
 				}
 			} catch (e) {
 				const message = e instanceof Error ? e.message : 'Failed to start emulator'
@@ -384,14 +416,33 @@ function RetroPlayerScene({ id }: { id: string }) {
 		handleRef.current?.setDiskSpeed?.(speed)
 	}
 
+	const onChangeMachine = async (id: string) => {
+		const handle = handleRef.current
+		if (!handle?.setMachine || id === machine) return
+		setMachine(id)
+		try {
+			// The machine restarts around the game, so this reloads the image with it.
+			await handle.setMachine(id)
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : 'Could not switch machine')
+		}
+	}
+
+	const onChangeJoystickScheme = (id: string) => {
+		setJoystickScheme(id)
+		handleRef.current?.setJoystickScheme?.(id)
+	}
+
 	const focusCanvas = () => {
 		canvasRef.current?.focus()
 	}
 
 	const isTouch = useMediaMatch('(pointer: coarse)')
-	const showC64Chrome = platform === 'c64' && status === 'playing'
-	const showOverlay = showC64Chrome && (isMobile || isTouch || editingOverlay)
-	const canUseKeyboard = status === 'playing' && hasVirtualKeyboard(platform)
+	const isPlaying = status === 'playing'
+	const showOverlay =
+		isPlaying && hasOverlayControls(platform) && (isMobile || isTouch || editingOverlay)
+	const showSettings = isPlaying && hasSettings(capabilities, canEditOverlay)
+	const canUseKeyboard = isPlaying && hasVirtualKeyboard(platform)
 	// Dragging a joystick button onto a docked keyboard is nobody's intent, so the two
 	// input surfaces never share the playfield.
 	const showKeyboardPanel = canUseKeyboard && showKeyboard && !editingOverlay
@@ -409,7 +460,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 	const onSaveOverlay = async () => {
 		try {
 			const data = await sdk.media.saveRetroControls(activeMediaId, draftOverlayKeys)
-			const next = resolveOverlayLayout(data)
+			const next = resolveOverlayLayout(data, platform)
 			setOverlayKeys(next)
 			setDraftOverlayKeys(next)
 			setEditingOverlay(false)
@@ -443,12 +494,16 @@ function RetroPlayerScene({ id }: { id: string }) {
 					{platform}
 				</span>
 				<div className="gap-1 ml-auto flex items-center">
-					<Button size="sm" variant="ghost" onClick={onSave} title="Save state">
-						<Save className="h-4 w-4" />
-					</Button>
-					<Button size="sm" variant="ghost" onClick={onLoad} title="Load state">
-						<HardDrive className="h-4 w-4" />
-					</Button>
+					{capabilities.saveState ? (
+						<>
+							<Button size="sm" variant="ghost" onClick={onSave} title="Save state">
+								<Save className="h-4 w-4" />
+							</Button>
+							<Button size="sm" variant="ghost" onClick={onLoad} title="Load state">
+								<HardDrive className="h-4 w-4" />
+							</Button>
+						</>
+					) : null}
 					<Button size="sm" variant="ghost" onClick={onFullscreen} title="Fullscreen">
 						<Fullscreen className="h-4 w-4" />
 					</Button>
@@ -463,28 +518,33 @@ function RetroPlayerScene({ id }: { id: string }) {
 							<Keyboard className="h-4 w-4" />
 						</Button>
 					) : null}
-					{showC64Chrome ? (
-						<>
-							<RetroPlayerSettings
-								inputMode={inputMode}
-								joystickPort={joystickPort}
-								onInputMode={onChangeInputMode}
-								onJoystickPort={onChangeJoystickPort}
-								diskSpeed={diskSpeed}
-								onDiskSpeed={onChangeDiskSpeed}
-								canEditOverlay={canEditOverlay}
-								onEditOverlay={onEditOverlay}
-								t={t}
-							/>
-							<Button
-								size="sm"
-								variant="ghost"
-								onClick={onReset}
-								title={t('reader.retro.reset', { defaultValue: 'Reset' })}
-							>
-								<RotateCcw className="h-4 w-4" />
-							</Button>
-						</>
+					{showSettings ? (
+						<RetroPlayerSettings
+							capabilities={capabilities}
+							inputMode={inputMode}
+							joystickPort={joystickPort}
+							onInputMode={onChangeInputMode}
+							onJoystickPort={onChangeJoystickPort}
+							diskSpeed={diskSpeed}
+							onDiskSpeed={onChangeDiskSpeed}
+							machine={machine}
+							onMachine={(value) => void onChangeMachine(value)}
+							joystickScheme={joystickScheme}
+							onJoystickScheme={onChangeJoystickScheme}
+							canEditOverlay={canEditOverlay}
+							onEditOverlay={onEditOverlay}
+							t={t}
+						/>
+					) : null}
+					{isPlaying && capabilities.reset ? (
+						<Button
+							size="sm"
+							variant="ghost"
+							onClick={onReset}
+							title={t('reader.retro.reset', { defaultValue: 'Reset' })}
+						>
+							<RotateCcw className="h-4 w-4" />
+						</Button>
 					) : null}
 				</div>
 			</header>
@@ -508,11 +568,13 @@ function RetroPlayerScene({ id }: { id: string }) {
 									onSave={() => void onSaveOverlay()}
 									onCancel={onCancelOverlay}
 									onReleased={focusCanvas}
+									platform={platform}
+									sendKey={sendKey}
 								/>
 							) : null}
 						</div>
 						{showKeyboardPanel ? (
-							<VirtualKeyboard platform={platform} onReleased={focusCanvas} />
+							<VirtualKeyboard platform={platform} onReleased={focusCanvas} sendKey={sendKey} />
 						) : null}
 					</div>
 					{status === 'error' && errorMessage ? (

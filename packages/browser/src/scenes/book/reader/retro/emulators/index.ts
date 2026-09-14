@@ -24,4 +24,5 @@ export type {
 	RetroEmulatorHandle,
 	RetroEmulatorModule,
 	RetroInputMode,
+	RetroOption,
 } from './types'

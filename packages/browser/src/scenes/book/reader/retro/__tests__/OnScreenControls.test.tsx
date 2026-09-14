@@ -4,6 +4,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 
 import {
 	DEFAULT_OVERLAY_KEYS,
+	defaultOverlayKeys,
 	joystickDirections,
 	OnScreenControls,
 	resolveOverlayLayout,
@@ -184,5 +185,65 @@ describe('resolveOverlayLayout', () => {
 	it('keeps honouring layouts saved with separate direction buttons', () => {
 		const saved = { keys: [{ id: 'up', x: 0.1, y: 0.5 }] }
 		expect(resolveOverlayLayout(saved)).toEqual([{ id: 'up', x: 0.1, y: 0.5 }])
+	})
+})
+
+describe('OnScreenControls (Spectrum)', () => {
+	let layout: ReturnType<typeof stubLayout>
+
+	beforeEach(() => {
+		layout = stubLayout()
+	})
+
+	afterEach(() => {
+		layout.mockRestore()
+	})
+
+	const renderSpectrum = (keys = defaultOverlayKeys('spectrum'), editing = false) => {
+		const sendKey = jest.fn()
+		render(<OnScreenControls keys={keys} platform="spectrum" sendKey={sendKey} editing={editing} />)
+		return sendKey
+	}
+
+	it('starts with a stick, a fire button and the keys games ask for', () => {
+		renderSpectrum()
+
+		expect(screen.getByRole('group', { name: 'Joystick' })).toBeInTheDocument()
+		expect(screen.getByRole('button', { name: 'Fire' })).toBeInTheDocument()
+		expect(screen.getByRole('button', { name: '1' })).toBeInTheDocument()
+		// A Spectrum has no RUN/STOP, so the C64's default has no place here.
+		expect(screen.queryByRole('button', { name: 'R/S' })).not.toBeInTheDocument()
+	})
+
+	it('legends the shared ids the way this machine prints them', () => {
+		renderSpectrum([{ id: 'return', x: 0.5, y: 0.5 }])
+
+		expect(screen.getByRole('button', { name: 'ENTER' })).toBeInTheDocument()
+	})
+
+	it('presses through the emulator handle rather than a window event', () => {
+		const sendKey = renderSpectrum([{ id: '1', x: 0.5, y: 0.5 }])
+		const button = screen.getByRole('button', { name: '1' })
+		fireEvent.pointerDown(button, { pointerId: 1 })
+		fireEvent.pointerUp(button, { pointerId: 1 })
+
+		expect(sendKey.mock.calls).toEqual([
+			['1', true],
+			['1', false],
+		])
+	})
+
+	it('offers this machine’s keys in the editor, and not another’s', () => {
+		renderSpectrum(defaultOverlayKeys('spectrum'), true)
+
+		expect(screen.getByRole('button', { name: 'CAPS' })).toBeInTheDocument()
+		expect(screen.getByRole('button', { name: 'SYM' })).toBeInTheDocument()
+		expect(screen.queryByRole('button', { name: 'C=' })).not.toBeInTheDocument()
+		expect(screen.queryByRole('button', { name: 'F1' })).not.toBeInTheDocument()
+	})
+
+	it('falls back to this machine’s default when a layout cannot be read', () => {
+		expect(resolveOverlayLayout({ keys: [] }, 'spectrum')).toEqual(defaultOverlayKeys('spectrum'))
+		expect(resolveOverlayLayout(null, 'c64')).toEqual(DEFAULT_OVERLAY_KEYS)
 	})
 })

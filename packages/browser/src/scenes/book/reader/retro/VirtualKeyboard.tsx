@@ -9,22 +9,56 @@ import {
 	useState,
 } from 'react'
 
-import { type Dispatchable, dispatchKey, type KeySpec, type OverlayKeyId } from './keys'
+import {
+	type Dispatchable,
+	dispatchKey,
+	type KeyModifiers,
+	type KeySpec,
+	type OverlayKeyId,
+} from './keys'
 
 /**
- * Sticky modifiers.
+ * A sticky modifier cap.
  *
- * `shift` is not a keystroke of its own: c64-ready presses matrix SHIFT itself when an
- * event carries `shiftKey`, and releases it on the next unshifted one, so a flag can
- * never leave SHIFT stuck the way a held keydown could. `commodore` and `ctrl` have no
- * such flag and are genuinely held down between their keydown and keyup.
+ * A single pointer cannot hold SHIFT and press a letter at the same time, so a modifier
+ * latches on until the next keystroke consumes it. How it reaches the machine differs:
+ * c64-ready presses matrix SHIFT itself for any event carrying `shiftKey` (and releases it
+ * on the next unshifted one, so a flag can never leave it stuck), while C=, CTRL and both
+ * of the Spectrum's shifts are genuinely held down across the keystroke.
  */
-type Modifier = 'shift' | 'shiftlock' | 'commodore' | 'ctrl'
+type Modifier = {
+	/** Latch slot; unique within a layout. */
+	name: string
+	/** Held down for the length of the keystroke. Absent for a flag-only modifier. */
+	key?: OverlayKeyId
+	/** Stamped onto the keystroke as `shiftKey` instead of being held. */
+	flag?: boolean
+	/** Stays latched until pressed again, rather than being spent on one keystroke. */
+	lock?: boolean
+}
+
+/** Cap, panel and legend colours: these are pictures of real machines, not app chrome. */
+type Palette = {
+	panel: string
+	cap: string
+	capActive: string
+	text: string
+	textActive: string
+	/** The smaller legend printed above the main one. */
+	legend: string
+	/** Function keys are a different colour of plastic on the machines that have them. */
+	fn?: string
+	fnText?: string
+	edge: string
+}
 
 type CapBase = {
-	/** Legend on the front of the cap — what the key types unshifted. */
+	/** Legend on the front of the cap — what the key types on its own. */
 	label: string
-	/** Legend printed above it — what Shift produces, as on the real keycap. */
+	/**
+	 * Legend printed above it: what SHIFT produces on a C64, what SYMBOL SHIFT produces on
+	 * a Spectrum — in both cases exactly what the real keycap shows.
+	 */
 	shiftLabel?: string
 	/** Width in cap units, where a letter key is 1. */
 	width?: number
@@ -49,6 +83,12 @@ type Filler = { filler: number }
 
 type CapRow = Array<KeyCap | Filler>
 
+type Layout = {
+	rows: CapRow[]
+	modifiers: Modifier[]
+	palette: Palette
+}
+
 const isFiller = (cap: KeyCap | Filler): cap is Filler => 'filler' in cap
 
 function key(
@@ -63,6 +103,11 @@ function key(
 function fn(id: OverlayKeyId, label: string, shiftLabel: string): KeyCap {
 	return { id, label, shiftLabel, tone: 'fn', width: 1.5 }
 }
+
+const C64_SHIFT: Modifier = { flag: true, name: 'shift' }
+const C64_SHIFT_LOCK: Modifier = { flag: true, lock: true, name: 'shiftlock' }
+const C64_COMMODORE: Modifier = { key: 'commodore', name: 'commodore' }
+const C64_CTRL: Modifier = { key: 'ctrl', name: 'ctrl' }
 
 /**
  * The breadbin layout, row by row. Every row totals 17.5 cap units (a 16-unit main block
@@ -93,7 +138,7 @@ const C64_ROWS: CapRow[] = [
 		fn('f1', 'F1', 'F2'),
 	],
 	[
-		{ modifier: 'ctrl', label: 'CTRL', width: 1.5 },
+		{ label: 'CTRL', modifier: C64_CTRL, width: 1.5 },
 		key('q', 'Q'),
 		key('w', 'W'),
 		key('e', 'E'),
@@ -112,7 +157,13 @@ const C64_ROWS: CapRow[] = [
 	],
 	[
 		key('runstop', 'STOP', 'RUN', { width: 1.25 }),
-		{ modifier: 'shiftlock', label: 'LOCK', shiftLabel: 'SHIFT', width: 1.25, aria: 'Shift lock' },
+		{
+			aria: 'Shift lock',
+			label: 'LOCK',
+			modifier: C64_SHIFT_LOCK,
+			shiftLabel: 'SHIFT',
+			width: 1.25,
+		},
 		key('a', 'A'),
 		key('s', 'S'),
 		key('d', 'D'),
@@ -129,8 +180,8 @@ const C64_ROWS: CapRow[] = [
 		fn('f5', 'F5', 'F6'),
 	],
 	[
-		{ modifier: 'commodore', label: 'C=', width: 1.25, aria: 'Commodore' },
-		{ modifier: 'shift', label: 'SHIFT', width: 1.5, aria: 'Shift left' },
+		{ aria: 'Commodore', label: 'C=', modifier: C64_COMMODORE, width: 1.25 },
+		{ aria: 'Shift left', label: 'SHIFT', modifier: C64_SHIFT, width: 1.5 },
 		key('z', 'Z'),
 		key('x', 'X'),
 		key('c', 'C'),
@@ -141,7 +192,7 @@ const C64_ROWS: CapRow[] = [
 		key('comma', ',', '<'),
 		key('period', '.', '>'),
 		key('slash', '/', '?'),
-		{ modifier: 'shift', label: 'SHIFT', width: 1.25, aria: 'Shift right' },
+		{ aria: 'Shift right', label: 'SHIFT', modifier: C64_SHIFT, width: 1.25 },
 		// The cursor cluster is two keys, not four: Shift turns down into up and right
 		// into left, exactly as the emulator's own mapping already does.
 		key('cursordown', 'CRSR', '↑↓', { aria: 'Cursor up and down' }),
@@ -151,14 +202,105 @@ const C64_ROWS: CapRow[] = [
 	[{ filler: 4 }, key('space', 'SPACE', undefined, { width: 9, aria: 'Space' }), { filler: 4.5 }],
 ]
 
-const LAYOUTS: Partial<Record<RetroPlatform, CapRow[]>> = {
-	c64: C64_ROWS,
+const SPECTRUM_CAPS_SHIFT: Modifier = { key: 'capsshift', name: 'capsshift' }
+const SPECTRUM_SYMBOL_SHIFT: Modifier = { key: 'symbolshift', name: 'symbolshift' }
+
+/**
+ * The 48K rubber keyboard: four rows of ten, which is the whole machine — every other
+ * legend is a shift away. `shiftLabel` is the red SYMBOL SHIFT character, so latching SYM
+ * and tapping P really does type `"`.
+ *
+ * The BASIC keywords printed on the keys are left off: they belong to a keyboard mode the
+ * machine chooses for itself, and there is no room for a third legend on a phone.
+ */
+const SPECTRUM_ROWS: CapRow[] = [
+	[
+		key('1', '1', '!'),
+		key('2', '2', '@'),
+		key('3', '3', '#'),
+		key('4', '4', '$'),
+		key('5', '5', '%'),
+		key('6', '6', '&'),
+		key('7', '7', "'"),
+		key('8', '8', '('),
+		key('9', '9', ')'),
+		key('0', '0', '_'),
+	],
+	[
+		key('q', 'Q', '≤'),
+		key('w', 'W', '≠'),
+		key('e', 'E', '≥'),
+		key('r', 'R', '<'),
+		key('t', 'T', '>'),
+		key('y', 'Y', 'AND'),
+		key('u', 'U', 'OR'),
+		key('i', 'I', 'AT'),
+		key('o', 'O', ';'),
+		key('p', 'P', '"'),
+	],
+	[
+		key('a', 'A', 'STOP'),
+		key('s', 'S', 'NOT'),
+		key('d', 'D', 'STEP'),
+		key('f', 'F', 'TO'),
+		key('g', 'G', 'THEN'),
+		key('h', 'H', '↑'),
+		key('j', 'J', '-'),
+		key('k', 'K', '+'),
+		key('l', 'L', '='),
+		key('return', 'ENTER', undefined, { aria: 'Enter' }),
+	],
+	[
+		{ aria: 'Caps shift', label: 'CAPS', modifier: SPECTRUM_CAPS_SHIFT, shiftLabel: 'SHIFT' },
+		key('z', 'Z', ':'),
+		key('x', 'X', '£'),
+		key('c', 'C', '?'),
+		key('v', 'V', '/'),
+		key('b', 'B', '*'),
+		key('n', 'N', ','),
+		key('m', 'M', '.'),
+		{ aria: 'Symbol shift', label: 'SYM', modifier: SPECTRUM_SYMBOL_SHIFT, shiftLabel: 'SHIFT' },
+		key('space', 'SPACE', 'BREAK', { aria: 'Space' }),
+	],
+]
+
+const LAYOUTS: Partial<Record<RetroPlatform, Layout>> = {
+	c64: {
+		modifiers: [C64_SHIFT, C64_SHIFT_LOCK, C64_COMMODORE, C64_CTRL],
+		palette: {
+			cap: '#d9d3c5',
+			capActive: '#6f8f5a',
+			edge: 'rgba(0, 0, 0, 0.25)',
+			fn: '#9a7d5d',
+			fnText: '#f6efe2',
+			legend: 'rgba(46, 42, 36, 0.7)',
+			panel: '#a9a091',
+			text: '#2e2a24',
+			textActive: '#ffffff',
+		},
+		rows: C64_ROWS,
+	},
+	spectrum: {
+		modifiers: [SPECTRUM_CAPS_SHIFT, SPECTRUM_SYMBOL_SHIFT],
+		palette: {
+			cap: '#3f3f42',
+			capActive: '#c8102e',
+			edge: 'rgba(0, 0, 0, 0.6)',
+			legend: '#ff5a4d',
+			panel: '#121212',
+			text: '#f2f2f2',
+			textActive: '#ffffff',
+		},
+		rows: SPECTRUM_ROWS,
+	},
 }
 
 /** Whether this platform has an authentic layout to show. */
 export function hasVirtualKeyboard(platform: RetroPlatform): boolean {
 	return platform in LAYOUTS
 }
+
+type SendKey = (target: Dispatchable, down: boolean, modifiers?: KeyModifiers) => void
 
 type CapButtonProps = {
 	cap: KeyCap
@@ -205,10 +347,11 @@ function CapButton({ cap, active, onPress, onRelease }: CapButtonProps) {
 			aria-label={cap.aria ?? cap.label}
 			aria-pressed={cap.modifier ? active : undefined}
 			className={cn(
-				'min-w-0 px-0.5 border-black/25 shadow-sm flex touch-none flex-col items-center justify-center overflow-hidden rounded-[3px] border-b-2 bg-[#d9d3c5] leading-none text-[#2e2a24] select-none',
-				'active:translate-y-px active:border-b active:bg-[#bdb5a3]',
-				cap.tone === 'fn' && 'border-black/35 bg-[#9a7d5d] text-[#f6efe2]',
-				active && 'border-black/40 text-white bg-[#6f8f5a]',
+				'min-w-0 px-0.5 flex touch-none flex-col items-center justify-center overflow-hidden rounded-[3px] border-b-2 leading-none select-none',
+				'shadow-sm border-[color:var(--cap-edge)] bg-[var(--cap-bg)] text-[color:var(--cap-fg)]',
+				'active:translate-y-px active:border-b active:brightness-90',
+				cap.tone === 'fn' && 'bg-[var(--cap-fn-bg)] text-[color:var(--cap-fn-fg)]',
+				active && 'bg-[var(--cap-active-bg)] text-[color:var(--cap-active-fg)]',
 			)}
 			style={{ flexBasis: 0, flexGrow: cap.width ?? 1 }}
 			onPointerDown={press}
@@ -217,7 +360,9 @@ function CapButton({ cap, active, onPress, onRelease }: CapButtonProps) {
 			onContextMenu={(e) => e.preventDefault()}
 		>
 			{cap.shiftLabel ? (
-				<span className="max-w-full truncate text-[0.75em] opacity-70">{cap.shiftLabel}</span>
+				<span className="max-w-full truncate text-[0.75em] text-[color:var(--cap-legend)]">
+					{cap.shiftLabel}
+				</span>
 			) : null}
 			<span className="max-w-full truncate">{cap.label}</span>
 		</button>
@@ -228,115 +373,119 @@ type VirtualKeyboardProps = {
 	platform: RetroPlatform
 	/** Hand focus back to the canvas once a keystroke completes. */
 	onReleased?: () => void
+	/**
+	 * How a keystroke reaches the machine. Defaults to a synthetic `KeyboardEvent` on
+	 * `window`, which is where c64-ready listens; emulators with an input API of their own
+	 * pass `RetroEmulatorHandle.sendKey` instead.
+	 */
+	sendKey?: SendKey
 }
 
 /**
  * The machine's own keyboard, docked under the playfield.
  *
  * Modifiers are sticky one-shots rather than held buttons — a single pointer cannot hold
- * SHIFT and press a letter at the same time — with SHIFT LOCK covering the case where a
- * user wants shift to stay down, which is what the cap is for on the real machine too.
+ * SHIFT and press a letter at the same time — with the C64's SHIFT LOCK covering the case
+ * where a user wants shift to stay down, which is what the cap is for on the real machine
+ * too.
  */
-export function VirtualKeyboard({ platform, onReleased }: VirtualKeyboardProps) {
-	const rows = LAYOUTS[platform]
+export function VirtualKeyboard({
+	platform,
+	onReleased,
+	sendKey = dispatchKey,
+}: VirtualKeyboardProps) {
+	const layout = LAYOUTS[platform]
+	const modifiers = layout?.modifiers
+	const [latched, setLatched] = useState<Record<string, boolean>>({})
 
-	const [shift, setShift] = useState(false)
-	const [shiftLock, setShiftLock] = useState(false)
-	const [commodore, setCommodore] = useState(false)
-	const [ctrl, setCtrl] = useState(false)
+	const flagActive = !!modifiers?.some((modifier) => modifier.flag && latched[modifier.name])
 
 	// Unmounting mid-chord (toggling the panel off, closing the book) must not leave a
 	// matrix key held down for the rest of the session.
-	const heldRef = useRef({ commodore: false, ctrl: false })
+	const releaseHeldRef = useRef<() => void>(() => undefined)
 	useEffect(() => {
-		heldRef.current = { commodore, ctrl }
-	}, [commodore, ctrl])
-	useEffect(
-		() => () => {
-			if (heldRef.current.commodore) dispatchKey('commodore', false)
-			if (heldRef.current.ctrl) dispatchKey('ctrl', false)
-		},
-		[],
-	)
-
-	const shiftActive = shift || shiftLock
+		releaseHeldRef.current = () => {
+			for (const modifier of modifiers ?? []) {
+				if (modifier.key && latched[modifier.name]) sendKey(modifier.key, false)
+			}
+		}
+	}, [latched, modifiers, sendKey])
+	useEffect(() => () => releaseHeldRef.current(), [])
 
 	const onPress = useCallback(
 		(cap: KeyCap): Dispatchable | null => {
 			if (!cap.modifier) {
 				// A `shiftSpec` already encodes the shift press, so the flag would only
 				// duplicate it.
-				const target = shiftActive && cap.shiftSpec ? cap.shiftSpec : cap.id
-				dispatchKey(target, true, { shiftKey: shiftActive && !cap.shiftSpec })
+				const target = flagActive && cap.shiftSpec ? cap.shiftSpec : cap.id
+				sendKey(target, true, { shiftKey: flagActive && !cap.shiftSpec })
 				return target
 			}
-			switch (cap.modifier) {
-				case 'shift':
-					setShift((held) => !held)
-					break
-				case 'shiftlock':
-					setShiftLock((locked) => !locked)
-					setShift(false)
-					break
-				case 'commodore':
-					dispatchKey('commodore', !commodore)
-					setCommodore(!commodore)
-					break
-				case 'ctrl':
-					dispatchKey('ctrl', !ctrl)
-					setCtrl(!ctrl)
-					break
-			}
+
+			const { name, key: heldKey, lock } = cap.modifier
+			const next = !latched[name]
+			if (heldKey) sendKey(heldKey, next)
+			setLatched((current) => {
+				// Latching SHIFT LOCK takes over from a one-shot SHIFT rather than stacking
+				// with it.
+				const cleared = lock
+					? Object.fromEntries(
+							Object.entries(current).map(([slot, on]) => [
+								slot,
+								modifiers?.some((modifier) => modifier.name === slot && modifier.flag) ? false : on,
+							]),
+						)
+					: current
+				return { ...cleared, [name]: next }
+			})
 			return null
 		},
-		[commodore, ctrl, shiftActive],
+		[flagActive, latched, modifiers, sendKey],
 	)
 
 	const onRelease = useCallback(
 		(cap: KeyCap, target: Dispatchable | null) => {
 			if (cap.modifier || !target) return
-			dispatchKey(target, false, { shiftKey: shiftActive && typeof target === 'string' })
-			// The keystroke is what consumes a one-shot modifier. SHIFT LOCK is the
-			// exception, which is the whole point of it having its own cap.
-			if (shift) setShift(false)
-			if (commodore) {
-				dispatchKey('commodore', false)
-				setCommodore(false)
+			sendKey(target, false, { shiftKey: flagActive && typeof target === 'string' })
+			// The keystroke is what consumes a one-shot modifier. A lock is the exception,
+			// which is the whole point of it having its own cap.
+			for (const modifier of modifiers ?? []) {
+				if (modifier.lock || !latched[modifier.name]) continue
+				if (modifier.key) sendKey(modifier.key, false)
 			}
-			if (ctrl) {
-				dispatchKey('ctrl', false)
-				setCtrl(false)
-			}
+			setLatched((current) => {
+				const next = { ...current }
+				for (const modifier of modifiers ?? []) {
+					if (!modifier.lock) next[modifier.name] = false
+				}
+				return next
+			})
 			onReleased?.()
 		},
-		[commodore, ctrl, onReleased, shift, shiftActive],
+		[flagActive, latched, modifiers, onReleased, sendKey],
 	)
 
-	if (!rows) return null
+	if (!layout) return null
 
-	const isActive = (cap: KeyCap) => {
-		switch (cap.modifier) {
-			case 'shift':
-				return shift
-			case 'shiftlock':
-				return shiftLock
-			case 'commodore':
-				return commodore
-			case 'ctrl':
-				return ctrl
-			default:
-				return false
-		}
-	}
+	const { palette, rows } = layout
 
 	return (
 		<div
 			// A picture of a physical machine rather than app chrome, so the palette is the
-			// C64's in both themes -- the same call the overlay editor panel makes.
-			className="border-black/50 p-1 flex shrink-0 touch-none flex-col gap-[2px] border-t bg-[#a9a091] select-none"
+			// machine's own in both themes -- the same call the overlay editor panel makes.
+			className="p-1 flex shrink-0 touch-none flex-col gap-[2px] border-t border-[color:var(--cap-edge)] bg-[var(--panel-bg)] select-none"
 			style={
 				{
+					'--cap-active-bg': palette.capActive,
+					'--cap-active-fg': palette.textActive,
+					'--cap-bg': palette.cap,
+					'--cap-edge': palette.edge,
+					'--cap-fg': palette.text,
+					'--cap-fn-bg': palette.fn ?? palette.cap,
+					'--cap-fn-fg': palette.fnText ?? palette.text,
 					'--cap-h': 'clamp(20px, min(4.4vw, 6.2vh), 40px)',
+					'--cap-legend': palette.legend,
+					'--panel-bg': palette.panel,
 					fontSize: 'clamp(7px, min(1vw, 1.5vh), 11px)',
 				} as CSSProperties
 			}
@@ -350,7 +499,7 @@ export function VirtualKeyboard({ platform, onReleased }: VirtualKeyboardProps) 
 							<CapButton
 								key={capIndex}
 								cap={cap}
-								active={isActive(cap)}
+								active={!!cap.modifier && !!latched[cap.modifier.name]}
 								onPress={onPress}
 								onRelease={onRelease}
 							/>

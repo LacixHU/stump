@@ -212,6 +212,8 @@ const RETRO_CONTROL_EXTRA_KEYS: &[&str] = &[
 	"instdel",
 	"home",
 	"shift",
+	"capsshift",
+	"symbolshift",
 ];
 
 /// Placeable overlay controls that are not a single character. `joystick` is the odd one
@@ -231,6 +233,10 @@ const RETRO_OVERLAY_SPECIAL_IDS: &[&str] = &[
 	"ctrl",
 	"shift",
 	"shiftright",
+	// The Spectrum's two shifts. Every other legend on that machine is one of these plus
+	// a key that is already in the list.
+	"capsshift",
+	"symbolshift",
 	"restore",
 	"instdel",
 	"home",
@@ -736,6 +742,23 @@ mod tests {
 
 		let letters = parse_retro_controls(br#"{"keys":[{"id":"a","x":0.2,"y":0.3}]}"#);
 		assert_eq!(letters[0].id, "a");
+	}
+
+	#[test]
+	fn test_parse_retro_controls_accepts_spectrum_shifts() {
+		// CAPS SHIFT and SYMBOL SHIFT are keys of the Spectrum matrix, so a layout saved
+		// for a Spectrum game has to survive the allow-list.
+		let keys = parse_retro_controls(
+			br#"{"keys":[{"id":"CapsShift","x":0.1,"y":0.9},{"id":"symbolshift","x":0.2,"y":0.9}]}"#,
+		);
+		assert_eq!(
+			keys.iter().map(|k| k.id.as_str()).collect::<Vec<_>>(),
+			vec!["capsshift", "symbolshift"]
+		);
+
+		let extras =
+			parse_retro_extra_keys(br#"{"extraKeys":["capsshift","symbolshift"]}"#);
+		assert_eq!(extras, vec!["capsshift", "symbolshift"]);
 	}
 
 	#[test]

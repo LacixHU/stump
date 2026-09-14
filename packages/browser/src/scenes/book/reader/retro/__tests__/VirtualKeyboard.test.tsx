@@ -36,9 +36,12 @@ describe('hasVirtualKeyboard', () => {
 		expect(hasVirtualKeyboard('c64')).toBe(true)
 	})
 
+	it('offers a layout for the Spectrum', () => {
+		expect(hasVirtualKeyboard('spectrum')).toBe(true)
+	})
+
 	it('stays silent for platforms without an authentic layout yet', () => {
 		expect(hasVirtualKeyboard('amiga')).toBe(false)
-		expect(hasVirtualKeyboard('spectrum')).toBe(false)
 	})
 })
 
@@ -197,5 +200,70 @@ describe('VirtualKeyboard', () => {
 				{ key: 'Control', shiftKey: false, type: 'keyup' },
 			])
 		})
+	})
+})
+
+describe('VirtualKeyboard (Spectrum)', () => {
+	/**
+	 * JSSpeccy takes input through an API rather than window events, so the Spectrum
+	 * keyboard is handed a `sendKey` and its whole observable behaviour is what it calls.
+	 */
+	function renderSpectrum() {
+		const sendKey = jest.fn()
+		render(<VirtualKeyboard platform="spectrum" sendKey={sendKey} />)
+		return sendKey
+	}
+
+	it('draws the rubber keyboard: four rows of ten', () => {
+		const { container } = render(<VirtualKeyboard platform="spectrum" />)
+		const rows = Array.from(container.firstElementChild?.children ?? [])
+
+		expect(rows).toHaveLength(4)
+		for (const row of rows) {
+			expect(row.children).toHaveLength(10)
+		}
+	})
+
+	it('prints the symbol-shift character above the letter, as on the keycap', () => {
+		render(<VirtualKeyboard platform="spectrum" />)
+
+		expect(screen.getByRole('button', { name: 'P' })).toHaveTextContent('"P')
+	})
+
+	it('sends a press and a release through the emulator handle', () => {
+		const sendKey = renderSpectrum()
+		tap('A')
+
+		expect(sendKey.mock.calls).toEqual([
+			['a', true, { shiftKey: false }],
+			['a', false, { shiftKey: false }],
+		])
+	})
+
+	it('holds CAPS SHIFT down across the keystroke it modifies', () => {
+		// CAPS SHIFT is a key of the matrix like any other: a game reading the cursor keys
+		// is reading CAPS SHIFT and 5 held together, not a shift flag.
+		const sendKey = renderSpectrum()
+		tap('Caps shift')
+		tap('7')
+
+		expect(sendKey.mock.calls).toEqual([
+			['capsshift', true],
+			['7', true, { shiftKey: false }],
+			['7', false, { shiftKey: false }],
+			['capsshift', false],
+		])
+	})
+
+	it('releases a latched shift when the keyboard goes away mid-chord', () => {
+		const sendKey = jest.fn()
+		const { unmount } = render(<VirtualKeyboard platform="spectrum" sendKey={sendKey} />)
+		tap('Symbol shift')
+		unmount()
+
+		expect(sendKey.mock.calls).toEqual([
+			['symbolshift', true],
+			['symbolshift', false],
+		])
 	})
 })

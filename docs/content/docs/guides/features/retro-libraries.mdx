@@ -57,7 +57,7 @@ Supported load types in this core: **`.d64`**, **`.prg`**, **`.crt`** (`.t64`/`.
 - **Virtual keyboard** (toolbar) docks the full C64 keyboard under the playfield, on desktop and touch alike. It is part of the fullscreen element, so it stays available in fullscreen.
   - `SHIFT` and `C=` are sticky one-shots: tap the modifier, then the key it applies to. `SHIFT LOCK` holds shift down until it is tapped again, as on the machine.
   - The shifted legend is printed above the unshifted one, so `SHIFT` + `1` gives `!`, `SHIFT` + `HOME` gives `CLR`, `SHIFT` + `F1` gives `F2`, and `SHIFT` + either cursor key reverses its direction.
-  - Only the C64 has an authentic layout today, so the button does not appear for other platforms.
+  - The C64 and the Spectrum both have an authentic layout; the button does not appear for platforms that do not.
 - Users with **Manage library** can **Edit overlay** (Settings): pick the joystick, fire, or any C64 key from the on-screen keyboard and drag them into place. Save writes series-folder `controls.json`.
 - The disk list **inserts** a new image into the running session (no reboot, no auto `LOAD`/`RUN`). Use this for multi-disk games.
 
@@ -82,6 +82,58 @@ Optional overlay layout lives in a series-folder `controls.json` next to the dis
 | `GET /api/v2/media/{id}/save-state`     | Library access  |
 | `PUT /api/v2/media/{id}/save-state`     | Library access  |
 | `DELETE /api/v2/media/{id}/save-state`  | Library access  |
+
+## ZX Spectrum emulator
+
+In-browser Spectrum play uses **[JSSpeccy 3.2](https://github.com/gasman/jsspeccy3)** by Matt
+Westcott: a WASM Z80 core in a Web Worker, cycle-accurate down to multicolour effects, with AY
+and beeper audio. Assets are served from `/retro/spectrum/` (`jsspeccy.js`, the worker, the
+core, ROMs and tape loaders).
+
+JSSpeccy is **GPL-3.0**, unlike the rest of Stump (MIT), and is redistributed here under that
+licence — its full text sits next to the bundle in `packages/browser/public/retro/spectrum/`.
+Nothing but `emulators/spectrum.ts` touches it, so swapping cores is a one-file change.
+
+Supported load types: **`.tap`** and **`.tzx`** tapes, **`.z80`** and **`.sna`** snapshots.
+(The core also reads `.szx`, but that extension is not yet catalogued as retro media, so no
+library will hand it to the player.) The Spectrum ROMs are bundled — Amstrad permits
+redistributing them with an emulator — so unlike the Amiga there is nothing to install.
+
+### Controls
+
+- **Machine** (Settings) picks **Spectrum 128K** (the default), **48K** or **Pentagon 128**.
+  Switching restarts the machine and reloads the game, so pick it before playing. 128K is the
+  safer default for later titles; a few early games want a real 48K. A `.z80` or `.sna`
+  snapshot carries its own machine type, so it always comes back as whatever it was saved on.
+- **Loading speed** (Settings) is the tape equivalent of the C64's disk speed. **Instant**
+  (default) traps the ROM's load routine and copies the tape in; **Authentic** plays the tape
+  through the ULA at real speed, loading screens and all.
+- **Joystick keys** (Settings). A Spectrum has no joystick port, and this core does not
+  emulate a Kempston interface, so the on-screen stick presses keys instead. Pick the scheme
+  the game was written for:
+  - **Q/A/O/P + Space** (default), the usual keyboard-game layout
+  - **Cursor keys**, which are CAPS SHIFT + 5-8 with `0` to fire (Protek / AGF)
+  - **Sinclair (6-0)**, the Interface 2 right-hand stick
+- **Reset** (toolbar) restarts the machine and reloads the tape or snapshot.
+- On-screen controls default to the stick, a fire button, `1`, `2` and `ENTER` — `1` and `2`
+  pick a control method in a good half of the catalogue. Any of the machine's 40 keys can be
+  dragged in from the overlay editor.
+- **Virtual keyboard** (toolbar) docks the 48K rubber keyboard. `CAPS SHIFT` and `SYMBOL
+SHIFT` are sticky one-shots that are genuinely held down across the next keystroke, because
+  that is what they are on the machine: a game reading the cursor keys is reading CAPS SHIFT
+  and `5` pressed together. The red SYMBOL SHIFT legend is printed above each key, so `SYM` +
+  `P` types `"`.
+- A physical keyboard is mapped by position (so a non-QWERTY layout still lines up), with
+  Shift as CAPS SHIFT, Ctrl as SYMBOL SHIFT, and the keys a Spectrum never had — arrows,
+  Backspace, Escape — sent as the CAPS SHIFT combinations they correspond to.
+
+Overlay `controls.json` works exactly as it does for the C64, with `capsshift` and
+`symbolshift` joining the vocabulary. A layout saved for a C64 game still loads: `runstop`
+becomes BREAK, `instdel` becomes DELETE, the cursor ids become their CAPS SHIFT pairs, and
+keys with no Spectrum equivalent (`commodore`, the function keys) simply do nothing.
+
+Save states are not available: the bundle can load a snapshot but has no way to write one, so
+the header's save and load buttons are hidden for Spectrum games.
 
 ## Play vs download
 
@@ -145,12 +197,18 @@ the snapshots belonging to its books. The server accepts snapshots up to **16 Mi
 which is comfortably above a C64 snapshot (a few hundred KiB) and an Amiga one
 (a few MiB).
 
-Save states depend on the emulator core supporting snapshots. The C64 core does; the
-Spectrum and Amiga shells do not yet, and the player will say so.
+Save states depend on the emulator core being able to write a snapshot. The C64 core can;
+JSSpeccy can only read them, and the Amiga is still a shell — for both, the save and load
+buttons are hidden rather than offered and then refused.
 
 ## Legal
 
-You must supply your own game images and BIOS/firmware. Stump does not distribute copyrighted ROMs or disk images.
+You must supply your own game images. Stump does not distribute copyrighted disk or tape
+images.
+
+Machine ROMs differ by platform. The Spectrum ROMs ship with the JSSpeccy bundle, which
+Amstrad permits for emulators; the Amiga's Kickstart does not allow that, so you supply it
+yourself (see above). The Spectrum core itself is GPL-3.0 — see the ZX Spectrum section.
 
 ## OPDS
 

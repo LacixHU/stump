@@ -1,16 +1,21 @@
+import type { RetroPlatform } from '@stump/client'
 import { Button, cn } from '@stump/components'
 import { type PointerEvent, type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 
+import type { RetroEmulatorHandle } from './emulators'
 import {
 	dispatchKey,
 	isJoystick,
 	JOYSTICK_ID,
 	type JoystickDirection,
 	OVERLAY_CONTROL_IDS,
-	OVERLAY_CONTROL_LABELS,
 	type OverlayControlId,
 	type OverlayKeyId,
+	overlayLabel,
 } from './keys'
+
+/** How a control reaches the machine; see `RetroEmulatorHandle.sendKey`. */
+type SendKey = NonNullable<RetroEmulatorHandle['sendKey']>
 
 export type OverlayKeyPlacement = {
 	id: OverlayControlId
@@ -18,7 +23,7 @@ export type OverlayKeyPlacement = {
 	y: number
 }
 
-const EDITOR_ROWS: OverlayControlId[][] = [
+const C64_EDITOR_ROWS: OverlayControlId[][] = [
 	[
 		'arrowleft',
 		'1',
@@ -71,6 +76,29 @@ const EDITOR_ROWS: OverlayControlId[][] = [
 	],
 ]
 
+/**
+ * The Spectrum's 40 keys, in rubber-keyboard order, plus the stick. There are no function
+ * keys, no C= and no RUN/STOP to offer: every other legend on the machine is CAPS SHIFT or
+ * SYMBOL SHIFT plus one of these.
+ */
+const SPECTRUM_EDITOR_ROWS: OverlayControlId[][] = [
+	['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
+	['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
+	['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'return'],
+	['capsshift', 'z', 'x', 'c', 'v', 'b', 'n', 'm', 'symbolshift', 'space'],
+	[JOYSTICK_ID, 'fire', 'up', 'down', 'left', 'right'],
+]
+
+const EDITOR_ROWS: Partial<Record<RetroPlatform, OverlayControlId[][]>> = {
+	c64: C64_EDITOR_ROWS,
+	spectrum: SPECTRUM_EDITOR_ROWS,
+}
+
+/** Whether this platform has a key vocabulary the overlay can be built from. */
+export function hasOverlayControls(platform: RetroPlatform): boolean {
+	return platform in EDITOR_ROWS
+}
+
 export const DEFAULT_OVERLAY_KEYS: OverlayKeyPlacement[] = [
 	{ id: JOYSTICK_ID, x: 0.15, y: 0.74 },
 	{ id: 'fire', x: 0.88, y: 0.78 },
@@ -79,17 +107,43 @@ export const DEFAULT_OVERLAY_KEYS: OverlayKeyPlacement[] = [
 	{ id: 'return', x: 0.7, y: 0.92 },
 ]
 
+/**
+ * A Spectrum stick presses whatever keys the joystick scheme names, so the overlay wants
+ * the keys a game asks for around it -- `1` and `2` pick a control method in half the
+ * catalogue -- rather than the C64's RUN/STOP.
+ */
+const SPECTRUM_OVERLAY_KEYS: OverlayKeyPlacement[] = [
+	{ id: JOYSTICK_ID, x: 0.15, y: 0.74 },
+	{ id: 'fire', x: 0.88, y: 0.78 },
+	{ id: '1', x: 0.42, y: 0.92 },
+	{ id: '2', x: 0.52, y: 0.92 },
+	{ id: 'return', x: 0.68, y: 0.92 },
+]
+
+const PLATFORM_OVERLAY_KEYS: Partial<Record<RetroPlatform, OverlayKeyPlacement[]>> = {
+	spectrum: SPECTRUM_OVERLAY_KEYS,
+}
+
+/** The layout a game starts with when it has no `controls.json` of its own. */
+export function defaultOverlayKeys(platform: RetroPlatform): OverlayKeyPlacement[] {
+	return PLATFORM_OVERLAY_KEYS[platform] ?? DEFAULT_OVERLAY_KEYS
+}
+
 const ALLOW = OVERLAY_CONTROL_IDS as readonly string[]
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value))
 
-export function resolveOverlayLayout(data: unknown): OverlayKeyPlacement[] {
+export function resolveOverlayLayout(
+	data: unknown,
+	platform: RetroPlatform = 'c64',
+): OverlayKeyPlacement[] {
+	const fallback = defaultOverlayKeys(platform)
 	if (!data || typeof data !== 'object' || !('keys' in data)) {
-		return DEFAULT_OVERLAY_KEYS
+		return fallback
 	}
 	const raw = (data as { keys: unknown }).keys
 	if (!Array.isArray(raw) || raw.length === 0) {
-		return DEFAULT_OVERLAY_KEYS
+		return fallback
 	}
 	const out: OverlayKeyPlacement[] = []
 	for (const item of raw) {
@@ -107,7 +161,7 @@ export function resolveOverlayLayout(data: unknown): OverlayKeyPlacement[] {
 			y: clamp01(y),
 		})
 	}
-	return out.length ? out : DEFAULT_OVERLAY_KEYS
+	return out.length ? out : fallback
 }
 
 type PlacementProps = {
@@ -116,6 +170,8 @@ type PlacementProps = {
 	onMove?: (id: OverlayControlId, x: number, y: number) => void
 	onReleased?: () => void
 	containerRef: RefObject<HTMLDivElement | null>
+	platform: RetroPlatform
+	sendKey: SendKey
 }
 
 /**
@@ -203,7 +259,15 @@ const JOYSTICK_HINTS: Array<{ direction: JoystickDirection; glyph: string; class
  * wanders off the base, which is what makes a fast turn feel continuous rather than like
  * four buttons being stabbed in sequence.
  */
-function Thumbstick({ placement, editing, onMove, onReleased, containerRef }: PlacementProps) {
+function Thumbstick({
+	placement,
+	editing,
+	onMove,
+	onReleased,
+	containerRef,
+	platform,
+	sendKey,
+}: PlacementProps) {
 	const baseRef = useRef<HTMLDivElement>(null)
 	const held = useRef<JoystickDirection[]>([])
 	const engaged = useRef(false)
@@ -211,16 +275,19 @@ function Thumbstick({ placement, editing, onMove, onReleased, containerRef }: Pl
 	const [knob, setKnob] = useState({ x: 0, y: 0 })
 	const [active, setActive] = useState<JoystickDirection[]>([])
 
-	const hold = useCallback((next: JoystickDirection[]) => {
-		for (const direction of held.current) {
-			if (!next.includes(direction)) dispatchKey(direction, false)
-		}
-		for (const direction of next) {
-			if (!held.current.includes(direction)) dispatchKey(direction, true)
-		}
-		held.current = next
-		setActive(next)
-	}, [])
+	const hold = useCallback(
+		(next: JoystickDirection[]) => {
+			for (const direction of held.current) {
+				if (!next.includes(direction)) sendKey(direction, false)
+			}
+			for (const direction of next) {
+				if (!held.current.includes(direction)) sendKey(direction, true)
+			}
+			held.current = next
+			setActive(next)
+		},
+		[sendKey],
+	)
 
 	// A stick torn down mid-throw -- overlay hidden, disk swapped -- would otherwise leave
 	// its directions held down inside the emulator.
@@ -293,7 +360,7 @@ function Thumbstick({ placement, editing, onMove, onReleased, containerRef }: Pl
 		<div
 			ref={baseRef}
 			role="group"
-			aria-label={OVERLAY_CONTROL_LABELS[placement.id]}
+			aria-label={overlayLabel(placement.id, platform)}
 			className={cn(
 				'sm:h-32 sm:w-32 h-28 w-28 border-white/30 bg-white/10 backdrop-blur-sm pointer-events-auto absolute z-20 -translate-x-1/2 -translate-y-1/2 touch-none rounded-full border select-none',
 				editing && 'ring-brand/80 ring-2',
@@ -327,7 +394,15 @@ function Thumbstick({ placement, editing, onMove, onReleased, containerRef }: Pl
 	)
 }
 
-function PadButton({ placement, editing, onMove, onReleased, containerRef }: PlacementProps) {
+function PadButton({
+	placement,
+	editing,
+	onMove,
+	onReleased,
+	containerRef,
+	platform,
+	sendKey,
+}: PlacementProps) {
 	const held = useRef(false)
 	const { begin, drag, end } = usePlacementDrag(placement.id, containerRef, onMove)
 	const keyId = placement.id as OverlayKeyId
@@ -335,8 +410,8 @@ function PadButton({ placement, editing, onMove, onReleased, containerRef }: Pla
 	const lift = useCallback(() => {
 		if (!held.current) return
 		held.current = false
-		dispatchKey(keyId, false)
-	}, [keyId])
+		sendKey(keyId, false)
+	}, [keyId, sendKey])
 
 	// Same reasoning as the stick: a button unmounted while down must not stay down.
 	useEffect(() => lift, [lift])
@@ -352,9 +427,9 @@ function PadButton({ placement, editing, onMove, onReleased, containerRef }: Pla
 			}
 			if (held.current) return
 			held.current = true
-			dispatchKey(keyId, true)
+			sendKey(keyId, true)
 		},
-		[begin, editing, keyId],
+		[begin, editing, keyId, sendKey],
 	)
 
 	const move = useCallback(
@@ -388,6 +463,8 @@ function PadButton({ placement, editing, onMove, onReleased, containerRef }: Pla
 		'commodore',
 		'shift',
 		'shiftright',
+		'capsshift',
+		'symbolshift',
 	].includes(placement.id)
 
 	return (
@@ -406,7 +483,7 @@ function PadButton({ placement, editing, onMove, onReleased, containerRef }: Pla
 			onPointerCancel={release}
 			onContextMenu={(e) => e.preventDefault()}
 		>
-			{OVERLAY_CONTROL_LABELS[placement.id]}
+			{overlayLabel(placement.id, platform)}
 		</button>
 	)
 }
@@ -418,6 +495,14 @@ type OnScreenControlsProps = {
 	onSave?: () => void
 	onCancel?: () => void
 	onReleased?: () => void
+	/** Decides which keys the editor offers and what legend each control carries. */
+	platform?: RetroPlatform
+	/**
+	 * How a control reaches the machine. Defaults to a synthetic `KeyboardEvent` on
+	 * `window`, which is where c64-ready listens; emulators with an input API of their own
+	 * pass `RetroEmulatorHandle.sendKey` instead.
+	 */
+	sendKey?: SendKey
 }
 
 export function OnScreenControls({
@@ -427,8 +512,11 @@ export function OnScreenControls({
 	onSave,
 	onCancel,
 	onReleased,
+	platform = 'c64',
+	sendKey = dispatchKey,
 }: OnScreenControlsProps) {
 	const containerRef = useRef<HTMLDivElement>(null)
+	const editorRows = EDITOR_ROWS[platform] ?? C64_EDITOR_ROWS
 
 	const onMove = useCallback(
 		(id: OverlayControlId, x: number, y: number) => {
@@ -449,7 +537,7 @@ export function OnScreenControls({
 		<div ref={containerRef} className="inset-0 pointer-events-none absolute z-20">
 			{editing ? (
 				<div className="top-2 right-2 left-2 p-2 gap-2 bg-black/80 pointer-events-auto absolute z-30 flex max-h-[45%] flex-col overflow-y-auto rounded-md">
-					{EDITOR_ROWS.map((row, rowIndex) => (
+					{editorRows.map((row, rowIndex) => (
 						<div key={rowIndex} className="gap-1 flex flex-wrap">
 							{row.map((id) => {
 								const active = keys.some((k) => k.id === id)
@@ -465,7 +553,7 @@ export function OnScreenControls({
 										)}
 										onClick={() => toggle(id)}
 									>
-										{OVERLAY_CONTROL_LABELS[id]}
+										{overlayLabel(id, platform)}
 									</button>
 								)
 							})}
@@ -497,6 +585,8 @@ export function OnScreenControls({
 						onMove={onMove}
 						onReleased={onReleased}
 						containerRef={containerRef}
+						platform={platform}
+						sendKey={sendKey}
 					/>
 				) : (
 					<PadButton
@@ -506,6 +596,8 @@ export function OnScreenControls({
 						onMove={onMove}
 						onReleased={onReleased}
 						containerRef={containerRef}
+						platform={platform}
+						sendKey={sendKey}
 					/>
 				),
 			)}

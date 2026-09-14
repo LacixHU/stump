@@ -1,6 +1,11 @@
 import type { RetroPlatform } from '@stump/client'
 
+import type { Dispatchable, KeyModifiers } from '../keys'
+
 export type RetroDiskSpeed = 'authentic' | 'instant'
+
+/** One entry in a machine-specific choice the player chrome renders as a radio group. */
+export type RetroOption = { id: string; label: string }
 
 export type EmulatorMountOptions = {
 	canvas: HTMLCanvasElement
@@ -29,6 +34,25 @@ export type RetroEmulatorHandle = {
 	setInputMode?: (mode: RetroInputMode) => void
 	setJoystickPort?: (port: 1 | 2) => void
 	setDiskSpeed?: (speed: RetroDiskSpeed) => void
+	/**
+	 * Press or release a control from one of the touch surfaces.
+	 *
+	 * Emulators that listen for `KeyboardEvent`s on `window` (c64-ready) need nothing here:
+	 * `dispatchKey` already reaches them. This is for the ones that take input through an
+	 * API of their own, where a synthetic event would go nowhere.
+	 */
+	sendKey?: (target: Dispatchable, down: boolean, modifiers?: KeyModifiers) => void
+	/** Machine variants of the same platform (Spectrum 48K/128K/Pentagon). */
+	machines?: readonly RetroOption[]
+	/** Id of the variant currently running, from `machines`. */
+	machine?: string
+	/** Switching restarts the machine, so the image is reloaded with it. */
+	setMachine?: (id: string) => Promise<void>
+	/** Key schemes an on-screen stick can drive, for machines with no joystick port. */
+	joystickSchemes?: readonly RetroOption[]
+	/** Id of the scheme currently in use, from `joystickSchemes`. */
+	joystickScheme?: string
+	setJoystickScheme?: (id: string) => void
 }
 
 export type RetroEmulatorModule = {

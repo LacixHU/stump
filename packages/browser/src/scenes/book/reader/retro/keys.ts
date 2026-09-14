@@ -2,12 +2,17 @@
  * The key vocabulary shared by the two retro input surfaces: the draggable joystick
  * overlay (`OnScreenControls`) and the docked machine keyboard (`VirtualKeyboard`).
  *
- * Both talk to the emulator the same way -- by dispatching synthetic `KeyboardEvent`s on
- * `window`, which is where c64-ready installs its listeners. It maps matrix keys off
- * `event.key` and joystick keys off `event.code`, so the `code` values below are
- * deliberately nonsense (`C64_z`): a real `KeyZ` would be swallowed as joystick fire in
- * mixed mode instead of reaching the keyboard matrix.
+ * The ids are machine-neutral names for caps, not keystrokes: what `a` or `fire` does to
+ * the running machine is the emulator module's business. c64-ready listens for
+ * `KeyboardEvent`s on `window`, so the C64 is driven by the synthetic events `keySpec` and
+ * `dispatchKey` below describe -- it maps matrix keys off `event.key` and joystick keys off
+ * `event.code`, which is why the `code` values are deliberately nonsense (`C64_z`): a real
+ * `KeyZ` would be swallowed as joystick fire in mixed mode instead of reaching the keyboard
+ * matrix. An emulator that takes input through an API instead (the Spectrum's does) says so
+ * with `RetroEmulatorHandle.sendKey`, and never sees these specs at all.
  */
+
+import type { RetroPlatform } from '@stump/client'
 
 export const OVERLAY_KEY_IDS = [
 	'up',
@@ -22,6 +27,8 @@ export const OVERLAY_KEY_IDS = [
 	'ctrl',
 	'shift',
 	'shiftright',
+	'capsshift',
+	'symbolshift',
 	'restore',
 	'instdel',
 	'home',
@@ -194,6 +201,8 @@ export function keySpec(id: OverlayKeyId): KeySpec {
 			return { key: 'ArrowLeft', code: 'C64_cursorleft' }
 		case 'cursorright':
 			return { key: 'ArrowRight', code: 'C64_cursorright' }
+		// Ids with no C64 cap behind them -- the Spectrum's two shift keys -- land here too,
+		// on a code no emulator claims, which is to say they do nothing.
 		default:
 			return { key: id, code: `C64_${id}` }
 	}
@@ -212,6 +221,8 @@ export const OVERLAY_LABELS: Record<OverlayKeyId, string> = {
 	ctrl: 'Ctrl',
 	shift: 'Shift',
 	shiftright: 'Shift',
+	capsshift: 'CAPS',
+	symbolshift: 'SYM',
 	restore: 'Rest',
 	instdel: 'Del',
 	home: 'Clr',
@@ -282,6 +293,29 @@ export const OVERLAY_LABELS: Record<OverlayKeyId, string> = {
 export const OVERLAY_CONTROL_LABELS: Record<OverlayControlId, string> = {
 	...OVERLAY_LABELS,
 	[JOYSTICK_ID]: 'Joystick',
+}
+
+/**
+ * Legends that read differently on another machine. A Spectrum has no RUN/STOP, and the
+ * key a C64 calls RETURN is ENTER on its keyboard, so the handful of shared ids whose
+ * legends collide are corrected here rather than in each surface that draws them.
+ */
+const PLATFORM_LABELS: Partial<Record<RetroPlatform, Partial<Record<OverlayControlId, string>>>> = {
+	spectrum: {
+		return: 'ENTER',
+		runstop: 'BREAK',
+		instdel: 'DELETE',
+		space: 'SPACE',
+		cursorup: '↑',
+		cursordown: '↓',
+		cursorleft: '←',
+		cursorright: '→',
+	},
+}
+
+/** The legend this machine prints on a control. */
+export function overlayLabel(id: OverlayControlId, platform: RetroPlatform): string {
+	return PLATFORM_LABELS[platform]?.[id] ?? OVERLAY_CONTROL_LABELS[id]
 }
 
 /** Modifier state to stamp onto a synthetic event. */
