@@ -8,7 +8,7 @@ import {
 import { Button, cn } from '@stump/components'
 import { TypedDocumentString, UserPermission } from '@stump/graphql'
 import { useLocaleContext } from '@stump/i18n'
-import { Fullscreen, HardDrive, RotateCcw, Save } from 'lucide-react'
+import { Fullscreen, HardDrive, Keyboard, RotateCcw, Save } from 'lucide-react'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { useMediaMatch } from 'rooks'
@@ -30,6 +30,7 @@ import {
 	resolveOverlayLayout,
 } from './retro/OnScreenControls'
 import { RetroPlayerSettings } from './retro/RetroPlayerSettings'
+import { hasVirtualKeyboard, VirtualKeyboard } from './retro/VirtualKeyboard'
 
 /** Inline document: not yet in gql codegen map (graphql() would return {}). */
 type RetroPlayerSceneQuery = {
@@ -125,6 +126,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 		useState<OverlayKeyPlacement[]>(DEFAULT_OVERLAY_KEYS)
 	const [editingOverlay, setEditingOverlay] = useState(false)
 	const [isFullscreen, setIsFullscreen] = useState(false)
+	const [showKeyboard, setShowKeyboard] = useState(false)
 	const isMobile = useMediaMatch('(max-width: 768px)')
 
 	const disks = useMemo(() => {
@@ -389,6 +391,10 @@ function RetroPlayerScene({ id }: { id: string }) {
 	const isTouch = useMediaMatch('(pointer: coarse)')
 	const showC64Chrome = platform === 'c64' && status === 'playing'
 	const showOverlay = showC64Chrome && (isMobile || isTouch || editingOverlay)
+	const canUseKeyboard = status === 'playing' && hasVirtualKeyboard(platform)
+	// Dragging a joystick button onto a docked keyboard is nobody's intent, so the two
+	// input surfaces never share the playfield.
+	const showKeyboardPanel = canUseKeyboard && showKeyboard && !editingOverlay
 
 	const onEditOverlay = () => {
 		setDraftOverlayKeys(overlayKeys)
@@ -446,6 +452,17 @@ function RetroPlayerScene({ id }: { id: string }) {
 					<Button size="sm" variant="ghost" onClick={onFullscreen} title="Fullscreen">
 						<Fullscreen className="h-4 w-4" />
 					</Button>
+					{canUseKeyboard ? (
+						<Button
+							size="sm"
+							variant={showKeyboard ? 'secondary' : 'ghost'}
+							aria-pressed={showKeyboard}
+							onClick={() => setShowKeyboard((shown) => !shown)}
+							title={t('reader.retro.virtualKeyboard', { defaultValue: 'Virtual keyboard' })}
+						>
+							<Keyboard className="h-4 w-4" />
+						</Button>
+					) : null}
 					{showC64Chrome ? (
 						<>
 							<RetroPlayerSettings
@@ -474,23 +491,28 @@ function RetroPlayerScene({ id }: { id: string }) {
 
 			<div className="min-h-0 md:flex-row flex flex-1 flex-col">
 				<main className="min-h-0 bg-black relative flex-1">
-					<div ref={playfieldRef} className="inset-0 bg-black absolute">
-						<canvas
-							ref={canvasRef}
-							className={cn(
-								'inset-0 bg-black absolute h-full w-full object-contain [image-rendering:pixelated]',
-								(status === 'loading' || status === 'error') && 'opacity-50',
-							)}
-						/>
-						{showOverlay ? (
-							<OnScreenControls
-								keys={editingOverlay ? draftOverlayKeys : overlayKeys}
-								editing={editingOverlay}
-								onChangeKeys={setDraftOverlayKeys}
-								onSave={() => void onSaveOverlay()}
-								onCancel={onCancelOverlay}
-								onReleased={focusCanvas}
+					<div ref={playfieldRef} className="inset-0 bg-black absolute flex flex-col">
+						<div className="min-h-0 relative flex-1">
+							<canvas
+								ref={canvasRef}
+								className={cn(
+									'inset-0 bg-black absolute h-full w-full object-contain [image-rendering:pixelated]',
+									(status === 'loading' || status === 'error') && 'opacity-50',
+								)}
 							/>
+							{showOverlay ? (
+								<OnScreenControls
+									keys={editingOverlay ? draftOverlayKeys : overlayKeys}
+									editing={editingOverlay}
+									onChangeKeys={setDraftOverlayKeys}
+									onSave={() => void onSaveOverlay()}
+									onCancel={onCancelOverlay}
+									onReleased={focusCanvas}
+								/>
+							) : null}
+						</div>
+						{showKeyboardPanel ? (
+							<VirtualKeyboard platform={platform} onReleased={focusCanvas} />
 						) : null}
 					</div>
 					{status === 'error' && errorMessage ? (

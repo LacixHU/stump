@@ -1,258 +1,12 @@
 import { Button, cn } from '@stump/components'
-import { useCallback, useRef, type PointerEvent, type RefObject } from 'react'
+import { type PointerEvent, type RefObject, useCallback, useRef } from 'react'
 
-export const OVERLAY_KEY_IDS = [
-	'up',
-	'down',
-	'left',
-	'right',
-	'fire',
-	'runstop',
-	'space',
-	'return',
-	'commodore',
-	'ctrl',
-	'shift',
-	'shiftright',
-	'restore',
-	'instdel',
-	'home',
-	'f1',
-	'f2',
-	'f3',
-	'f4',
-	'f5',
-	'f6',
-	'f7',
-	'f8',
-	'pound',
-	'at',
-	'star',
-	'plus',
-	'minus',
-	'equals',
-	'colon',
-	'semicolon',
-	'comma',
-	'period',
-	'slash',
-	'arrowleft',
-	'arrowup',
-	'cursorup',
-	'cursordown',
-	'cursorleft',
-	'cursorright',
-	'a',
-	'b',
-	'c',
-	'd',
-	'e',
-	'f',
-	'g',
-	'h',
-	'i',
-	'j',
-	'k',
-	'l',
-	'm',
-	'n',
-	'o',
-	'p',
-	'q',
-	'r',
-	's',
-	't',
-	'u',
-	'v',
-	'w',
-	'x',
-	'y',
-	'z',
-	'0',
-	'1',
-	'2',
-	'3',
-	'4',
-	'5',
-	'6',
-	'7',
-	'8',
-	'9',
-] as const
-
-export type OverlayKeyId = (typeof OVERLAY_KEY_IDS)[number]
+import { dispatchKey, OVERLAY_KEY_IDS, OVERLAY_LABELS, type OverlayKeyId } from './keys'
 
 export type OverlayKeyPlacement = {
 	id: OverlayKeyId
 	x: number
 	y: number
-}
-
-type KeySpec = { key: string; code: string }
-
-function keySpec(id: OverlayKeyId): KeySpec {
-	switch (id) {
-		case 'up':
-			return { key: 'ArrowUp', code: 'ArrowUp' }
-		case 'down':
-			return { key: 'ArrowDown', code: 'ArrowDown' }
-		case 'left':
-			return { key: 'ArrowLeft', code: 'ArrowLeft' }
-		case 'right':
-			return { key: 'ArrowRight', code: 'ArrowRight' }
-		case 'fire':
-			return { key: 'z', code: 'KeyZ' }
-		case 'runstop':
-			return { key: 'Escape', code: 'Escape' }
-		case 'space':
-			return { key: ' ', code: 'Space' }
-		case 'return':
-			return { key: 'Enter', code: 'Enter' }
-		case 'commodore':
-			return { key: 'Control', code: 'ControlRight' }
-		case 'ctrl':
-			return { key: 'Tab', code: 'Tab' }
-		case 'shift':
-		case 'shiftright':
-			return { key: 'Shift', code: 'ShiftLeft' }
-		case 'restore':
-			return { key: 'PageUp', code: 'PageUp' }
-		case 'instdel':
-			return { key: 'Backspace', code: 'Backspace' }
-		case 'home':
-			return { key: 'Home', code: 'Home' }
-		case 'f1':
-			return { key: 'F1', code: 'C64_f1' }
-		case 'f2':
-			return { key: 'F2', code: 'C64_f2' }
-		case 'f3':
-			return { key: 'F3', code: 'C64_f3' }
-		case 'f4':
-			return { key: 'F4', code: 'C64_f4' }
-		case 'f5':
-			return { key: 'F5', code: 'C64_f5' }
-		case 'f6':
-			return { key: 'F6', code: 'C64_f6' }
-		case 'f7':
-			return { key: 'F7', code: 'C64_f7' }
-		case 'f8':
-			return { key: 'F8', code: 'C64_f8' }
-		case 'pound':
-			return { key: '\\', code: 'C64_pound' }
-		case 'at':
-			return { key: '@', code: 'C64_at' }
-		case 'star':
-			return { key: '*', code: 'C64_star' }
-		case 'plus':
-			return { key: '+', code: 'C64_plus' }
-		case 'minus':
-			return { key: '-', code: 'C64_minus' }
-		case 'equals':
-			return { key: '=', code: 'C64_equals' }
-		case 'colon':
-			return { key: ':', code: 'C64_colon' }
-		case 'semicolon':
-			return { key: ';', code: 'C64_semicolon' }
-		case 'comma':
-			return { key: ',', code: 'C64_comma' }
-		case 'period':
-			return { key: '.', code: 'C64_period' }
-		case 'slash':
-			return { key: '/', code: 'C64_slash' }
-		case 'arrowleft':
-			return { key: '`', code: 'C64_arrowleft' }
-		case 'arrowup':
-			return { key: '^', code: 'C64_arrowup' }
-		case 'cursorup':
-			return { key: 'ArrowUp', code: 'C64_cursorup' }
-		case 'cursordown':
-			return { key: 'ArrowDown', code: 'C64_cursordown' }
-		case 'cursorleft':
-			return { key: 'ArrowLeft', code: 'C64_cursorleft' }
-		case 'cursorright':
-			return { key: 'ArrowRight', code: 'C64_cursorright' }
-		default:
-			return { key: id, code: `C64_${id}` }
-	}
-}
-
-export const OVERLAY_LABELS: Record<OverlayKeyId, string> = {
-	up: 'Joy ↑',
-	down: 'Joy ↓',
-	left: 'Joy ←',
-	right: 'Joy →',
-	fire: 'Fire',
-	runstop: 'R/S',
-	space: 'Space',
-	return: 'Return',
-	commodore: 'C=',
-	ctrl: 'Ctrl',
-	shift: 'Shift',
-	shiftright: 'Shift',
-	restore: 'Rest',
-	instdel: 'Del',
-	home: 'Clr',
-	f1: 'F1',
-	f2: 'F2',
-	f3: 'F3',
-	f4: 'F4',
-	f5: 'F5',
-	f6: 'F6',
-	f7: 'F7',
-	f8: 'F8',
-	pound: '£',
-	at: '@',
-	star: '*',
-	plus: '+',
-	minus: '-',
-	equals: '=',
-	colon: ':',
-	semicolon: ';',
-	comma: ',',
-	period: '.',
-	slash: '/',
-	arrowleft: '←',
-	arrowup: '↑',
-	cursorup: 'Cr ↑',
-	cursordown: 'Cr ↓',
-	cursorleft: 'Cr ←',
-	cursorright: 'Cr →',
-	a: 'A',
-	b: 'B',
-	c: 'C',
-	d: 'D',
-	e: 'E',
-	f: 'F',
-	g: 'G',
-	h: 'H',
-	i: 'I',
-	j: 'J',
-	k: 'K',
-	l: 'L',
-	m: 'M',
-	n: 'N',
-	o: 'O',
-	p: 'P',
-	q: 'Q',
-	r: 'R',
-	s: 'S',
-	t: 'T',
-	u: 'U',
-	v: 'V',
-	w: 'W',
-	x: 'X',
-	y: 'Y',
-	z: 'Z',
-	'0': '0',
-	'1': '1',
-	'2': '2',
-	'3': '3',
-	'4': '4',
-	'5': '5',
-	'6': '6',
-	'7': '7',
-	'8': '8',
-	'9': '9',
 }
 
 const EDITOR_ROWS: OverlayKeyId[][] = [
@@ -337,17 +91,6 @@ export function resolveOverlayLayout(data: unknown): OverlayKeyPlacement[] {
 	return out.length ? out : DEFAULT_OVERLAY_KEYS
 }
 
-function dispatchKey(spec: KeySpec, down: boolean) {
-	window.dispatchEvent(
-		new KeyboardEvent(down ? 'keydown' : 'keyup', {
-			bubbles: true,
-			cancelable: true,
-			code: spec.code,
-			key: spec.key,
-		}),
-	)
-}
-
 type PadButtonProps = {
 	placement: OverlayKeyPlacement
 	editing: boolean
@@ -371,7 +114,7 @@ function PadButton({ placement, editing, onMove, onReleased, containerRef }: Pad
 			}
 			if (held.current) return
 			held.current = true
-			dispatchKey(keySpec(placement.id), true)
+			dispatchKey(placement.id, true)
 		},
 		[editing, placement.id],
 	)
@@ -400,7 +143,7 @@ function PadButton({ placement, editing, onMove, onReleased, containerRef }: Pad
 			}
 			if (!held.current) return
 			held.current = false
-			dispatchKey(keySpec(placement.id), false)
+			dispatchKey(placement.id, false)
 			onReleased?.()
 		},
 		[editing, onReleased, placement.id],

@@ -53,6 +53,10 @@ Supported load types in this core: **`.d64`**, **`.prg`**, **`.crt`** (`.t64`/`.
   - **Authentic** is real 1541 timing, with no warping and no injection.
   - Disk speed does not apply to `.t64` tapes or bare `.prg` files: there is no drive involved, so they are always written straight into memory. The program is started with `RUN` when it loads at `$0801`, and with `SYS <load address>` otherwise — which is how most machine-code tape rips start.
 - On-screen controls show on touch/narrow screens, or while editing the overlay. Desktop fullscreen with a keyboard does not show them.
+- **Virtual keyboard** (toolbar) docks the full C64 keyboard under the playfield, on desktop and touch alike. It is part of the fullscreen element, so it stays available in fullscreen.
+  - `SHIFT` and `C=` are sticky one-shots: tap the modifier, then the key it applies to. `SHIFT LOCK` holds shift down until it is tapped again, as on the machine.
+  - The shifted legend is printed above the unshifted one, so `SHIFT` + `1` gives `!`, `SHIFT` + `HOME` gives `CLR`, `SHIFT` + `F1` gives `F2`, and `SHIFT` + either cursor key reverses its direction.
+  - Only the C64 has an authentic layout today, so the button does not appear for other platforms.
 - Users with **Manage library** can **Edit overlay** (Settings): pick any C64 key or joystick control from the on-screen keyboard and drag them into place. Save writes series-folder `controls.json`.
 - The disk list **inserts** a new image into the running session (no reboot, no auto `LOAD`/`RUN`). Use this for multi-disk games.
 
