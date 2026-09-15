@@ -847,3 +847,73 @@ path too, and `Operation Wolf` gets _further_ injected (picture up, drive idle) 
 
 - `ZAK-2.D64` / `ZAK-3.D64` have no closed PRG in the directory, so they fall through to the drive.
   Correct for data-only sides, but nothing tells the reader that is what happened
+
+---
+
+# ZX Spectrum: "Bomb Jack (Encore)" freezes at start
+
+## Problem
+
+`Bomb Jack (Encore).tzx` never gets past a black screen with a green border. Every other
+Spectrum tape tried so far loads instantly.
+
+## Root cause
+
+Instant loading is JSSpeccy's tape trap: the core traps the ROM's `LD-BYTES` entry at
+`$0556` and the worker copies the next tape block straight into memory. Bomb Jack's BASIC
+loads a 501-byte machine-code loader to `$FE0A`, and that loader is its own relocated copy
+of the ROM's `LD-EDGE` routine (`$FF9E`: `INC B` / `IN A,($FE)` / `XOR C` / `AND $20` /
+`JR Z`, with the BREAK check NOPped out). It never calls the ROM, so the trap never fires,
+and with traps on the tape is never played -- the loader spins on an EAR bit nothing is
+driving. Traced in a Node harness: four traps fire (header, BASIC, header, loader), the
+block cursor stops at block 5, and the PC sits between `$FF9E` and `$FFA9` forever.
+
+Playing the tape for real loads the game -- but at ROM speed, which for this 43K tape is
+about four minutes.
+
+## Plan
+
+- [x] Reproduce headlessly and prove the cause at instruction level
+- [x] Detect the stall from the host: the picture stops changing and stays frozen
+- [x] On a stall, turn the traps off and play the tape from the block the traps left it on
+- [x] Confirm the guess: if the picture is still frozen after the tape has had its say, it
+      was not a loader -- stop the tape and put the traps back
+- [x] Warp while a fallen-back tape loads, so the fix is not a four-minute wait
+- [x] Arm the watcher only once the loader snapshot has landed, not when the tape is mounted
+- [x] Leave explicit "Authentic" alone: chosen deliberately, so no warp
+
+## Review
+
+`emulators/spectrum.ts` now watches the frames the worker sends back. A pixel-identical
+picture for 150 frames while a trapped tape is mounted means nothing is being loaded, so
+the traps come off and the tape rolls; the next 400 frames say whether anything was
+listening. If the picture moves, the tape stays on and up to 12 extra frames are queued
+behind each of the host's, which loads the rest at roughly 14x. If it does not move, the
+tape stops and the traps go back on, once per mount.
+
+Measured in headless Chrome against the real module:
+
+|                             | before              | after                        |
+| --------------------------- | ------------------- | ---------------------------- |
+| Bomb Jack (Encore), instant | frozen indefinitely | menu at ~24s, plays          |
+| Manic Miner, instant        | instant             | instant, fallback never arms |
+| Bomb Jack, authentic        | loads (~4 min)      | unchanged, no warp           |
+
+### Notes
+
+- **Warp frames are swallowed, not rendered.** The host hands its three display buffers out
+  by index and takes whatever comes back as the one it is holding, so a warp frame's
+  `frameCompleted` must never reach it. They are told apart by order, not identity: the
+  worker answers in the order it is asked and a transferred `ArrayBuffer` comes back as a
+  different object. The warp frames are therefore queued _before_ the host's own handler
+  runs, because that handler is where the host posts its next frame.
+- **`setDiskSpeed` no longer toggles the traps while a tape is rolling.** Traps and the
+  pulse generator share one block cursor; a trap firing mid-playback would take a block out
+  from under the load. The new setting is applied when the tape stops.
+- **The recovery window has to be generous.** A loader shows nothing while it syncs to a
+  pilot tone, and a header block's pilot is 8063 pulses -- five seconds. The first guess at
+  25 frames was measured wrong (it takes ~50) and abandoned every fallback.
+- **No unit test.** The whole change is worker-protocol timing: the message order, the
+  buffer hand-back, and the emulated CPU's reaction. `jest` + jsdom has none of that. It is
+  covered instead by the headless harness described in the session memory, which runs the
+  real module against the real tapes.
