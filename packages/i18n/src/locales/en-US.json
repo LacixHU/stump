@@ -1016,7 +1016,8 @@
 		"actions": {
 			"markAsRead": "Mark series as read",
 			"markAsUnread": "Mark series as unread",
-			"goToLibrary": "Go to library"
+			"goToLibrary": "Go to library",
+			"goUp": "Go up one level"
 		},
 		"errors": {
 			"failedToUpdateCompletion": "Failed to update book completion status"

@@ -1,7 +1,9 @@
 import { PREFETCH_STALE_TIME, useSDK, useSuspenseGraphQL } from '@stump/client'
-import { Breadcrumbs, cn } from '@stump/components'
+import { Breadcrumbs, IconButton, cn } from '@stump/components'
 import { graphql } from '@stump/graphql'
+import { useLocaleContext } from '@stump/i18n'
 import { useQueryClient } from '@tanstack/react-query'
+import { ChevronLeft } from 'lucide-react'
 import { Suspense, useEffect, useMemo } from 'react'
 import { Outlet, useNavigate, useParams } from 'react-router'
 
@@ -100,6 +102,7 @@ export const usePrefetchSeries = () => {
 export default function SeriesLayout() {
 	const navigate = useNavigate()
 	const paths = usePaths()
+	const { t } = useLocaleContext()
 	const { sdk } = useSDK()
 
 	const { id } = useParams()
@@ -136,12 +139,23 @@ export default function SeriesLayout() {
 
 	if (!series) return null
 
+	const parent = series.ancestors.at(-1)
+	const upTo = parent ? paths.seriesOverview(parent.id) : paths.librarySeries(series.library.id)
+
 	return (
 		<SeriesContext.Provider value={{ series }}>
 			{/* key forces a full refresh when navigating parent â†’ child series */}
 			<div key={series.id} className="relative flex flex-1 flex-col">
 				{breadcrumbs.length > 1 && (
-					<div className="px-4 pt-3 md:px-6">
+					<div className="px-4 pt-3 md:px-6 gap-1 flex items-center">
+						<IconButton
+							variant="ghost"
+							size="xs"
+							onClick={() => navigate(upTo)}
+							aria-label={t('seriesHeader.actions.goUp')}
+						>
+							<ChevronLeft className="h-4 w-4" strokeWidth={3} />
+						</IconButton>
 						<Breadcrumbs segments={breadcrumbs} trailingSlash />
 					</div>
 				)}

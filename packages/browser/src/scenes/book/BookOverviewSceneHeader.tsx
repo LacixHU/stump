@@ -1,9 +1,10 @@
 import { formatBytes } from '@stump/client'
-import { Badge, Heading, Link, Statistic, Text } from '@stump/components'
+import { Badge, Heading, IconButton, Link, Statistic, Text } from '@stump/components'
 import { BookCardFragment, BookOverviewSceneQuery, Tag } from '@stump/graphql'
 import { useLocaleContext } from '@stump/i18n'
-import { ExternalLink } from 'lucide-react'
+import { ChevronLeft, ExternalLink } from 'lucide-react'
 import { Suspense } from 'react'
+import { useNavigate } from 'react-router'
 
 import BadgeList from '@/components/BadgeList'
 import ReadMore from '@/components/ReadMore'
@@ -20,6 +21,7 @@ type Props = {
 
 export default function BookOverviewSceneHeader({ media, book, completedAt }: Props) {
 	const { t } = useLocaleContext()
+	const navigate = useNavigate()
 	const metadata = media.metadata
 	const tags = media.tags as Tag[] | undefined
 	const pages = media.pages ?? 0
@@ -40,13 +42,23 @@ export default function BookOverviewSceneHeader({ media, book, completedAt }: Pr
 
 	return (
 		<div className="gap-3 flex w-full flex-col">
-			<div className="gap-3 flex flex-wrap items-center">
-				<Heading size="lg">{media.resolvedName}</Heading>
-				{media.seriesId && (
+			{media.seriesId && (
+				<div className="gap-1 flex items-center">
+					<IconButton
+						variant="ghost"
+						size="xs"
+						onClick={() => navigate(paths.seriesOverview(media.seriesId!))}
+						aria-label={t('seriesHeader.actions.goUp')}
+					>
+						<ChevronLeft className="h-4 w-4" strokeWidth={3} />
+					</IconButton>
 					<Suspense>
 						<BookLibrarySeriesLinks seriesId={media.seriesId} />
 					</Suspense>
-				)}
+				</div>
+			)}
+			<div className="gap-3 flex flex-wrap items-center">
+				<Heading size="lg">{media.resolvedName}</Heading>
 			</div>
 
 			{hasStats && (

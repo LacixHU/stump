@@ -1012,7 +1012,8 @@
 		"actions": {
 			"markAsRead": "Sorozat megjelölése olvasottként",
 			"markAsUnread": "Sorozat megjelölése olvasatlanként",
-			"goToLibrary": "Ugrás a könyvtárhoz"
+			"goToLibrary": "Ugrás a könyvtárhoz",
+			"goUp": "Egy szinttel feljebb"
 		},
 		"errors": {
 			"failedToUpdateCompletion": "Nem sikerült frissíteni a könyv befejezési állapotát"
