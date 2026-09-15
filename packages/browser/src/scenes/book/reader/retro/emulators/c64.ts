@@ -64,6 +64,9 @@ const KEYBOARD_BUFFER_MAX = 8
 const BASIC_POINTERS = [0x002d, 0x002f, 0x0031]
 /** Where variables start when no BASIC program is present. */
 const EMPTY_BASIC_END = 0x0803
+/** Where the KERNAL leaves the address a load started at (MEMUSS) and ended past (EAL). */
+const LOAD_START_POINTER = 0x00c3
+const LOAD_END_POINTER = 0x00ae
 
 const BOOT_TIMEOUT_MS = 5000
 const KEYBOARD_DRAIN_TIMEOUT_MS = 2000
@@ -141,6 +144,22 @@ function startCommand(program: C64Program): string {
 	return program.loadAddress === BASIC_START ? 'run\n' : `sys ${program.loadAddress}\n`
 }
 
+function writePointer(host: EmulatorHost, pointer: number, address: number): void {
+	host.cpuWrite(pointer, address & 0xff)
+	host.cpuWrite(pointer + 1, (address >> 8) & 0xff)
+}
+
+function setBasicPointers(host: EmulatorHost, address: number): void {
+	for (const pointer of BASIC_POINTERS) {
+		writePointer(host, pointer, address)
+	}
+}
+
+/** One past the last byte a load writes: the two-byte load address never reaches RAM. */
+function programEnd(program: C64Program): number {
+	return program.loadAddress + program.prg.length - 2
+}
+
 /**
  * Point BASIC at an empty program. c64_loadPRG sets the variable pointers past
  * whatever it just injected, which leaves them well outside BASIC RAM for a
@@ -149,10 +168,27 @@ function startCommand(program: C64Program): string {
 function clearBasicProgram(host: EmulatorHost): void {
 	host.cpuWrite(BASIC_START, 0)
 	host.cpuWrite(BASIC_START + 1, 0)
-	for (const pointer of BASIC_POINTERS) {
-		host.cpuWrite(pointer, EMPTY_BASIC_END & 0xff)
-		host.cpuWrite(pointer + 1, (EMPTY_BASIC_END >> 8) & 0xff)
-	}
+	setBasicPointers(host, EMPTY_BASIC_END)
+}
+
+/**
+ * Say where the file went, the way a KERNAL LOAD would have.
+ *
+ * Injecting a program is not a load, so nothing writes the bookkeeping a load
+ * leaves behind. A single-file crack needs it: the depacker wrapped around the
+ * game has to know where its packed data ends, and reads whichever pointer its
+ * author preferred — $ae from the KERNAL, or the variable pointers BASIC copies
+ * it into. Neither is set correctly for us. c64_loadPRG does move the variable
+ * pointers, but it counts the two-byte load address as if it had been written to
+ * RAM, so they land one byte past where the KERNAL puts them; $ae and $c3 it
+ * leaves alone entirely.
+ *
+ * Either way the depacker unpacks nonsense over itself, which presents as a
+ * machine that stops rather than as an error.
+ */
+function setLoadExtent(host: EmulatorHost, program: C64Program): void {
+	writePointer(host, LOAD_START_POINTER, program.loadAddress)
+	writePointer(host, LOAD_END_POINTER, programEnd(program))
 }
 
 function isAtBasicPrompt(host: EmulatorHost): boolean {
@@ -379,7 +415,10 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			await waitUntil(() => (host ? isAtBasicPrompt(host) : false), BOOT_TIMEOUT_MS)
 			if (!host) return
 			host.loadGame({ type: 'prg', data: target.prg })
-			if (target.loadAddress !== BASIC_START) {
+			setLoadExtent(host, target)
+			if (target.loadAddress === BASIC_START) {
+				setBasicPointers(host, programEnd(target))
+			} else {
 				clearBasicProgram(host)
 			}
 			await typeText(host, startCommand(target))

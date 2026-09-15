@@ -794,3 +794,56 @@ Verified against a copy of the live database:
 - Deleting a library orphans its `library_configs` row (that column has no FK either)
 - `scanned_directories` is never purged, so a rescan after a clean can skip subtrees
 - `.tap` and `.g64` on C64 have no branch in `inferContainer` and will misload
+
+# C64: "Barbarian" freezes before the title screen
+
+`F:\Retro\C64\Barbarian\barbarian1-TTF.d64` reached a garbled screen and stopped. Reproduced
+headlessly by driving `c64-ready`'s emulator straight from Node (esbuild-bundled
+`dist-ts/emulator/c64-emulator.js`, `fetch` patched for `file:` URLs) and replaying the same
+sequence `autostart` performs.
+
+## Root cause
+
+Both Barbarians are single-file cracks: one ~45 KB PRG at `$0801` whose BASIC stub is a bare
+`SYS`, wrapping the game in a depacker. Such a depacker has to know where its packed data ends,
+and reads that from whichever pointer a KERNAL `LOAD` leaves it in. Injecting a program is not a
+load, so nothing writes that bookkeeping -- and the two titles happen to read the two different
+pointers, which is why they failed differently.
+
+- [x] Barbarian 1 walks its data down through `($2d)`, BASIC's VARTAB. `c64_loadPRG` does set it,
+      but counts the PRG's two-byte load address as if it had been written to RAM, so it landed at
+      `$acf2` where the KERNAL leaves `$acf1`
+- [x] Barbarian 2 reads `$ae` (EAL), which `c64_loadPRG` does not touch at all -- it was still
+      `$0000`. Proved by diffing all 64 KB of RAM between the two load paths at the moment before
+      `RUN`: the program bytes were identical, and restoring `$ae/$af` alone was enough
+- [x] Either way the depacker unpacks nonsense over itself -- a machine that stops, not an error.
+      The authentic drive load sets both pointers itself, which is why only "instant" hung
+
+## Fix
+
+- [x] `writePointer` / `setBasicPointers` / `programEnd` extracted; `clearBasicProgram` reuses them
+- [x] `setLoadExtent` writes `$c3` (start) and `$ae` (one past the end) after every injection
+- [x] A BASIC-start program additionally gets VARTAB/ARYTAB/STREND, as BASIC's own LOAD would
+
+## Verification
+
+Screen changes over 2000 frames after `RUN`, injected path, across every `.d64` under `F:\Retro\C64`:
+
+| disk                            | before          | after          |
+| ------------------------------- | --------------- | -------------- |
+| `barbarian1-TTF.d64`            | 7, dead `$0819` | 31, live       |
+| `Barbarian 2/bar2.D64`          | 2, dead `$086e` | 37, live       |
+| `Barbarian 2/bar22.D64`         | 2, dead `$086f` | 37, live       |
+| the other 6 autostarting images | --              | byte-identical |
+
+Each fixed title now sits at the same PC as its own authentic `LOAD"*",8,1` + `RUN` -- the TTF
+intro for Barbarian 1, the Astor Zagreb intro for Barbarian 2. Retro jest suite: 68 passed.
+
+Two titles look quiet but are not defects: `Uj_Vadnyugat_II.d64` idles at `$0a18` on the authentic
+path too, and `Operation Wolf` gets _further_ injected (picture up, drive idle) than authentically
+(still in `$ee60` at four emulated minutes).
+
+## Left alone (real, but out of scope)
+
+- `ZAK-2.D64` / `ZAK-3.D64` have no closed PRG in the directory, so they fall through to the drive.
+  Correct for data-only sides, but nothing tells the reader that is what happened
