@@ -214,6 +214,13 @@ const RETRO_CONTROL_EXTRA_KEYS: &[&str] = &[
 	"shift",
 	"capsshift",
 	"symbolshift",
+	"f9",
+	"f10",
+	"tab",
+	"alt",
+	"help",
+	"delete",
+	"capslock",
 ];
 
 /// Placeable overlay controls that are not a single character. `joystick` is the odd one
@@ -248,6 +255,8 @@ const RETRO_OVERLAY_SPECIAL_IDS: &[&str] = &[
 	"f6",
 	"f7",
 	"f8",
+	"f9",
+	"f10",
 	"pound",
 	"at",
 	"star",
@@ -259,6 +268,16 @@ const RETRO_OVERLAY_SPECIAL_IDS: &[&str] = &[
 	"comma",
 	"period",
 	"slash",
+	"backslash",
+	"bracketleft",
+	"bracketright",
+	"quote",
+	"backquote",
+	"tab",
+	"alt",
+	"help",
+	"delete",
+	"capslock",
 	"arrowleft",
 	"arrowup",
 	"cursorup",
@@ -759,6 +778,17 @@ mod tests {
 		let extras =
 			parse_retro_extra_keys(br#"{"extraKeys":["capsshift","symbolshift"]}"#);
 		assert_eq!(extras, vec!["capsshift", "symbolshift"]);
+	}
+
+	#[test]
+	fn test_parse_retro_controls_accepts_amiga_keys() {
+		let keys = parse_retro_controls(
+			br#"{"keys":[{"id":"tab","x":0.1,"y":0.2},{"id":"alt","x":0.2,"y":0.2},{"id":"Help","x":0.3,"y":0.2}]}"#,
+		);
+		assert_eq!(
+			keys.iter().map(|k| k.id.as_str()).collect::<Vec<_>>(),
+			vec!["tab", "alt", "help"]
+		);
 	}
 
 	#[test]

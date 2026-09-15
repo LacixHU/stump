@@ -57,7 +57,7 @@ Supported load types in this core: **`.d64`**, **`.prg`**, **`.crt`** (`.t64`/`.
 - **Virtual keyboard** (toolbar) docks the full C64 keyboard under the playfield, on desktop and touch alike. It is part of the fullscreen element, so it stays available in fullscreen.
   - `SHIFT` and `C=` are sticky one-shots: tap the modifier, then the key it applies to. `SHIFT LOCK` holds shift down until it is tapped again, as on the machine.
   - The shifted legend is printed above the unshifted one, so `SHIFT` + `1` gives `!`, `SHIFT` + `HOME` gives `CLR`, `SHIFT` + `F1` gives `F2`, and `SHIFT` + either cursor key reverses its direction.
-  - The C64 and the Spectrum both have an authentic layout; the button does not appear for platforms that do not.
+  - The C64, Spectrum and Amiga each have an authentic layout; the button does not appear for platforms that do not.
 - Users with **Manage library** can **Edit overlay** (Settings): pick the joystick, fire, or any C64 key from the on-screen keyboard and drag them into place. Save writes series-folder `controls.json`.
 - The disk list **inserts** a new image into the running session (no reboot, no auto `LOAD`/`RUN`). Use this for multi-disk games.
 
@@ -147,15 +147,32 @@ the header's save and load buttons are hidden for Spectrum games.
 
 `play-file` only allows retro extensions (defense in depth so non-download users cannot pull EPUBs/CBZs through that path).
 
-## Amiga firmware (Kickstart)
+## Amiga emulator
 
-Amiga emulation needs user-supplied Kickstart ROMs. Never commit or bundle BIOS files.
+In-browser Amiga play uses **[vAmigaWeb 4.3.6](https://github.com/vAmigaWeb/vAmigaWeb)** (GPL-3.0; WASM core of [vAmiga](https://dirkwhoffmann.github.io/vAmiga/)). Assets are served from `/retro/amiga/` (`vAmiga.js`, `vAmiga.wasm`). Kickstart ROMs are **not** bundled.
 
-1. Set `STUMP_FIRMWARE_DIR` (default: `{config_dir}/firmware`).
-2. Place required Kickstart files as documented by the pinned Amiga WASM build (e.g. `kick33180.A500`, `kick34005.A500`).
+Supported load types: **`.adf`** and **`.adz`**. The machine is an A500 (512K chip + 512K slow, OCS).
+
+### Firmware (Kickstart)
+
+1. Set `firmware_dir` in `Stump.toml`, or `STUMP_FIRMWARE_DIR` (default: `{config_dir}/firmware`).
+2. Place both files as those exact basenames (no subfolders):
+   - `kick33180.A500` — Kickstart **1.2** (v33.180)
+   - `kick34005.A500` — Kickstart **1.3** (v34.005)
 3. The player fetches them via `GET /api/v2/firmware/{file_name}` (authenticated; basename only—no path traversal).
 
 If firmware is missing, the catalog still works; Play shows setup instructions.
+
+### Controls
+
+- **Machine** (Settings) picks **Kickstart 1.3** (default) or **1.2**. Switching restarts the machine and reloads the disk.
+- **Joystick port** (Settings) defaults to **port 2**, which is where almost every game expects the stick. Port 1 is the mouse.
+- **Loading speed**: **Instant** (default) warps while the floppy is busy; **Authentic** is real disk timing.
+- Arrow keys and Left Ctrl are the joystick in mixed/joystick mode. The mouse on the canvas drives port 1.
+- **Reset** hard-resets the A500 with the current disk still in DF0.
+- Multi-disk titles: pick a sibling in the disk list to insert it without rebooting.
+- **Virtual keyboard** (toolbar) docks the A500 keyboard (no numeric keypad). `SHIFT`, `ALT`, `Amiga` and `CTRL` are sticky one-shots held down across the next keystroke — vAmiga reads raw key codes, not a shift flag. Shifted legends are printed above each key. `Caps Lock` is a tap, which is how the machine locks it.
+- Save states are available (vAmiga snapshots).
 
 ## Covers / thumbnails
 
@@ -197,9 +214,9 @@ the snapshots belonging to its books. The server accepts snapshots up to **16 Mi
 which is comfortably above a C64 snapshot (a few hundred KiB) and an Amiga one
 (a few MiB).
 
-Save states depend on the emulator core being able to write a snapshot. The C64 core can;
-JSSpeccy can only read them, and the Amiga is still a shell — for both, the save and load
-buttons are hidden rather than offered and then refused.
+Save states depend on the emulator core being able to write a snapshot. The C64 and Amiga
+cores can; JSSpeccy can only read them, so the save and load buttons are hidden for
+Spectrum games rather than offered and then refused.
 
 ## Legal
 
@@ -208,7 +225,7 @@ images.
 
 Machine ROMs differ by platform. The Spectrum ROMs ship with the JSSpeccy bundle, which
 Amstrad permits for emulators; the Amiga's Kickstart does not allow that, so you supply it
-yourself (see above). The Spectrum core itself is GPL-3.0 — see the ZX Spectrum section.
+yourself (see above). The Spectrum and Amiga cores are GPL-3.0 — see those sections.
 
 ## OPDS
 

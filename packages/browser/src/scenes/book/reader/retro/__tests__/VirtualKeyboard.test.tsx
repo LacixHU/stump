@@ -40,8 +40,8 @@ describe('hasVirtualKeyboard', () => {
 		expect(hasVirtualKeyboard('spectrum')).toBe(true)
 	})
 
-	it('stays silent for platforms without an authentic layout yet', () => {
-		expect(hasVirtualKeyboard('amiga')).toBe(false)
+	it('offers a layout for the Amiga', () => {
+		expect(hasVirtualKeyboard('amiga')).toBe(true)
 	})
 })
 
@@ -54,11 +54,6 @@ describe('VirtualKeyboard', () => {
 
 	afterEach(() => {
 		recorder.stop()
-	})
-
-	it('renders nothing for a platform without a layout', () => {
-		const { container } = render(<VirtualKeyboard platform="amiga" />)
-		expect(container).toBeEmptyDOMElement()
 	})
 
 	it('lines every row up into the same columns', () => {
@@ -264,6 +259,82 @@ describe('VirtualKeyboard (Spectrum)', () => {
 		expect(sendKey.mock.calls).toEqual([
 			['symbolshift', true],
 			['symbolshift', false],
+		])
+	})
+})
+
+describe('VirtualKeyboard (Amiga)', () => {
+	function renderAmiga() {
+		const sendKey = jest.fn()
+		render(<VirtualKeyboard platform="amiga" sendKey={sendKey} />)
+		return sendKey
+	}
+
+	it('draws the A500 keyboard: six rows of 15 cap units', () => {
+		const { container } = render(<VirtualKeyboard platform="amiga" />)
+		const rows = Array.from(container.firstElementChild?.children ?? [])
+
+		expect(rows).toHaveLength(6)
+		for (const row of rows) {
+			const units = Array.from(row.children).reduce(
+				(total, cap) => total + Number((cap as HTMLElement).style.flexGrow),
+				0,
+			)
+			expect(units).toBeCloseTo(15)
+		}
+	})
+
+	it('prints the shifted legend above the unshifted one, as on the keycap', () => {
+		render(<VirtualKeyboard platform="amiga" />)
+
+		expect(screen.getByRole('button', { name: '2' })).toHaveTextContent('@2')
+	})
+
+	it('sends a press and a release through the emulator handle', () => {
+		const sendKey = renderAmiga()
+		tap('A')
+
+		expect(sendKey.mock.calls).toEqual([
+			['a', true, { shiftKey: false }],
+			['a', false, { shiftKey: false }],
+		])
+	})
+
+	it('holds SHIFT down across the keystroke it modifies', () => {
+		const sendKey = renderAmiga()
+		tap('Shift left')
+		tap('1')
+
+		expect(sendKey.mock.calls).toEqual([
+			['shift', true],
+			['1', true, { shiftKey: false }],
+			['1', false, { shiftKey: false }],
+			['shift', false],
+		])
+	})
+
+	it('holds Amiga down across the keystroke it modifies', () => {
+		const sendKey = renderAmiga()
+		tap('Amiga')
+		tap('Q')
+
+		expect(sendKey.mock.calls).toEqual([
+			['commodore', true],
+			['q', true, { shiftKey: false }],
+			['q', false, { shiftKey: false }],
+			['commodore', false],
+		])
+	})
+
+	it('releases a latched modifier when the keyboard goes away mid-chord', () => {
+		const sendKey = jest.fn()
+		const { unmount } = render(<VirtualKeyboard platform="amiga" sendKey={sendKey} />)
+		tap('Alt')
+		unmount()
+
+		expect(sendKey.mock.calls).toEqual([
+			['alt', true],
+			['alt', false],
 		])
 	})
 })

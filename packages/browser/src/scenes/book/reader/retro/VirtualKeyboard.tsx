@@ -264,6 +264,112 @@ const SPECTRUM_ROWS: CapRow[] = [
 	],
 ]
 
+const AMIGA_SHIFT: Modifier = { key: 'shift', name: 'shift' }
+const AMIGA_CTRL: Modifier = { key: 'ctrl', name: 'ctrl' }
+const AMIGA_ALT: Modifier = { key: 'alt', name: 'alt' }
+const AMIGA_AMIGA: Modifier = { key: 'commodore', name: 'amiga' }
+
+function amigaFn(id: OverlayKeyId, label: string): KeyCap {
+	return { id, label, tone: 'fn' }
+}
+
+/**
+ * The A500 US keyboard without the numeric keypad. Every row totals 15 cap units — the
+ * number row's own count — so the letters stay in columns once the rows stretch to the
+ * panel. `shiftLabel` is the legend printed on the top of an Amiga cap.
+ *
+ * Shift, Alt, Amiga and Ctrl are held across the next keystroke: vAmiga takes raw key
+ * codes, not a shift flag. Caps Lock is a tap, which is how the machine locks it.
+ */
+const AMIGA_ROWS: CapRow[] = [
+	[
+		key('runstop', 'Esc', undefined, { width: 1.25, aria: 'Escape' }),
+		amigaFn('f1', 'F1'),
+		amigaFn('f2', 'F2'),
+		amigaFn('f3', 'F3'),
+		amigaFn('f4', 'F4'),
+		amigaFn('f5', 'F5'),
+		amigaFn('f6', 'F6'),
+		amigaFn('f7', 'F7'),
+		amigaFn('f8', 'F8'),
+		amigaFn('f9', 'F9'),
+		amigaFn('f10', 'F10'),
+		key('delete', 'Del', undefined, { width: 1.75, aria: 'Delete' }),
+		key('help', 'Help', undefined, { width: 2 }),
+	],
+	[
+		key('backquote', '`', '~'),
+		key('1', '1', '!'),
+		key('2', '2', '@'),
+		key('3', '3', '#'),
+		key('4', '4', '$'),
+		key('5', '5', '%'),
+		key('6', '6', '^'),
+		key('7', '7', '&'),
+		key('8', '8', '*'),
+		key('9', '9', '('),
+		key('0', '0', ')'),
+		key('minus', '-', '_'),
+		key('equals', '=', '+'),
+		key('backslash', '\\', '|'),
+		key('instdel', 'Backspace', undefined, { aria: 'Backspace' }),
+	],
+	[
+		key('tab', 'Tab', undefined, { width: 1.5 }),
+		key('q', 'Q'),
+		key('w', 'W'),
+		key('e', 'E'),
+		key('r', 'R'),
+		key('t', 'T'),
+		key('y', 'Y'),
+		key('u', 'U'),
+		key('i', 'I'),
+		key('o', 'O'),
+		key('p', 'P'),
+		key('bracketleft', '[', '{'),
+		key('bracketright', ']', '}'),
+		key('return', 'Return', undefined, { width: 1.5 }),
+	],
+	[
+		{ label: 'Ctrl', modifier: AMIGA_CTRL, width: 1.5 },
+		key('capslock', 'Caps Lock', undefined, { width: 2.5, aria: 'Caps lock' }),
+		key('a', 'A'),
+		key('s', 'S'),
+		key('d', 'D'),
+		key('f', 'F'),
+		key('g', 'G'),
+		key('h', 'H'),
+		key('j', 'J'),
+		key('k', 'K'),
+		key('l', 'L'),
+		key('semicolon', ';', ':'),
+		key('quote', "'", '"'),
+	],
+	[
+		{ aria: 'Shift left', label: 'Shift', modifier: AMIGA_SHIFT, width: 2.5 },
+		key('z', 'Z'),
+		key('x', 'X'),
+		key('c', 'C'),
+		key('v', 'V'),
+		key('b', 'B'),
+		key('n', 'N'),
+		key('m', 'M'),
+		key('comma', ',', '<'),
+		key('period', '.', '>'),
+		key('slash', '/', '?'),
+		{ aria: 'Shift right', label: 'Shift', modifier: AMIGA_SHIFT, width: 2.5 },
+	],
+	[
+		{ aria: 'Alt', label: 'Alt', modifier: AMIGA_ALT, width: 1.5 },
+		{ aria: 'Amiga', label: 'Amiga', modifier: AMIGA_AMIGA, width: 1.5 },
+		key('space', 'Space', undefined, { width: 8, aria: 'Space' }),
+		key('cursorleft', '←', undefined, { aria: 'Cursor left' }),
+		key('cursordown', '↓', undefined, { aria: 'Cursor down' }),
+		key('cursorup', '↑', undefined, { aria: 'Cursor up' }),
+		key('cursorright', '→', undefined, { aria: 'Cursor right' }),
+	],
+]
+
 const LAYOUTS: Partial<Record<RetroPlatform, Layout>> = {
 	c64: {
 		modifiers: [C64_SHIFT, C64_SHIFT_LOCK, C64_COMMODORE, C64_CTRL],
@@ -292,6 +398,21 @@ const LAYOUTS: Partial<Record<RetroPlatform, Layout>> = {
 			textActive: '#ffffff',
 		},
 		rows: SPECTRUM_ROWS,
+	},
+	amiga: {
+		modifiers: [AMIGA_SHIFT, AMIGA_CTRL, AMIGA_ALT, AMIGA_AMIGA],
+		palette: {
+			cap: '#e4dccb',
+			capActive: '#c45c26',
+			edge: 'rgba(0, 0, 0, 0.28)',
+			fn: '#b8a48c',
+			fnText: '#2a2620',
+			legend: 'rgba(42, 38, 32, 0.65)',
+			panel: '#c4b496',
+			text: '#2a2620',
+			textActive: '#ffffff',
+		},
+		rows: AMIGA_ROWS,
 	},
 }
 

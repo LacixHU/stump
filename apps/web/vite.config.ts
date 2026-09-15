@@ -80,6 +80,7 @@ export default defineConfig({
 					/^\/koreader(?:\/|$)/,
 					/^\/retro(?:\/|$)/,
 				],
+				globIgnores: ['**/node_modules/**/*', '**/retro/**'],
 				maximumFileSizeToCacheInBytes: 6 * 1024 * 1024, // 6MB
 			},
 			outDir: '../dist',
