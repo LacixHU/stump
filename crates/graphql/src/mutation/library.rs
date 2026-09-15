@@ -128,20 +128,45 @@ impl LibraryMutation {
 			.collect::<Vec<_>>();
 		tracing::trace!(?deleted_media_ids, "Deleted media ids");
 
+		// "Not associated with any media" has to mean the whole subtree, not just
+		// direct children. A nested library deliberately gets a series for every
+		// ancestor directory, and those hold no books of their own — deleting them
+		// would take the entire tree out of the library's series list, since the
+		// list only shows roots and the surviving children would still point at a
+		// row that no longer exists.
+		//
+		// The two subqueries are the same pair the series lists use to decide a
+		// series is real, which keeps one rule: if it is visible, clean leaves it
+		// alone unless it is actually missing from disk.
+		let series_with_media = Query::select()
+			.distinct()
+			.column(media::Column::SeriesId)
+			.from(media::Entity)
+			// `NOT IN` against a set containing NULL is NULL for every row, which
+			// would silently turn this whole branch into a no-op.
+			.and_where(media::Column::SeriesId.is_not_null())
+			.and_where(media::Column::DeletedAt.is_null())
+			.to_owned();
+		let series_that_are_parents = Query::select()
+			.distinct()
+			.column(series::Column::ParentSeriesId)
+			.from(series::Entity)
+			.and_where(series::Column::ParentSeriesId.is_not_null())
+			.and_where(series::Column::DeletedAt.is_null())
+			.to_owned();
+
 		let deleted_series_ids = series::Entity::delete_many()
 			.filter(series::Column::LibraryId.eq(id.to_string()))
 			.filter(
 				Condition::any()
 					.add(series::Column::Status.ne(FileStatus::Ready.to_string()))
-					// TODO: Double check that this query is correct
 					.add(
-						series::Column::Id.not_in_subquery(
-							Query::select()
-								.column(media::Column::SeriesId)
-								.distinct()
-								.from(media::Entity)
-								.to_owned(),
-						),
+						Condition::all()
+							.add(series::Column::Id.not_in_subquery(series_with_media))
+							.add(
+								series::Column::Id
+									.not_in_subquery(series_that_are_parents),
+							),
 					),
 			)
 			.exec_with_returning(&txn)
@@ -150,6 +175,24 @@ impl LibraryMutation {
 			.map(|s| s.id)
 			.collect::<Vec<_>>();
 		tracing::trace!(?deleted_series_ids, "Deleted series ids");
+
+		// `series.parent_series_id` carries no foreign key, so nothing in the
+		// database detaches the children of a series that really was missing from
+		// disk. Left pointing at a deleted parent they are neither a root nor
+		// reachable through one, and they vanish from every list while still
+		// sitting in the table.
+		if !deleted_series_ids.is_empty() {
+			let orphaned_children = series::Entity::update_many()
+				.col_expr(
+					series::Column::ParentSeriesId,
+					Expr::value(Option::<String>::None),
+				)
+				.filter(series::Column::ParentSeriesId.is_in(deleted_series_ids.clone()))
+				.exec(&txn)
+				.await?
+				.rows_affected;
+			tracing::trace!(orphaned_children, "Re-rooted children of deleted series");
+		}
 
 		let is_library_empty = series::Entity::find()
 			.filter(series::Column::LibraryId.eq(id.to_string()))

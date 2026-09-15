@@ -148,7 +148,8 @@ const eventHandler = async (
 					client.invalidateQueries({ queryKey: [sdk.cacheKeys.getStats], exact: false }),
 					client.invalidateQueries({
 						predicate: ({ queryKey: [rootKey] }) =>
-							typeof rootKey === 'string' && ['series', 'media'].includes(rootKey.toLowerCase()),
+							typeof rootKey === 'string' &&
+							SCAN_AFFECTED_LIST_KEYS.includes(rootKey.toLowerCase()),
 					}),
 				])
 			}
@@ -157,7 +158,7 @@ const eventHandler = async (
 			if (liveRefetch) {
 				await client.invalidateQueries({
 					predicate: ({ queryKey: [rootKey] }) =>
-						typeof rootKey === 'string' && ['series', 'media'].includes(rootKey.toLowerCase()),
+						typeof rootKey === 'string' && SCAN_AFFECTED_LIST_KEYS.includes(rootKey.toLowerCase()),
 				})
 			}
 			break
@@ -168,6 +169,15 @@ const eventHandler = async (
 			console.warn(`Unhandled core event type: ${__typename}`)
 	}
 }
+
+/**
+ * Root cache keys of every list that gains rows when a scan creates series or books.
+ *
+ * Matched lowercased against camelCase keys, which is why the library-scoped lists have
+ * to be spelled out: `librarySeries` does not contain `series` once folded, so a library
+ * left open while a scan runs would otherwise keep showing the grid it loaded first.
+ */
+const SCAN_AFFECTED_LIST_KEYS = ['series', 'media', 'libraryseries', 'librarybooks']
 
 const handleJobOutput = async (
 	{ output }: Extract<UseCoreEventSubscription['readEvents'], { __typename: 'JobOutput' }>,
@@ -192,8 +202,12 @@ const handleJobOutput = async (
 		sdk.cacheKeys.scanHistory,
 		sdk.cacheKeys.getStats,
 		'missingEntities', // TODO: Put behind key?
-		...(affectedBooks > 0 ? [sdk.cacheKeys.recentlyAddedMedia, sdk.cacheKeys.media] : []),
-		...(affectedSeries > 0 ? [sdk.cacheKeys.recentlyAddedSeries, sdk.cacheKeys.series] : []),
+		...(affectedBooks > 0
+			? [sdk.cacheKeys.recentlyAddedMedia, sdk.cacheKeys.media, sdk.cacheKeys.libraryBooks]
+			: []),
+		...(affectedSeries > 0
+			? [sdk.cacheKeys.recentlyAddedSeries, sdk.cacheKeys.series, sdk.cacheKeys.librarySeries]
+			: []),
 	] as string[]
 
 	await client.invalidateQueries({

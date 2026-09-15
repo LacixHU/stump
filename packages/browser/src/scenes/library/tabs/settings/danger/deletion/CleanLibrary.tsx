@@ -1,4 +1,4 @@
-import { useGraphQLMutation } from '@stump/client'
+import { useGraphQLMutation, useSDK } from '@stump/client'
 import {
 	Alert,
 	AlertDescription,
@@ -12,7 +12,7 @@ import { graphql, LibraryMissingEntitiesQuery } from '@stump/graphql'
 import { useLocaleContext } from '@stump/i18n'
 import { useQueryClient } from '@tanstack/react-query'
 import { Info } from 'lucide-react'
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { useLibraryManagement } from '../../context'
@@ -33,12 +33,30 @@ export default function CleanLibrary() {
 		library: { id },
 	} = useLibraryManagement()
 	const { t } = useLocaleContext()
+	const { sdk } = useSDK()
 	const { mutateAsync: cleanLibrary, isPending } = useGraphQLMutation(mutation)
 
 	const [showConfirmation, setShowConfirmation] = useState(false)
 	const [isNoneMissingState, setIsNoneMissingState] = useState(false)
 
 	const client = useQueryClient()
+
+	/** Everything that counts or lists the books and series a clean can remove. */
+	const invalidatedOnClean = useMemo<string[]>(
+		() => [
+			'missingEntities',
+			sdk.cacheKeys.librarySeries,
+			sdk.cacheKeys.libraryBooks,
+			sdk.cacheKeys.libraryById,
+			sdk.cacheKeys.libraryOverview,
+			sdk.cacheKeys.series,
+			sdk.cacheKeys.seriesById,
+			sdk.cacheKeys.media,
+			sdk.cacheKeys.mediaById,
+			sdk.cacheKeys.getStats,
+		],
+		[sdk],
+	)
 
 	useEffect(() => {
 		const unsubscribe = client.getQueryCache().subscribe(({ query: { queryKey } }) => {
@@ -57,7 +75,18 @@ export default function CleanLibrary() {
 
 	const handleClean = async () => {
 		try {
-			toast.promise(cleanLibrary({ id }), {
+			// Cleaning removes books and series outright, so everything counting or
+			// listing them is now wrong — including the missing-entities table the
+			// user is looking at, which would otherwise keep offering rows that have
+			// already been deleted.
+			const cleaned = cleanLibrary({ id }).then(async (result) => {
+				await client.invalidateQueries({
+					predicate: ({ queryKey: [rootKey] }) =>
+						typeof rootKey === 'string' && invalidatedOnClean.includes(rootKey),
+				})
+				return result
+			})
+			toast.promise(cleaned, {
 				loading: t(getKey('confirmation.loading')),
 				success: ({ cleanLibrary: result }) => {
 					if (result.isEmpty) {

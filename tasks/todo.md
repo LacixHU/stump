@@ -698,3 +698,99 @@ keyboard, so a session that never happened to click stayed silent for as long as
 - **Wizard of Wor goes quiet ~10 s in.** The SID's own buffer is zero from then on, and the
   stock c64-ready player does the same with that disk, so it is the cracktro's tune ending.
   Uridium plays continuously for 100 s+.
+
+# Operation Wolf froze at the title screen, and cleaning a library emptied its series list
+
+Two unrelated reports, two unrelated causes.
+
+## 1. A multi-load disk deadlocked against a drive that was still booting
+
+`Operation Wolf [Sir 13].d64` holds two programs: `OP. WOLF TITLE` (13 blocks) and
+`OPERATION WOLF` (174 blocks). The title program draws the screen and then loads the
+game itself, addressing the drive directly -- the only KERNAL calls in it are `$FF5B`
+and `$FFD2`, and the filename sits in it as a raw 16-byte `$A0`-padded string. So it
+needs a working 1541, unlike Uridium or Zamzara, whose first file _is_ the whole game.
+
+`autostart()` did insert the disk, but in the same breath as the `RUN`:
+
+```ts
+await waitUntil(() => isAtBasicPrompt(host), BOOT_TIMEOUT_MS)
+if (disk) host.loadGame({ type: 'd64', data: disk }) // c64_setDriveEnabled(1) + insert
+host.loadGame({ type: 'prg', data: target.prg })
+await typeText(host, startCommand(target))
+```
+
+Two things conspire. `c64_setDriveEnabled(1)` starts the 1541's ROM self-test, which
+runs for ~48 frames before the drive reaches its idle loop. And the boot wait above
+returns instantly -- `c64_init()` already leaves the machine at `READY`, so
+`isAtBasicPrompt` is true before a single tick. The game therefore addressed the bus
+while the drive was still at `$EAB7`, the ATN handshake was lost, and **neither side
+recovers**: the C64 spins in the KERNAL serial routines and the drive sits idle. Not
+slow -- deadlocked. 150 emulated seconds changed nothing.
+
+- [x] Insert the disk first, then wait `DRIVE_SPINUP_FRAMES` (60) before injecting and
+      typing `RUN`
+- [x] Count the wait in emulated frames rather than wall clock, since only the frame
+      loop advances the core -- and `forceWarp` is already on, so it costs a few real ms
+
+Measured threshold, injecting into the real `c64.wasm`: deadlock at <= 6 frames, loads
+from 8 up. 60 leaves an ample margin and still lands well inside one warped rAF burst.
+
+### Verified (headless Node, real `c64.wasm`, real disks, real container parsers)
+
+| disk                    |             before |                           after |
+| ----------------------- | -----------------: | ------------------------------: |
+| Operation Wolf [Sir 13] | **STUCK** at $EEAC | loads; game code at $6D8B @127s |
+| Uridium                 |            RUNNING |                         RUNNING |
+| Wizard of Wor           |            RUNNING |                         RUNNING |
+| Zamzara-TCF             |            RUNNING |                         RUNNING |
+| UjVadnyugat-IBM / II    |            RUNNING |                         RUNNING |
+| REVENGE.T64             |            RUNNING |                         RUNNING |
+
+Single-load disks go from 47 spurious drive-busy frames to 0, which is right: they
+never read from the drive once injected. `jest --testPathPatterns retro` -- 68 passed.
+
+## 2. Clean Library deleted exactly the folders the series list is built from
+
+Reproduced against the real database. `clean_library` deleted a series when it had no
+media, measured as `id NOT IN (SELECT DISTINCT series_id FROM media)` -- **direct**
+media only. A nested library deliberately gets a series per ancestor directory, and
+those hold no books of their own. Running the mutation's own SQL against the user's
+`F:\Retro` library selected precisely `C64` and `ZX Spectrum` -- its only two roots.
+
+Their nine children survived, still pointing at deleted rows, because
+`series.parent_series_id` has no foreign key and nothing detaches them. The list filters
+`isRoot: true` (`parent_series_id IS NULL`), so every one of them was excluded too:
+an empty library whose rows were all still in the table. A later scan re-created the two
+parents from disk, which is why they came back "after a full restart".
+
+- [x] Do not delete a series that is some other series' parent -- reusing the same two
+      subqueries `series_visible_in_lists_condition` already uses, so one rule holds:
+      if it is visible, clean leaves it alone unless it is genuinely missing from disk
+- [x] Guard the `NOT IN` with `series_id IS NOT NULL` -- a single NULL made the whole
+      branch NULL for every row, silently turning it into a no-op
+- [x] Ignore soft-deleted media when deciding a series has books
+- [x] Re-root the children of a series that _is_ deleted, so a parent that really did
+      go missing cannot strand its subtree
+
+Verified against a copy of the live database:
+
+| scenario                | before                       | after                               |
+| ----------------------- | ---------------------------- | ----------------------------------- |
+| healthy library, clean  | deletes `C64`, `ZX Spectrum` | deletes nothing                     |
+| `C64` genuinely missing | 8 children invisible         | `C64` removed, 8 children re-rooted |
+
+### And why it only recovered on a restart
+
+- [x] `CleanLibrary.tsx` invalidated nothing at all, so the missing-entities table kept
+      offering rows that had already been deleted
+- [x] `useCoreEvent.ts` matched scan events against `['series', 'media']` lowercased --
+      `librarySeries` folds to `libraryseries` and matched neither, so a library left
+      open was never told when a scan re-created its series
+
+## Left alone (real, but out of scope for this report)
+
+- `delete_library` never calls `remove_watcher`, so the OS watch outlives the library
+- Deleting a library orphans its `library_configs` row (that column has no FK either)
+- `scanned_directories` is never purged, so a rescan after a clean can skip subtrees
+- `.tap` and `.g64` on C64 have no branch in `inferContainer` and will misload

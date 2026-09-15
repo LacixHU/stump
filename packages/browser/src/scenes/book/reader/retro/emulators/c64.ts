@@ -37,6 +37,20 @@ const WARP_BUDGET_MS = 12
 const WARP_MAX_FRAMES = 24
 /** c1541_getStatus: 1 = idle, 2 = motor running / transfer in progress. */
 const DRIVE_BUSY = 2
+/**
+ * Emulated frames the 1541 needs between power-on and its first bus transaction.
+ *
+ * c64_setDriveEnabled starts the drive's ROM self-test, and the drive does not
+ * reach its idle loop for the best part of an emulated second. A program that
+ * addresses the bus before then loses the ATN handshake, and neither side ever
+ * recovers: the C64 spins in the KERNAL serial routines while the drive sits
+ * idle. Measured against a real title, the deadlock is certain below 7 frames
+ * and gone by 8; this is the drive's own power-on time over again, and warp
+ * spends it in a few real milliseconds.
+ */
+const DRIVE_SPINUP_FRAMES = 60
+/** Wall-clock ceiling for a wait denominated in emulated frames. */
+const EMULATED_WAIT_TIMEOUT_MS = 5000
 
 const SCREEN_RAM = 0x0400
 const SCREEN_CELLS = 1000
@@ -283,6 +297,8 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	let host: EmulatorHost | null = null
 	let frameRaf = 0
 	let forceWarp = false
+	/** Frames the core has actually been ticked, so a wait can be denominated in emulated time. */
+	let framesEmulated = 0
 	let sidPump: { resume: () => void; destroy: () => void } | null = null
 
 	const isDriveBusy = () => host?.wasm?.exports?.c1541_getStatus?.() === DRIVE_BUSY
@@ -326,12 +342,25 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 				skipRender = true
 				for (let i = 0; i < WARP_MAX_FRAMES && performance.now() < deadline; i += 1) {
 					runTick(FRAME_MS)
+					framesEmulated += 1
 				}
 				skipRender = false
 			}
 			runTick(delta)
+			framesEmulated += 1
 		}
 		frameRaf = requestAnimationFrame(loop)
+	}
+
+	/**
+	 * Wait out a stretch of emulated time. Only the frame loop advances the core, so
+	 * this is measured in ticks rather than wall clock — under warp it costs a
+	 * fraction of the emulated duration, and it gives up rather than hanging if the
+	 * loop is not running at all (a hidden tab suspends requestAnimationFrame).
+	 */
+	const waitForEmulatedFrames = (frames: number) => {
+		const target = framesEmulated + frames
+		return waitUntil(() => framesEmulated >= target, EMULATED_WAIT_TIMEOUT_MS)
 	}
 
 	/** Boot to the BASIC prompt, drop the program straight into RAM, RUN it. */
@@ -339,12 +368,16 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		if (!host) return
 		forceWarp = true
 		try {
-			await waitUntil(() => (host ? isAtBasicPrompt(host) : false), BOOT_TIMEOUT_MS)
-			if (!host) return
-			// Keep the disk in the drive so multi-load games can still read from it.
+			// Power the drive up before anything can address the bus: the disk has to
+			// stay in it for a multi-load game, and its self-test has to finish first
+			// or the game's very first LOAD deadlocks against a drive still booting.
 			if (disk) {
 				host.loadGame({ type: 'd64', data: disk })
+				await waitForEmulatedFrames(DRIVE_SPINUP_FRAMES)
+				if (!host) return
 			}
+			await waitUntil(() => (host ? isAtBasicPrompt(host) : false), BOOT_TIMEOUT_MS)
+			if (!host) return
 			host.loadGame({ type: 'prg', data: target.prg })
 			if (target.loadAddress !== BASIC_START) {
 				clearBasicProgram(host)
