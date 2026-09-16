@@ -107,8 +107,8 @@ describe('VirtualKeyboard', () => {
 	})
 
 	it('uses codes the emulator will not mistake for joystick input', () => {
-		// KeyZ/KeyX/KeyC and the arrow codes are joystick fire and directions in mixed
-		// mode, so a cap sending the real code would never reach the keyboard matrix.
+		// Arrow codes are still joystick directions in mixed mode. Z/X/C used to be fire
+		// too, so letter caps keep a fake code in case that mapping comes back.
 		const codes: string[] = []
 		const listener = (event: Event) => codes.push((event as KeyboardEvent).code)
 		window.addEventListener('keydown', listener)

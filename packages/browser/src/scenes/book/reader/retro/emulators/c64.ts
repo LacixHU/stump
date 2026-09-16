@@ -7,6 +7,7 @@ import {
 	looksLikeT64,
 	programFromPrg,
 } from './c64-images'
+import { C64_KEYBOARD_JOYSTICK_MAP, retargetC64MixedLetterKey } from './c64-keys'
 import type {
 	EmulatorMountOptions,
 	RetroDiskSpeed,
@@ -471,6 +472,8 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	window.addEventListener('pointerdown', unlockAudio, true)
 	window.addEventListener('keydown', unlockAudio, true)
 	window.addEventListener('keydown', swallowKeyRepeat, true)
+	window.addEventListener('keydown', retargetC64MixedLetterKey, true)
+	window.addEventListener('keyup', retargetC64MixedLetterKey, true)
 	canvas.addEventListener('pointerdown', unlockAudio)
 
 	await player.start()
@@ -484,6 +487,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		sidPump = createSidPump(host)
 	}
 	unlockAudio()
+	player.setKeyboardJoystickMap(C64_KEYBOARD_JOYSTICK_MAP)
 	player.setInputMode('mixed')
 	player.setFastForwardSpeed(100)
 
@@ -492,6 +496,8 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			window.removeEventListener('pointerdown', unlockAudio, true)
 			window.removeEventListener('keydown', unlockAudio, true)
 			window.removeEventListener('keydown', swallowKeyRepeat, true)
+			window.removeEventListener('keydown', retargetC64MixedLetterKey, true)
+			window.removeEventListener('keyup', retargetC64MixedLetterKey, true)
 			canvas.removeEventListener('pointerdown', unlockAudio)
 			sidPump?.destroy()
 			sidPump = null

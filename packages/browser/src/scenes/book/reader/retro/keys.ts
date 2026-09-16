@@ -7,10 +7,10 @@
  * the running machine is the emulator module's business. c64-ready listens for
  * `KeyboardEvent`s on `window`, so the C64 is driven by the synthetic events `keySpec` and
  * `dispatchKey` below describe -- it maps matrix keys off `event.key` and joystick keys off
- * `event.code`, which is why the `code` values are deliberately nonsense (`C64_z`): a real
- * `KeyZ` would be swallowed as joystick fire in mixed mode instead of reaching the keyboard
- * matrix. An emulator that takes input through an API instead (the Spectrum's does) says so
- * with `RetroEmulatorHandle.sendKey`, and never sees these specs at all.
+ * `event.code`. Letter caps use a nonsense code (`C64_z`) so a leftover mixed-mode fire
+ * mapping cannot swallow them; overlay fire is Left Ctrl, the same stick button as a
+ * laptop keyboard. An emulator that takes input through an API instead (the Spectrum's
+ * does) says so with `RetroEmulatorHandle.sendKey`, and never sees these specs at all.
  */
 
 import type { RetroPlatform } from '@stump/client'
@@ -144,7 +144,7 @@ export function keySpec(id: OverlayKeyId): KeySpec {
 		case 'right':
 			return { key: 'ArrowRight', code: 'ArrowRight' }
 		case 'fire':
-			return { key: 'z', code: 'KeyZ' }
+			return { key: 'Control', code: 'ControlLeft' }
 		case 'runstop':
 			return { key: 'Escape', code: 'Escape' }
 		case 'space':
