@@ -1,6 +1,7 @@
 /**
- * The key vocabulary shared by the two retro input surfaces: the draggable joystick
- * overlay (`OnScreenControls`) and the docked machine keyboard (`VirtualKeyboard`).
+ * The key vocabulary shared by the retro input surfaces: the draggable joystick overlay
+ * (`OnScreenControls`), the docked machine keyboard (`VirtualKeyboard`), and a USB or
+ * Bluetooth gamepad (`useGamepadJoystick`).
  *
  * The ids are machine-neutral names for caps, not keystrokes: what `a` or `fire` does to
  * the running machine is the emulator module's business. c64-ready listens for

@@ -79,6 +79,15 @@ describe('VirtualKeyboard', () => {
 		expect(cap).toHaveTextContent('!1')
 	})
 
+	it("prints legends in the machine's keycap typeface, in bold", () => {
+		const { container } = render(<VirtualKeyboard platform="c64" />)
+		const panel = container.firstElementChild as HTMLElement
+
+		expect(panel).toHaveClass('font-bold')
+		expect(panel.style.fontFamily).toMatch(/Arial Narrow/)
+		expect(panel.style.fontStretch).toBe('condensed')
+	})
+
 	it('sends a keydown on press and a keyup on release', () => {
 		render(<VirtualKeyboard platform="c64" />)
 		tap('A')
@@ -225,6 +234,14 @@ describe('VirtualKeyboard (Spectrum)', () => {
 		expect(screen.getByRole('button', { name: 'P' })).toHaveTextContent('"P')
 	})
 
+	it('prints legends in Helvetica Bold, as on a 48K rubber key', () => {
+		const { container } = render(<VirtualKeyboard platform="spectrum" />)
+		const panel = container.firstElementChild as HTMLElement
+
+		expect(panel).toHaveClass('font-bold')
+		expect(panel.style.fontFamily).toMatch(/^Helvetica/)
+	})
+
 	it('sends a press and a release through the emulator handle', () => {
 		const sendKey = renderSpectrum()
 		tap('A')
@@ -288,6 +305,14 @@ describe('VirtualKeyboard (Amiga)', () => {
 		render(<VirtualKeyboard platform="amiga" />)
 
 		expect(screen.getByRole('button', { name: '2' })).toHaveTextContent('@2')
+	})
+
+	it('prints legends in Helvetica Bold, as on an A500 cap', () => {
+		const { container } = render(<VirtualKeyboard platform="amiga" />)
+		const panel = container.firstElementChild as HTMLElement
+
+		expect(panel).toHaveClass('font-bold')
+		expect(panel.style.fontFamily).toMatch(/^Helvetica/)
 	})
 
 	it('sends a press and a release through the emulator handle', () => {

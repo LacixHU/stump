@@ -38,6 +38,7 @@ import {
 	resolveOverlayLayout,
 } from './retro/OnScreenControls'
 import { RetroPlayerSettings } from './retro/RetroPlayerSettings'
+import { useGamepadJoystick } from './retro/useGamepadJoystick'
 import { hasVirtualKeyboard, VirtualKeyboard } from './retro/VirtualKeyboard'
 
 /** Inline document: not yet in gql codegen map (graphql() would return {}). */
@@ -172,9 +173,9 @@ function RetroPlayerScene({ id }: { id: string }) {
 	}, [])
 
 	/**
-	 * How the two touch surfaces reach the machine. c64-ready listens for `KeyboardEvent`s
-	 * on `window`, so a synthetic event is enough for it; an emulator that takes input
-	 * through an API of its own says so with `sendKey`.
+	 * How the overlay, virtual keyboard and gamepad reach the machine. c64-ready listens
+	 * for `KeyboardEvent`s on `window`, so a synthetic event is enough for it; an emulator
+	 * that takes input through an API of its own says so with `sendKey`.
 	 */
 	const sendKey = useCallback((target: Dispatchable, down: boolean, modifiers?: KeyModifiers) => {
 		const handle = handleRef.current
@@ -184,6 +185,12 @@ function RetroPlayerScene({ id }: { id: string }) {
 		}
 		dispatchKey(target, down, modifiers)
 	}, [])
+
+	const isPlaying = status === 'playing'
+	useGamepadJoystick({
+		enabled: isPlaying && inputMode !== 'keyboard',
+		sendKey,
+	})
 
 	const fetchImage = useCallback(
 		async (mediaId: string) => {
@@ -438,7 +445,6 @@ function RetroPlayerScene({ id }: { id: string }) {
 	}
 
 	const isTouch = useMediaMatch('(pointer: coarse)')
-	const isPlaying = status === 'playing'
 	const showOverlay =
 		isPlaying && hasOverlayControls(platform) && (isMobile || isTouch || editingOverlay)
 	const showSettings = isPlaying && hasSettings(capabilities, canEditOverlay)

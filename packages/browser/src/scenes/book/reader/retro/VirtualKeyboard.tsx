@@ -5,6 +5,7 @@ import {
 	type PointerEvent,
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useRef,
 	useState,
 } from 'react'
@@ -87,6 +88,13 @@ type Layout = {
 	rows: CapRow[]
 	modifiers: Modifier[]
 	palette: Palette
+	/**
+	 * The face pad-printed on the real keycaps, not the machine's screen font
+	 * and not the app's UI typeface.
+	 */
+	font: string
+	/** Breadbin C64 legends are Univers Condensed; stretch when the face allows it. */
+	fontStretch?: CSSProperties['fontStretch']
 }
 
 const isFiller = (cap: KeyCap | Filler): cap is Filler => 'filler' in cap
@@ -370,8 +378,20 @@ const AMIGA_ROWS: CapRow[] = [
 	],
 ]
 
+/**
+ * Univers 67 Bold Condensed on a breadbin C64; Helvetica Bold on a 48K Spectrum
+ * rubber key and on an A500 cap. System faces stand in — the originals are not
+ * licensed as webfonts — with Arial Narrow / Helvetica Neue Condensed covering
+ * the C64's width, and Helvetica / Arial covering the other two.
+ */
+const C64_KEYCAP_FONT =
+	"'Arial Narrow', 'Helvetica Neue Condensed', 'Franklin Gothic Medium', Helvetica, Arial, sans-serif"
+const SWISS_KEYCAP_FONT = "Helvetica, 'Helvetica Neue', Arial, sans-serif"
+
 const LAYOUTS: Partial<Record<RetroPlatform, Layout>> = {
 	c64: {
+		font: C64_KEYCAP_FONT,
+		fontStretch: 'condensed',
 		modifiers: [C64_SHIFT, C64_SHIFT_LOCK, C64_COMMODORE, C64_CTRL],
 		palette: {
 			cap: '#d9d3c5',
@@ -387,6 +407,7 @@ const LAYOUTS: Partial<Record<RetroPlatform, Layout>> = {
 		rows: C64_ROWS,
 	},
 	spectrum: {
+		font: SWISS_KEYCAP_FONT,
 		modifiers: [SPECTRUM_CAPS_SHIFT, SPECTRUM_SYMBOL_SHIFT],
 		palette: {
 			cap: '#3f3f42',
@@ -400,6 +421,7 @@ const LAYOUTS: Partial<Record<RetroPlatform, Layout>> = {
 		rows: SPECTRUM_ROWS,
 	},
 	amiga: {
+		font: SWISS_KEYCAP_FONT,
 		modifiers: [AMIGA_SHIFT, AMIGA_CTRL, AMIGA_ALT, AMIGA_AMIGA],
 		palette: {
 			cap: '#e4dccb',
@@ -423,6 +445,29 @@ export function hasVirtualKeyboard(platform: RetroPlatform): boolean {
 
 type SendKey = (target: Dispatchable, down: boolean, modifiers?: KeyModifiers) => void
 
+/** Single-line caps sit a little smaller; stacked legends fill more of the face. */
+const SINGLE_LINE_FILL = 0.8
+const MULTI_LINE_FILL = 0.9
+
+function fitLegend(capEl: HTMLElement, legend: HTMLElement, fill: number) {
+	const style = getComputedStyle(capEl)
+	const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
+	const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
+	const maxW = (capEl.clientWidth - padX) * fill
+	const maxH = (capEl.clientHeight - padY) * fill
+	if (maxW < 2 || maxH < 2) return
+
+	let lo = 4
+	let hi = maxH
+	for (let i = 0; i < 12; i++) {
+		const mid = (lo + hi) / 2
+		capEl.style.fontSize = `${mid}px`
+		if (legend.offsetWidth <= maxW && legend.offsetHeight <= maxH) lo = mid
+		else hi = mid
+	}
+	capEl.style.fontSize = `${lo}px`
+}
+
 type CapButtonProps = {
 	cap: KeyCap
 	active: boolean
@@ -437,6 +482,26 @@ function CapButton({ cap, active, onPress, onRelease }: CapButtonProps) {
 	// the matrix.
 	const pressed = useRef<Dispatchable | null>(null)
 	const held = useRef(false)
+	const capRef = useRef<HTMLButtonElement>(null)
+	const legendRef = useRef<HTMLSpanElement>(null)
+
+	useLayoutEffect(() => {
+		const capEl = capRef.current
+		const legend = legendRef.current
+		if (!capEl || !legend) return
+		let fitting = false
+		const fit = () => {
+			if (fitting) return
+			fitting = true
+			fitLegend(capEl, legend, cap.shiftLabel ? MULTI_LINE_FILL : SINGLE_LINE_FILL)
+			fitting = false
+		}
+		fit()
+		if (typeof ResizeObserver === 'undefined') return
+		const observer = new ResizeObserver(fit)
+		observer.observe(capEl)
+		return () => observer.disconnect()
+	}, [cap.label, cap.shiftLabel])
 
 	const press = useCallback(
 		(e: PointerEvent<HTMLButtonElement>) => {
@@ -464,11 +529,12 @@ function CapButton({ cap, active, onPress, onRelease }: CapButtonProps) {
 
 	return (
 		<button
+			ref={capRef}
 			type="button"
 			aria-label={cap.aria ?? cap.label}
 			aria-pressed={cap.modifier ? active : undefined}
 			className={cn(
-				'min-w-0 px-0.5 flex touch-none flex-col items-center justify-center overflow-hidden rounded-[3px] border-b-2 leading-none select-none',
+				'min-h-0 min-w-0 px-0.5 font-bold flex h-full touch-none items-center justify-center overflow-hidden rounded-[3px] border-b-2 leading-none select-none',
 				'shadow-sm border-[color:var(--cap-edge)] bg-[var(--cap-bg)] text-[color:var(--cap-fg)]',
 				'active:translate-y-px active:border-b active:brightness-90',
 				cap.tone === 'fn' && 'bg-[var(--cap-fn-bg)] text-[color:var(--cap-fn-fg)]',
@@ -480,12 +546,15 @@ function CapButton({ cap, active, onPress, onRelease }: CapButtonProps) {
 			onPointerCancel={release}
 			onContextMenu={(e) => e.preventDefault()}
 		>
-			{cap.shiftLabel ? (
-				<span className="max-w-full truncate text-[0.75em] text-[color:var(--cap-legend)]">
-					{cap.shiftLabel}
-				</span>
-			) : null}
-			<span className="max-w-full truncate">{cap.label}</span>
+			<span
+				ref={legendRef}
+				className="flex w-max shrink-0 flex-col items-center leading-none whitespace-nowrap"
+			>
+				{cap.shiftLabel ? (
+					<span className="text-[0.75em] text-[color:var(--cap-legend)]">{cap.shiftLabel}</span>
+				) : null}
+				<span>{cap.label}</span>
+			</span>
 		</button>
 	)
 }
@@ -588,13 +657,13 @@ export function VirtualKeyboard({
 
 	if (!layout) return null
 
-	const { palette, rows } = layout
+	const { font, fontStretch, palette, rows } = layout
 
 	return (
 		<div
 			// A picture of a physical machine rather than app chrome, so the palette is the
 			// machine's own in both themes -- the same call the overlay editor panel makes.
-			className="p-1 flex shrink-0 touch-none flex-col gap-[2px] border-t border-[color:var(--cap-edge)] bg-[var(--panel-bg)] select-none"
+			className="p-1 font-bold flex shrink-0 touch-none flex-col gap-[2px] border-t border-[color:var(--cap-edge)] bg-[var(--panel-bg)] select-none"
 			style={
 				{
 					'--cap-active-bg': palette.capActive,
@@ -607,7 +676,8 @@ export function VirtualKeyboard({
 					'--cap-h': 'clamp(20px, min(4.4vw, 6.2vh), 40px)',
 					'--cap-legend': palette.legend,
 					'--panel-bg': palette.panel,
-					fontSize: 'clamp(7px, min(1vw, 1.5vh), 11px)',
+					fontFamily: font,
+					fontStretch,
 				} as CSSProperties
 			}
 		>

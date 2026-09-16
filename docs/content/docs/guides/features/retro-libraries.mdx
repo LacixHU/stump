@@ -52,6 +52,7 @@ Supported load types in this core: **`.d64`**, **`.prg`**, **`.crt`** (`.t64`/`.
   - **Instant** (default) reads the first program out of the `.d64` directory and writes it straight into C64 memory, so a game that would take one to two minutes to load off the emulated 1541 starts in well under a second. The disk stays in the drive, so games that load further data during play still work — those transfers are warped instead (roughly 10x; gameplay itself stays at original C64 speed). Disks whose first file is not a BASIC-startable program fall back to a normal warped `LOAD"*",8,1`.
   - **Authentic** is real 1541 timing, with no warping and no injection.
   - Disk speed does not apply to `.t64` tapes or bare `.prg` files: there is no drive involved, so they are always written straight into memory. The program is started with `RUN` when it loads at `$0801`, and with `SYS <load address>` otherwise — which is how most machine-code tape rips start.
+- A USB or Bluetooth **gamepad** is the same stick as the on-screen one: D-pad or left analog stick for directions, the bottom or right face button (A / Cross, or B / Circle) to fire. It works on desktop even when the overlay is hidden. Keyboard-only input mode ignores the pad so arrows stay keyboard keys.
 - On-screen controls show on touch/narrow screens, or while editing the overlay. Desktop fullscreen with a keyboard does not show them.
   - The **joystick** is a single stick, not four direction buttons: press anywhere on its base and slide, and it keeps following the finger without needing a lift between directions. A diagonal holds both directions at once, as a real stick does. Separate `up`/`down`/`left`/`right` buttons are still available in the overlay editor for layouts that want them.
 - **Virtual keyboard** (toolbar) docks the full C64 keyboard under the playfield, on desktop and touch alike. It is part of the fullscreen element, so it stays available in fullscreen.
@@ -109,8 +110,8 @@ redistributing them with an emulator — so unlike the Amiga there is nothing to
   (default) traps the ROM's load routine and copies the tape in; **Authentic** plays the tape
   through the ULA at real speed, loading screens and all.
 - **Joystick keys** (Settings). A Spectrum has no joystick port, and this core does not
-  emulate a Kempston interface, so the on-screen stick presses keys instead. Pick the scheme
-  the game was written for:
+  emulate a Kempston interface, so the on-screen stick and a gamepad press keys instead.
+  Pick the scheme the game was written for:
   - **Q/A/O/P + Space** (default), the usual keyboard-game layout
   - **Cursor keys**, which are CAPS SHIFT + 5-8 with `0` to fire (Protek / AGF)
   - **Sinclair (6-0)**, the Interface 2 right-hand stick
@@ -168,7 +169,7 @@ If firmware is missing, the catalog still works; Play shows setup instructions.
 - **Machine** (Settings) picks **Kickstart 1.3** (default) or **1.2**. Switching restarts the machine and reloads the disk.
 - **Joystick port** (Settings) defaults to **port 2**, which is where almost every game expects the stick. Port 1 is the mouse.
 - **Loading speed**: **Instant** (default) warps while the floppy is busy; **Authentic** is real disk timing.
-- Arrow keys and Left Ctrl are the joystick in mixed/joystick mode. The mouse on the canvas drives port 1.
+- Arrow keys and Left Ctrl are the joystick in mixed/joystick mode. A gamepad is that same stick (D-pad or left analog, A / Cross to fire) on the selected port. The mouse on the canvas drives port 1.
 - **Reset** hard-resets the A500 with the current disk still in DF0.
 - Multi-disk titles: pick a sibling in the disk list to insert it without rebooting.
 - **Virtual keyboard** (toolbar) docks the A500 keyboard (no numeric keypad). `SHIFT`, `ALT`, `Amiga` and `CTRL` are sticky one-shots held down across the next keystroke — vAmiga reads raw key codes, not a shift flag. Shifted legends are printed above each key. `Caps Lock` is a tap, which is how the machine locks it.
