@@ -32,12 +32,14 @@ This is a fork of [stumpapp/stump](https://github.com/stumpapp/stump). Extra fea
 - **Text-to-speech** — server-side Piper TTS, rate/pitch, sentence prefetch/gaps, Hungarian pronunciation aid
 - **Opt-in library access** — users only see libraries they have been granted; library settings gated by Manage library
 - **Nested libraries / series tabs** — hierarchical series; parent Series tab shows sub-series + direct books; Books tab is books-only
+- **Hierarchy navigation** — go-up controls from book and nested series views
+- **Retro computer libraries** — catalog and play C64, ZX Spectrum, and Amiga disk/tape images in the browser (WASM); server-side save states; virtual keyboard and on-screen controls; sidecar/Wikipedia covers
 - **Versioned thumbnails** — cache-safe URLs, more reliable upload/loading, nested series 3-cover stacks
 - **Localization** — broad EN/HU browser UI i18n, including reader controls and filters
 - **Filtering** — richer media/series filters and metadata-aware title sort
 - **EPUB reader** — better TOC/chapters, desktop fullscreen, download spinner, translated control tooltips
 - **PDF reader** — centered loading spinner while the file downloads
-- **Image reader** — pinch/pan zoom, 2× max zoom, slip-tolerant tap advance, 20% side tap zones, Android centering, Auto scale default
+- **Image reader** — pinch/pan zoom, 2× max zoom, slip-tolerant tap advance, swipe page turns, 20% side tap zones, Android centering, Auto scale default
 - **Server** — TLS, Apalis job worker with graceful shutdown, safer PDF routing
 - **UI polish** — settings cleanup, Go Home error-boundary fix, image error fallback, dialog close buttons
 
@@ -148,9 +150,14 @@ There are a number of other projects that are similar to Stump, it certainly isn
 > If a package or subfolder has its own license file, that license takes precedence over the repository-level license and will be listed below.
 
 - The [expo application](./apps/expo/LICENSE) is licensed under [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html)
+- The [ZX Spectrum emulator](./packages/browser/public/retro/spectrum/COPYING) ([JSSpeccy 3.2](https://github.com/gasman/jsspeccy3)) is licensed under [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html)
+- The [Amiga emulator](./packages/browser/public/retro/amiga/COPYING) ([vAmigaWeb](https://github.com/vAmigaWeb/vAmigaWeb)) is licensed under [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html)
 - All other code in the repository is licensed under [MIT License](https://www.tldrlegal.com/license/mit-license)
 
 ## Attribution
 
 - Some of the icons used in the web and mobile applications are from the [Spacedrive](https://github.com/spacedriveapp/spacedrive/tree/main/packages/assets/icons) repository, and are licensed under the [FSL-1.1-ALv2](https://github.com/spacedriveapp/spacedrive/blob/main/LICENSE) license.
 - The native Readium expo modules were adapted from [Storyteller](https://gitlab.com/storyteller-platform/storyteller)
+- In-browser C64 play uses [c64-ready](https://www.npmjs.com/package/c64-ready) (MIT; WASM based on c64.js / lvllvl)
+- In-browser ZX Spectrum play uses [JSSpeccy](https://github.com/gasman/jsspeccy3) by Matt Westcott (GPL-3.0). Sinclair/Amstrad Spectrum ROMs are redistributed as permitted for emulators
+- In-browser Amiga play uses [vAmigaWeb](https://github.com/vAmigaWeb/vAmigaWeb) (GPL-3.0). Kickstart ROMs are not bundled; you supply them via `STUMP_FIRMWARE_DIR`
