@@ -1,5 +1,12 @@
 import type { Dispatchable, OverlayKeyId } from '../keys'
 import {
+	AUDIO_FRAMES,
+	AUDIO_GAIN,
+	AUDIO_SAMPLE_RATE,
+	enqueueSoundChunks,
+	writeSoundOutput,
+} from './amiga-audio'
+import {
 	AMIGA_KEY_CODES,
 	isPhysicalJoystickCode,
 	joystickCommand,
@@ -7,6 +14,7 @@ import {
 	overlayKeyCode,
 	physicalJoystickEvent,
 } from './amiga-keys'
+import { createAmigaTouchMouse, longPressMs, type TouchMouseCommand } from './amiga-touch-mouse'
 import { containPoint, palDisplayHeight, TPP } from './amiga-video'
 import type {
 	EmulatorMountOptions,
@@ -32,7 +40,6 @@ const HBLANK_MIN = 0x12 * TPP
 const HPIXELS = 912 * TPP
 const VPIXELS = 313
 const CATCHUP_MAX = 8
-const AUDIO_SAMPLE_RATE = 44100
 
 type VAmigaModule = {
 	ccall: (name: string, returnType: string, argTypes: string[], args: unknown[]) => unknown
@@ -194,8 +201,14 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	const previousCursor = canvas.style.cursor
 	canvas.style.cursor = 'none'
 
-	const applyWarp = () => {
-		module._wasm_set_warp(diskSpeed === 'instant' ? 1 : 0)
+	const wasmConfigure = module.cwrap('wasm_configure', 'string', ['string', 'string']) as (
+		option: string,
+		value: string,
+	) => string
+
+	const applyDiskSpeed = () => {
+		module._wasm_set_warp(0)
+		wasmConfigure('DRIVE_SPEED', diskSpeed === 'instant' ? '-1' : '1')
 	}
 
 	const insertDisk = (bytes: ArrayBuffer, fileName?: string) => {
@@ -207,7 +220,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		insertDisk(disk, fileName)
 		module._wasm_reset()
 		module._wasm_run()
-		applyWarp()
+		applyDiskSpeed()
 	}
 
 	const roms = firmware as Record<string, ArrayBuffer>
@@ -252,29 +265,34 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	try {
 		const context = new AudioContext({ sampleRate: AUDIO_SAMPLE_RATE })
 		module._wasm_set_sample_rate(context.sampleRate)
-		const node = context.createScriptProcessor(1024, 0, 2)
+		const node = context.createScriptProcessor(AUDIO_FRAMES, 0, 2)
+		const gain = context.createGain()
+		gain.gain.value = AUDIO_GAIN
+		const queue: Float32Array[] = []
 		node.onaudioprocess = (event) => {
 			const left = event.outputBuffer.getChannelData(0)
 			const right = event.outputBuffer.getChannelData(1)
-			const samples = module._wasm_copy_into_sound_buffer()
-			if (samples < 1024) {
-				left.fill(0)
-				right.fill(0)
-				return
+			if (context.state === 'running') {
+				const samples = module._wasm_copy_into_sound_buffer()
+				if (samples >= AUDIO_FRAMES) {
+					const addr = module._wasm_get_sound_buffer_address()
+					const heap = new Float32Array(module.HEAPF32.buffer, addr, samples * 2)
+					if (heap.byteLength) enqueueSoundChunks(heap, samples, queue)
+				}
 			}
-			const addr = module._wasm_get_sound_buffer_address()
-			const heap = new Float32Array(module.HEAPF32.buffer, addr, 2048)
-			left.set(heap.subarray(0, 1024))
-			right.set(heap.subarray(1024, 2048))
+			writeSoundOutput(left, right, queue.shift())
 		}
-		node.connect(context.destination)
+		node.connect(gain)
+		gain.connect(context.destination)
 		audio = {
 			resume: () => {
-				void context.resume()
+				void context.resume().catch(() => undefined)
 			},
 			destroy: () => {
+				node.onaudioprocess = null
 				node.disconnect()
-				void context.close()
+				gain.disconnect()
+				void context.close().catch(() => undefined)
 			},
 		}
 	} catch {
@@ -308,10 +326,142 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 
 	const onKeyDown = (event: KeyboardEvent) => onKey(event, true)
 	const onKeyUp = (event: KeyboardEvent) => onKey(event, false)
+
+	const touchMouse = createAmigaTouchMouse()
+	let longPressTimer: ReturnType<typeof setTimeout> | null = null
+	const pointerOpts: AddEventListenerOptions = { passive: false }
+
+	const isTouchPointer = (event: PointerEvent) =>
+		event.pointerType === 'touch' || event.pointerType === 'pen'
+
+	const isCompatTouchMouse = (event: MouseEvent) =>
+		Boolean(
+			(event as MouseEvent & { sourceCapabilities?: { firesTouchEvents?: boolean } | null })
+				.sourceCapabilities?.firesTouchEvents,
+		)
+
+	const stopLongPress = () => {
+		if (longPressTimer != null) {
+			clearTimeout(longPressTimer)
+			longPressTimer = null
+		}
+	}
+
+	const releaseTouchCapture = (pointerId: number) => {
+		if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId)
+	}
+
+	const dropTouchGesture = () => {
+		stopLongPress()
+		const pointerId = touchMouse.pointerId
+		if (pointerId != null) releaseTouchCapture(pointerId)
+		touchMouse.reset()
+	}
+
 	const onBlur = () => {
 		wasmJoystick(joystickCommand(joystickPort, 'RELEASE_X'))
 		wasmJoystick(joystickCommand(joystickPort, 'RELEASE_Y'))
 		wasmJoystick(joystickCommand(joystickPort, 'RELEASE_FIRE'))
+		dropTouchGesture()
+	}
+
+	const scaleTouchDelta = (dx: number, dy: number) => {
+		if (!canvas.width || !canvas.height || !clip.height) return { dx: 0, dy: 0 }
+		const rect = canvas.getBoundingClientRect()
+		const scale = Math.min(rect.width / canvas.width, rect.height / canvas.height)
+		const drawnWidth = canvas.width * scale
+		const drawnHeight = canvas.height * scale
+		if (drawnWidth <= 0 || drawnHeight <= 0) return { dx: 0, dy: 0 }
+		return {
+			dx: Math.round(dx * (canvas.width / drawnWidth)),
+			dy: Math.round(dy * (clip.height / drawnHeight)),
+		}
+	}
+
+	const mouseButtonsHeld: Record<1 | 3, number> = { 1: 0, 3: 0 }
+	const pulseMouseButton = (button: 1 | 3) => {
+		if (destroyed) return
+		if (mouseButtonsHeld[button] === 0) module._wasm_mouse_button(1, button, 1)
+		mouseButtonsHeld[button] += 1
+		requestAnimationFrame(() => {
+			requestAnimationFrame(() => {
+				mouseButtonsHeld[button] = Math.max(0, mouseButtonsHeld[button] - 1)
+				if (!destroyed && mouseButtonsHeld[button] === 0) {
+					module._wasm_mouse_button(1, button, 0)
+				}
+			})
+		})
+	}
+
+	const applyTouchCommands = (commands: TouchMouseCommand[]) => {
+		let sawMove = false
+		for (const command of commands) {
+			if (command.type === 'move') {
+				sawMove = true
+				const scaled = scaleTouchDelta(command.dx, command.dy)
+				if (scaled.dx || scaled.dy) module._wasm_mouse(1, scaled.dx, scaled.dy)
+			} else {
+				pulseMouseButton(command.button)
+			}
+		}
+		return sawMove
+	}
+
+	const startLongPress = () => {
+		stopLongPress()
+		longPressTimer = setTimeout(() => {
+			longPressTimer = null
+			applyTouchCommands(touchMouse.longPress(performance.now()))
+		}, longPressMs)
+	}
+
+	const onPointerDown = (event: PointerEvent) => {
+		if (!isTouchPointer(event)) return
+		event.preventDefault()
+		unlockAudio()
+		canvas.focus()
+		const commands = touchMouse.down(
+			{ pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY },
+			performance.now(),
+		)
+		applyTouchCommands(commands)
+		if (touchMouse.pointerId !== event.pointerId) return
+		canvas.setPointerCapture(event.pointerId)
+		startLongPress()
+	}
+	const onPointerMove = (event: PointerEvent) => {
+		if (!isTouchPointer(event)) return
+		event.preventDefault()
+		const commands = touchMouse.move({
+			pointerId: event.pointerId,
+			clientX: event.clientX,
+			clientY: event.clientY,
+		})
+		if (applyTouchCommands(commands)) stopLongPress()
+	}
+	const onPointerUp = (event: PointerEvent) => {
+		if (!isTouchPointer(event)) return
+		event.preventDefault()
+		stopLongPress()
+		const tracked = touchMouse.pointerId === event.pointerId
+		const commands = touchMouse.up(
+			{ pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY },
+			performance.now(),
+		)
+		applyTouchCommands(commands)
+		if (tracked) releaseTouchCapture(event.pointerId)
+	}
+	const onPointerCancel = (event: PointerEvent) => {
+		if (!isTouchPointer(event)) return
+		event.preventDefault()
+		stopLongPress()
+		const tracked = touchMouse.pointerId === event.pointerId
+		touchMouse.cancel({
+			pointerId: event.pointerId,
+			clientX: event.clientX,
+			clientY: event.clientY,
+		})
+		if (tracked) releaseTouchCapture(event.pointerId)
 	}
 
 	let lastMouse: { x: number; y: number } | null = null
@@ -328,6 +478,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		return { x: point.x, y: (point.y * clip.height) / canvas.height }
 	}
 	const onMouseMove = (event: MouseEvent) => {
+		if (isCompatTouchMouse(event)) return
 		if (document.pointerLockElement === canvas) {
 			module._wasm_mouse(1, event.movementX, event.movementY)
 			return
@@ -343,6 +494,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		lastMouse = point
 	}
 	const onMouseDown = (event: MouseEvent) => {
+		if (isCompatTouchMouse(event)) return
 		unlockAudio()
 		canvas.focus()
 		if (document.pointerLockElement !== canvas) {
@@ -352,6 +504,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		module._wasm_mouse_button(1, button, 1)
 	}
 	const onMouseUp = (event: MouseEvent) => {
+		if (isCompatTouchMouse(event)) return
 		const button = event.button === 2 ? 3 : 1
 		module._wasm_mouse_button(1, button, 0)
 	}
@@ -372,6 +525,10 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	canvas.addEventListener('mousedown', onMouseDown)
 	canvas.addEventListener('mouseleave', onMouseLeave)
 	window.addEventListener('mouseup', onMouseUp)
+	canvas.addEventListener('pointerdown', onPointerDown, pointerOpts)
+	canvas.addEventListener('pointermove', onPointerMove, pointerOpts)
+	canvas.addEventListener('pointerup', onPointerUp, pointerOpts)
+	canvas.addEventListener('pointercancel', onPointerCancel, pointerOpts)
 	canvas.addEventListener('contextmenu', onContextMenu)
 	document.addEventListener('pointerlockchange', onPointerLockChange)
 	canvas.tabIndex = 0
@@ -391,8 +548,17 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			canvas.removeEventListener('mousedown', onMouseDown)
 			canvas.removeEventListener('mouseleave', onMouseLeave)
 			window.removeEventListener('mouseup', onMouseUp)
+			canvas.removeEventListener('pointerdown', onPointerDown, pointerOpts)
+			canvas.removeEventListener('pointermove', onPointerMove, pointerOpts)
+			canvas.removeEventListener('pointerup', onPointerUp, pointerOpts)
+			canvas.removeEventListener('pointercancel', onPointerCancel, pointerOpts)
 			canvas.removeEventListener('contextmenu', onContextMenu)
 			document.removeEventListener('pointerlockchange', onPointerLockChange)
+			dropTouchGesture()
+			if (mouseButtonsHeld[1]) module._wasm_mouse_button(1, 1, 0)
+			if (mouseButtonsHeld[3]) module._wasm_mouse_button(1, 3, 0)
+			mouseButtonsHeld[1] = 0
+			mouseButtonsHeld[3] = 0
 			if (document.pointerLockElement === canvas) document.exitPointerLock()
 			canvas.style.cursor = previousCursor
 			audio?.destroy()
@@ -426,7 +592,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		reset: () => {
 			module._wasm_reset()
 			module._wasm_run()
-			applyWarp()
+			applyDiskSpeed()
 			canvas.focus()
 		},
 		setInputMode: (mode) => {
@@ -439,7 +605,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		},
 		setDiskSpeed: (speed) => {
 			diskSpeed = speed
-			applyWarp()
+			applyDiskSpeed()
 		},
 		sendKey: (target: Dispatchable, down) => {
 			if (typeof target !== 'string') return

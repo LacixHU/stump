@@ -50,7 +50,7 @@ export default function BookOverviewSceneHeader({ media, book, completedAt }: Pr
 						onClick={() => navigate(paths.seriesOverview(media.seriesId!))}
 						aria-label={t('seriesHeader.actions.goUp')}
 					>
-						<ChevronLeft className="h-4 w-4" strokeWidth={3} />
+						<ChevronLeft className="h-[1.4rem] w-[1.4rem]" strokeWidth={4} />
 					</IconButton>
 					<Suspense>
 						<BookLibrarySeriesLinks seriesId={media.seriesId} />

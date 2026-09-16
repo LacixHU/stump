@@ -154,7 +154,7 @@ export default function SeriesLayout() {
 							onClick={() => navigate(upTo)}
 							aria-label={t('seriesHeader.actions.goUp')}
 						>
-							<ChevronLeft className="h-4 w-4" strokeWidth={3} />
+							<ChevronLeft className="h-[1.4rem] w-[1.4rem]" strokeWidth={4} />
 						</IconButton>
 						<Breadcrumbs segments={breadcrumbs} trailingSlash />
 					</div>

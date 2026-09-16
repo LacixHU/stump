@@ -562,7 +562,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 							<canvas
 								ref={canvasRef}
 								className={cn(
-									'inset-0 bg-black absolute h-full w-full object-contain [image-rendering:pixelated]',
+									'inset-0 bg-black absolute h-full w-full touch-none object-contain [image-rendering:pixelated]',
 									(status === 'loading' || status === 'error') && 'opacity-50',
 								)}
 							/>
