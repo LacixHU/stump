@@ -2,12 +2,12 @@
 
 The Amiga core behind `scenes/book/reader/retro/emulators/amiga.ts`.
 
-|                |                                                    |
-| -------------- | -------------------------------------------------- |
-| Upstream       | https://github.com/vAmigaWeb/vAmigaWeb             |
-| Version        | 4.3.6 (built files from https://vamigaweb.github.io) |
-| Authors        | mithrendal, Dirk W. Hoffmann                       |
-| Licence        | GPL-3.0 — see `COPYING`                            |
+|          |                                                      |
+| -------- | ---------------------------------------------------- |
+| Upstream | https://github.com/vAmigaWeb/vAmigaWeb               |
+| Version  | 4.3.6 (built files from https://vamigaweb.github.io) |
+| Authors  | mithrendal, Dirk W. Hoffmann                         |
+| Licence  | GPL-3.0 — see `COPYING`                              |
 
 `vAmiga.js` and `vAmiga.wasm` are the published Emscripten build. They must stay
 together: the glue resolves the WASM relative to its own script URL.
@@ -18,6 +18,8 @@ touching only `emulators/amiga.ts` — nothing else imports these files.
 
 Kickstart ROMs are **not** bundled. Place `kick33180.A500` (1.2) and
 `kick34005.A500` (1.3) in `STUMP_FIRMWARE_DIR` (default `{config_dir}/firmware`).
+For A1200/AGA also place `kick40068.A1200` (3.1) and/or `kick39106.A1200` (3.0);
+those names are required — extra files in the firmware folder are not listed.
 
 ## Upgrading
 

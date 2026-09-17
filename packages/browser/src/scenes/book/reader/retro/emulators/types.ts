@@ -61,5 +61,7 @@ export type RetroEmulatorModule = {
 	label: string
 	/** Firmware basenames required before play (Amiga Kickstart, etc.) */
 	requiredFirmware?: string[]
+	/** Extra firmware fetched when present; missing files are skipped (A1200 Kickstart). */
+	optionalFirmware?: string[]
 	create: (options: EmulatorMountOptions) => Promise<RetroEmulatorHandle>
 }

@@ -226,12 +226,13 @@ function RetroPlayerScene({ id }: { id: string }) {
 	)
 
 	const fetchFirmware = useCallback(
-		async (names: string[]) => {
+		async (names: string[], optional = false) => {
 			const out: Record<string, ArrayBuffer> = {}
 			for (const name of names) {
 				const url = sdk.firmware.fileURL(name)
 				const res = await fetch(url, { credentials: 'include' })
 				if (!res.ok) {
+					if (optional) continue
 					throw new Error(
 						`Missing firmware "${name}". Place Kickstart ROMs in STUMP_FIRMWARE_DIR (user-supplied only).`,
 					)
@@ -262,6 +263,12 @@ function RetroPlayerScene({ id }: { id: string }) {
 				if (mod.requiredFirmware?.length) {
 					firmware = await fetchFirmware(mod.requiredFirmware)
 				}
+				if (mod.optionalFirmware?.length) {
+					firmware = {
+						...(firmware ?? {}),
+						...(await fetchFirmware(mod.optionalFirmware, true)),
+					}
+				}
 
 				const canvas = canvasRef.current
 				if (!canvas) {
@@ -271,18 +278,19 @@ function RetroPlayerScene({ id }: { id: string }) {
 				const fileName =
 					path.split(/[/\\]/).pop() ||
 					(extension ? `game.${extension.replace(/^\./, '')}` : undefined)
+				const speed: RetroDiskSpeed = resolved === 'amiga' ? 'authentic' : DEFAULT_DISK_SPEED
 				const handle = await mod.create({
 					canvas,
 					image,
 					firmware,
 					fileName,
-					diskSpeed: DEFAULT_DISK_SPEED,
+					diskSpeed: speed,
 				})
 				handleRef.current = handle
 				setActiveMediaId(mediaId)
 				setInputMode('mixed')
 				setJoystickPort(2)
-				setDiskSpeed(DEFAULT_DISK_SPEED)
+				setDiskSpeed(speed)
 				setCapabilities(describeCapabilities(handle))
 				setMachine(handle.machine)
 				setJoystickScheme(handle.joystickScheme)

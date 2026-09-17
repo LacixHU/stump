@@ -14,6 +14,14 @@ import {
 	overlayKeyCode,
 	physicalJoystickEvent,
 } from './amiga-keys'
+import {
+	AMIGA_KICKSTART_FILES,
+	AMIGA_OPTIONAL_KICKSTART_FILES,
+	availableMachines,
+	defaultMachineId,
+	hardwareConfigLines,
+	machineById,
+} from './amiga-machines'
 import { createAmigaTouchMouse, longPressMs, type TouchMouseCommand } from './amiga-touch-mouse'
 import { containPoint, palDisplayHeight, TPP } from './amiga-video'
 import type {
@@ -22,19 +30,12 @@ import type {
 	RetroEmulatorHandle,
 	RetroEmulatorModule,
 	RetroInputMode,
-	RetroOption,
 } from './types'
+
+export { AMIGA_KICKSTART_FILES, AMIGA_OPTIONAL_KICKSTART_FILES } from './amiga-machines'
 
 const ASSET_BASE = '/retro/amiga'
 const SCRIPT_URL = `${ASSET_BASE}/vAmiga.js`
-
-export const AMIGA_KICKSTART_FILES = ['kick33180.A500', 'kick34005.A500'] as const
-
-const MACHINES: readonly RetroOption[] = [
-	{ id: 'kick34005.A500', label: 'A500 Kickstart 1.3' },
-	{ id: 'kick33180.A500', label: 'A500 Kickstart 1.2' },
-]
-const DEFAULT_MACHINE = 'kick34005.A500'
 
 const HBLANK_MIN = 0x12 * TPP
 const HPIXELS = 912 * TPP
@@ -147,7 +148,8 @@ function diskName(fileName?: string): string {
 }
 
 function kickstartOf(machine: string, firmware: Record<string, ArrayBuffer>): Uint8Array {
-	const buffer = firmware[machine] || firmware[DEFAULT_MACHINE]
+	const profile = machineById(machine)
+	const buffer = firmware[profile?.kickstart || machine]
 	if (!buffer) {
 		throw new Error(`Missing Amiga Kickstart firmware: ${machine}`)
 	}
@@ -184,7 +186,6 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		[],
 	) as () => void
 
-	let machine = DEFAULT_MACHINE
 	let diskSpeed: RetroDiskSpeed = options.diskSpeed ?? 'instant'
 	let inputMode: RetroInputMode = 'mixed'
 	let joystickPort: 1 | 2 = 2
@@ -205,6 +206,13 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		option: string,
 		value: string,
 	) => string
+	const wasmConfigureMulti = module.cwrap('wasm_configure_multi', 'string', ['string']) as (
+		config: string,
+	) => string
+
+	const roms = firmware as Record<string, ArrayBuffer>
+	const machines = availableMachines(roms)
+	let machine = defaultMachineId(options.fileName, machines)
 
 	const applyDiskSpeed = () => {
 		module._wasm_set_warp(0)
@@ -215,7 +223,15 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		loadFile(module, diskName(fileName), new Uint8Array(bytes), 0)
 	}
 
+	const applyHardware = (id: string) => {
+		const hardware = machineById(id)?.hardware
+		if (!hardware) return
+		const error = wasmConfigureMulti(hardwareConfigLines(hardware))
+		if (error) throw new Error(`Amiga hardware config failed: ${error}`)
+	}
+
 	const boot = (kick: Uint8Array, disk: ArrayBuffer, fileName?: string) => {
+		applyHardware(machine)
 		loadFile(module, 'kick.rom_file', kick)
 		insertDisk(disk, fileName)
 		module._wasm_reset()
@@ -223,7 +239,6 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		applyDiskSpeed()
 	}
 
-	const roms = firmware as Record<string, ArrayBuffer>
 	boot(kickstartOf(machine, roms), current.image, current.fileName)
 
 	const paint = () => {
@@ -619,14 +634,13 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			if (code === null) return
 			module._wasm_key(code, down ? 1 : 0)
 		},
-		machines: MACHINES,
+		machines,
 		get machine() {
 			return machine
 		},
 		setMachine: async (id) => {
-			if (!MACHINES.some((option) => option.id === id) || id === machine) return
+			if (!machines.some((option) => option.id === id) || id === machine) return
 			machine = id
-			const roms = firmware as Record<string, ArrayBuffer>
 			boot(kickstartOf(machine, roms), current.image, current.fileName)
 		},
 	}
@@ -635,6 +649,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 const module: RetroEmulatorModule = {
 	platform: 'amiga',
 	label: 'Commodore Amiga',
+	optionalFirmware: [...AMIGA_OPTIONAL_KICKSTART_FILES],
 	requiredFirmware: [...AMIGA_KICKSTART_FILES],
 	create,
 }
