@@ -35,7 +35,7 @@ impl OpdsLinkType {
 			// TODO: what about rar?
 			"zip" | "cbz" | "rar" | "cbr" => Some(OpdsLinkType::Zip),
 			"d64" | "t64" | "prg" | "g64" | "tap" | "tzx" | "z80" | "sna" | "adf"
-			| "adz" => Some(OpdsLinkType::OctetStream),
+			| "adz" | "img" | "ima" | "exe" | "com" | "dosz" => Some(OpdsLinkType::OctetStream),
 			_ => None,
 		}
 	}

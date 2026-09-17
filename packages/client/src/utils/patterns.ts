@@ -2,7 +2,7 @@ export const ARCHIVE_EXTENSION = /cbr|cbz|zip|rar/
 export const EBOOK_EXTENSION = /epub/
 export const PDF_EXTENSION = /pdf/
 
-/** Retro computer disk/tape image extensions (C64, Spectrum, Amiga). */
+/** Retro computer disk/tape image extensions (C64, Spectrum, Amiga, DOS). */
 export const RETRO_EXTENSIONS = [
 	'd64',
 	't64',
@@ -14,13 +14,18 @@ export const RETRO_EXTENSIONS = [
 	'sna',
 	'adf',
 	'adz',
+	'img',
+	'ima',
+	'exe',
+	'com',
+	'dosz',
 ] as const
 
 export type RetroExtension = (typeof RETRO_EXTENSIONS)[number]
 
 export const RETRO_EXTENSION = new RegExp(`^(?:${RETRO_EXTENSIONS.join('|')})$`, 'i')
 
-export type RetroPlatform = 'c64' | 'spectrum' | 'amiga'
+export type RetroPlatform = 'c64' | 'spectrum' | 'amiga' | 'dos'
 
 const UNIQUE_EXT_PLATFORM: Record<string, RetroPlatform> = {
 	d64: 'c64',
@@ -32,6 +37,11 @@ const UNIQUE_EXT_PLATFORM: Record<string, RetroPlatform> = {
 	sna: 'spectrum',
 	adf: 'amiga',
 	adz: 'amiga',
+	img: 'dos',
+	ima: 'dos',
+	exe: 'dos',
+	com: 'dos',
+	dosz: 'dos',
 }
 
 /**
@@ -90,6 +100,15 @@ function platformFromPathHints(path?: string): RetroPlatform | undefined {
 		if (segment === 'amiga' || segment.includes('amiga')) {
 			return 'amiga'
 		}
+		if (
+			segment === 'dos' ||
+			segment === 'msdos' ||
+			segment === 'pc' ||
+			segment.includes('msdos') ||
+			segment.includes('ms-dos')
+		) {
+			return 'dos'
+		}
 	}
 	return undefined
 }
@@ -101,6 +120,7 @@ function platformFromSeriesTags(tags?: string[]): RetroPlatform | undefined {
 		if (lower === 'platform:c64') return 'c64'
 		if (lower === 'platform:spectrum') return 'spectrum'
 		if (lower === 'platform:amiga') return 'amiga'
+		if (lower === 'platform:dos') return 'dos'
 	}
 	return undefined
 }

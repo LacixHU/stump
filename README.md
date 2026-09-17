@@ -33,7 +33,7 @@ This is a fork of [stumpapp/stump](https://github.com/stumpapp/stump). Extra fea
 - **Opt-in library access** — users only see libraries they have been granted; library settings gated by Manage library
 - **Nested libraries / series tabs** — hierarchical series; parent Series tab shows sub-series + direct books; Books tab is books-only
 - **Hierarchy navigation** — go-up controls from book and nested series views
-- **Retro computer libraries** — catalog and play C64, ZX Spectrum, and Amiga disk/tape images in the browser (WASM); server-side save states; virtual keyboard and on-screen controls; sidecar/Wikipedia covers
+- **Retro computer libraries** — catalog and play C64, ZX Spectrum, Amiga, and DOS disk/tape/program images in the browser (WASM); server-side save states; virtual keyboard and on-screen controls; sidecar/Wikipedia covers
 - **Versioned thumbnails** — cache-safe URLs, more reliable upload/loading, nested series 3-cover stacks
 - **Localization** — broad EN/HU browser UI i18n, including reader controls and filters
 - **Filtering** — richer media/series filters and metadata-aware title sort
@@ -152,6 +152,7 @@ There are a number of other projects that are similar to Stump, it certainly isn
 - The [expo application](./apps/expo/LICENSE) is licensed under [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html)
 - The [ZX Spectrum emulator](./packages/browser/public/retro/spectrum/COPYING) ([JSSpeccy 3.2](https://github.com/gasman/jsspeccy3)) is licensed under [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html)
 - The [Amiga emulator](./packages/browser/public/retro/amiga/COPYING) ([vAmigaWeb](https://github.com/vAmigaWeb/vAmigaWeb)) is licensed under [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html)
+- The [DOS emulator](./packages/browser/public/retro/dos/COPYING) ([js-dos 6.22](https://github.com/caiiiycuk/js-dos) / [em-dosbox](https://github.com/dreamlayers/em-dosbox)) is licensed under [GPL-2.0](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
 - All other code in the repository is licensed under [MIT License](https://www.tldrlegal.com/license/mit-license)
 
 ## Attribution
@@ -161,3 +162,4 @@ There are a number of other projects that are similar to Stump, it certainly isn
 - In-browser C64 play uses [c64-ready](https://www.npmjs.com/package/c64-ready) (MIT; WASM based on c64.js / lvllvl)
 - In-browser ZX Spectrum play uses [JSSpeccy](https://github.com/gasman/jsspeccy3) by Matt Westcott (GPL-3.0). Sinclair/Amstrad Spectrum ROMs are redistributed as permitted for emulators
 - In-browser Amiga play uses [vAmigaWeb](https://github.com/vAmigaWeb/vAmigaWeb) (GPL-3.0). Kickstart ROMs are not bundled; you supply them via `STUMP_FIRMWARE_DIR`
+- In-browser DOS play uses [js-dos](https://js-dos.com) 6.22 / [em-dosbox](https://github.com/dreamlayers/em-dosbox) (GPL-2.0). Put floppy `.img`/`.ima`, `.exe`/`.com`, or a `.dosz` zip bundle in a Retro library.

@@ -141,10 +141,63 @@ const AMIGA_EDITOR_ROWS: OverlayControlId[][] = [
 	],
 ]
 
+const DOS_EDITOR_ROWS: OverlayControlId[][] = [
+	['runstop', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'delete', 'home'],
+	[
+		'backquote',
+		'1',
+		'2',
+		'3',
+		'4',
+		'5',
+		'6',
+		'7',
+		'8',
+		'9',
+		'0',
+		'minus',
+		'equals',
+		'backslash',
+		'instdel',
+	],
+	[
+		'tab',
+		'q',
+		'w',
+		'e',
+		'r',
+		't',
+		'y',
+		'u',
+		'i',
+		'o',
+		'p',
+		'bracketleft',
+		'bracketright',
+		'return',
+	],
+	['ctrl', 'capslock', 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'semicolon', 'quote'],
+	['shift', 'z', 'x', 'c', 'v', 'b', 'n', 'm', 'comma', 'period', 'slash', 'shiftright'],
+	['alt', 'space'],
+	[
+		JOYSTICK_ID,
+		'fire',
+		'up',
+		'down',
+		'left',
+		'right',
+		'cursorup',
+		'cursordown',
+		'cursorleft',
+		'cursorright',
+	],
+]
+
 const EDITOR_ROWS: Partial<Record<RetroPlatform, OverlayControlId[][]>> = {
 	c64: C64_EDITOR_ROWS,
 	spectrum: SPECTRUM_EDITOR_ROWS,
 	amiga: AMIGA_EDITOR_ROWS,
+	dos: DOS_EDITOR_ROWS,
 }
 
 /** Whether this platform has a key vocabulary the overlay can be built from. */
@@ -181,9 +234,18 @@ const AMIGA_OVERLAY_KEYS: OverlayKeyPlacement[] = [
 	{ id: 'runstop', x: 0.7, y: 0.92 },
 ]
 
+const DOS_OVERLAY_KEYS: OverlayKeyPlacement[] = [
+	{ id: JOYSTICK_ID, x: 0.15, y: 0.74 },
+	{ id: 'fire', x: 0.88, y: 0.78 },
+	{ id: 'space', x: 0.42, y: 0.92 },
+	{ id: 'return', x: 0.56, y: 0.92 },
+	{ id: 'runstop', x: 0.7, y: 0.92 },
+]
+
 const PLATFORM_OVERLAY_KEYS: Partial<Record<RetroPlatform, OverlayKeyPlacement[]>> = {
 	spectrum: SPECTRUM_OVERLAY_KEYS,
 	amiga: AMIGA_OVERLAY_KEYS,
+	dos: DOS_OVERLAY_KEYS,
 }
 
 /** The layout a game starts with when it has no `controls.json` of its own. */

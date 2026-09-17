@@ -347,6 +347,17 @@ const PLATFORM_LABELS: Partial<Record<RetroPlatform, Partial<Record<OverlayContr
 		cursorleft: '←',
 		cursorright: '→',
 	},
+	dos: {
+		return: 'Enter',
+		runstop: 'Esc',
+		commodore: 'Win',
+		space: 'Space',
+		instdel: 'Backspace',
+		cursorup: '↑',
+		cursordown: '↓',
+		cursorleft: '←',
+		cursorright: '→',
+	},
 }
 
 /** The legend this machine prints on a control. */

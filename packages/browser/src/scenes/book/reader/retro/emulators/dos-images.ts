@@ -1,0 +1,77 @@
+const RUN_BAT = ['autoexec.bat', 'start.bat', 'run.bat', 'play.bat']
+
+export function basenameOf(fileName?: string): string {
+	return (fileName || 'GAME.EXE').split(/[/\\]/).pop() || 'GAME.EXE'
+}
+
+export function extensionOf(fileName?: string): string {
+	const name = basenameOf(fileName)
+	const dot = name.lastIndexOf('.')
+	return dot >= 0 ? name.slice(dot + 1).toLowerCase() : ''
+}
+
+export function toDos83(fileName: string): string {
+	const name = basenameOf(fileName)
+	const dot = name.lastIndexOf('.')
+	const rawStem = (dot >= 0 ? name.slice(0, dot) : name).toUpperCase()
+	const rawExt = (dot >= 0 ? name.slice(dot + 1) : '').toUpperCase()
+	const stem = (rawStem.replace(/[^A-Z0-9]/g, '').slice(0, 8) || 'GAME').padEnd(1)
+	const ext = rawExt.replace(/[^A-Z0-9]/g, '').slice(0, 3)
+	return ext ? `${stem}.${ext}` : stem
+}
+
+export function isZipBytes(bytes: Uint8Array): boolean {
+	return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b
+}
+
+export function zipEntryNames(bytes: Uint8Array): string[] {
+	const names: string[] = []
+	let offset = 0
+	while (offset + 46 < bytes.length) {
+		if (
+			bytes[offset] !== 0x50 ||
+			bytes[offset + 1] !== 0x4b ||
+			bytes[offset + 2] !== 0x01 ||
+			bytes[offset + 3] !== 0x02
+		) {
+			offset += 1
+			continue
+		}
+		const nameLen = bytes[offset + 28]! | (bytes[offset + 29]! << 8)
+		const extraLen = bytes[offset + 30]! | (bytes[offset + 31]! << 8)
+		const commentLen = bytes[offset + 32]! | (bytes[offset + 33]! << 8)
+		const nameStart = offset + 46
+		const nameEnd = nameStart + nameLen
+		if (nameEnd > bytes.length) break
+		const name = String.fromCharCode(...bytes.subarray(nameStart, nameEnd)).replace(/\\/g, '/')
+		if (name && !name.endsWith('/')) names.push(name)
+		offset = nameEnd + extraLen + commentLen
+	}
+	return names
+}
+
+export function pickRunnable(names: string[], archiveStem?: string): string | null {
+	const files = names
+		.map((name) => name.split('/').pop() || name)
+		.filter((name) => !name.startsWith('.'))
+	const lower = files.map((name) => name.toLowerCase())
+	for (const bat of RUN_BAT) {
+		const index = lower.indexOf(bat)
+		if (index >= 0) return toDos83(files[index]!)
+	}
+	const programs = files.filter((name) => /\.(exe|com)$/i.test(name))
+	if (programs.length === 1) return toDos83(programs[0]!)
+	if (archiveStem) {
+		const stem = archiveStem.replace(/[^A-Za-z0-9]/g, '').toLowerCase()
+		const match = programs.find((name) =>
+			name
+				.replace(/\.(exe|com)$/i, '')
+				.replace(/[^A-Za-z0-9]/g, '')
+				.toLowerCase()
+				.startsWith(stem.slice(0, 8)),
+		)
+		if (match) return toDos83(match)
+	}
+	if (programs[0]) return toDos83(programs[0])
+	return null
+}

@@ -1,6 +1,6 @@
 ---
 title: Retro computer libraries
-description: Catalog and play C64, ZX Spectrum, and Amiga disk/tape images in the browser
+description: Catalog and play C64, ZX Spectrum, Amiga, and DOS disk/tape/program images in the browser
 ---
 
 # Retro computer libraries
@@ -14,6 +14,7 @@ Stump can catalog single-file disk and tape images for classic computers and pla
 | Commodore 64 | `d64`, `t64`, `prg`, `g64`, `tap` (with path hint) |
 | ZX Spectrum  | `tzx`, `z80`, `sna`, `tap` (with path hint)        |
 | Amiga        | `adf`, `adz`                                       |
+| DOS          | `img`, `ima`, `exe`, `com`, `dosz`                 |
 
 These extensions are registered globally (like PDF). Create a library with type **Retro** so auto-metadata (when enabled) targets the right providers.
 
@@ -27,6 +28,7 @@ Prefer nested folders (library pattern **Nested** is the default when you pick R
   C64/Last Ninja/Last Ninja Side B.d64
   Spectrum/Manic Miner/manic.tap
   Amiga/Lemmings/Lemmings.adf
+  DOS/Doom/DOOM.EXE
 ```
 
 Each game folder becomes a **series**; each disk/tape file becomes **media**. Multi-disk games share one series.
@@ -58,7 +60,7 @@ Supported load types in this core: **`.d64`**, **`.prg`**, **`.crt`** (`.t64`/`.
 - **Virtual keyboard** (toolbar) docks the full C64 keyboard under the playfield, on desktop and touch alike. It is part of the fullscreen element, so it stays available in fullscreen.
   - `SHIFT` and `C=` are sticky one-shots: tap the modifier, then the key it applies to. `SHIFT LOCK` holds shift down until it is tapped again, as on the machine.
   - The shifted legend is printed above the unshifted one, so `SHIFT` + `1` gives `!`, `SHIFT` + `HOME` gives `CLR`, `SHIFT` + `F1` gives `F2`, and `SHIFT` + either cursor key reverses its direction.
-  - The C64, Spectrum and Amiga each have an authentic layout; the button does not appear for platforms that do not.
+  - The C64, Spectrum, Amiga and DOS each have a layout; the button does not appear for platforms that do not.
 - Users with **Manage library** can **Edit overlay** (Settings): pick the joystick, fire, or any C64 key from the on-screen keyboard and drag them into place. Save writes series-folder `controls.json`.
 - The disk list **inserts** a new image into the running session (no reboot, no auto `LOAD`/`RUN`). Use this for multi-disk games.
 
@@ -175,6 +177,29 @@ If firmware is missing, the catalog still works; Play shows setup instructions.
 - **Virtual keyboard** (toolbar) docks the A500 keyboard (no numeric keypad). `SHIFT`, `ALT`, `Amiga` and `CTRL` are sticky one-shots held down across the next keystroke — vAmiga reads raw key codes, not a shift flag. Shifted legends are printed above each key. `Caps Lock` is a tap, which is how the machine locks it.
 - Save states are available (vAmiga snapshots).
 
+## DOS emulator
+
+In-browser DOS play uses **[js-dos 6.22](https://js-dos.com)** / **[em-dosbox](https://github.com/dreamlayers/em-dosbox)** (GPL-2.0). Assets are served from `/retro/dos/` (`js-dos.js`, `wdosbox.js`, `wdosbox.wasm.js`). No IBM BIOS is required.
+
+Supported load types:
+
+| Extension       | What happens                                                                                        |
+| --------------- | --------------------------------------------------------------------------------------------------- |
+| `.img` / `.ima` | Floppy image mounted as `A:`                                                                        |
+| `.exe` / `.com` | Written to `C:` and run                                                                             |
+| `.dosz`         | Zip bundle extracted to `C:`; `AUTOEXEC.BAT` / `START.BAT` / a matching EXE is started when present |
+
+Do **not** use `.zip` — that extension is already comic/CBZ. Rename a game folder zip to `.dosz`.
+
+Path segments `dos`, `msdos`, or `pc` tag a folder as DOS.
+
+### Controls
+
+- A physical keyboard types into DOSBox. The **virtual keyboard** is a PC 101 layout (no keypad); `SHIFT`, `CTRL` and `ALT` are sticky one-shots.
+- The mouse on the canvas is the DOS mouse. On a phone, drag a finger to move the pointer (it is **not** under the finger); tap is left click; a still long-press is right click.
+- On-screen stick and fire send arrow keys and Ctrl. Many DOS games accept that; mouse-only titles use the trackpad.
+- Save states are not available for this core.
+
 ## Covers / thumbnails
 
 Retro files have no internal pages, so Stump **cannot** generate a cover from the disk image itself.
@@ -188,7 +213,7 @@ Retro files have no internal pages, so Stump **cannot** generate a cover from th
 
 Then run a library **scan** (or thumbnail generation). Stump copies/resizes the sidecar into the thumbnail store.
 
-If no sidecar is found, Stump searches Wikipedia via the MediaWiki API in [Category:Video game covers](https://en.wikipedia.org/wiki/Category:Video_game_covers) (and platform subcategories such as Commodore 64 / ZX Spectrum / Amiga). A matching cover is downloaded and stored as the thumbnail.
+If no sidecar is found, Stump searches Wikipedia via the MediaWiki API in [Category:Video game covers](https://en.wikipedia.org/wiki/Category:Video_game_covers) (and platform subcategories such as Commodore 64 / ZX Spectrum / Amiga / MS-DOS). A matching cover is downloaded and stored as the thumbnail.
 
 Sidecar files always win over Wikipedia. Many Wikipedia covers are fair-use; only use this for your own library. Manual upload on the book manage page still works.
 
@@ -216,8 +241,8 @@ which is comfortably above a C64 snapshot (a few hundred KiB) and an Amiga one
 (a few MiB).
 
 Save states depend on the emulator core being able to write a snapshot. The C64 and Amiga
-cores can; JSSpeccy can only read them, so the save and load buttons are hidden for
-Spectrum games rather than offered and then refused.
+cores can; JSSpeccy and js-dos cannot write them, so the save and load buttons are hidden
+for Spectrum and DOS games rather than offered and then refused.
 
 ## Legal
 
@@ -226,7 +251,8 @@ images.
 
 Machine ROMs differ by platform. The Spectrum ROMs ship with the JSSpeccy bundle, which
 Amstrad permits for emulators; the Amiga's Kickstart does not allow that, so you supply it
-yourself (see above). The Spectrum and Amiga cores are GPL-3.0 — see those sections.
+yourself (see above). DOSBox does not need an IBM BIOS. The Spectrum and Amiga cores are
+GPL-3.0; the DOS core is GPL-2.0 — see those sections.
 
 ## OPDS
 

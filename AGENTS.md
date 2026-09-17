@@ -5,7 +5,7 @@
 Commits fail if staged files are not formatted. Always format before committing:
 
 - **Rust (`*.rs`)**: `cargo fmt --manifest-path=core/Cargo.toml` (also server/desktop manifests if those crates changed). Do not leave import/line wraps that rustfmt would rewrite.
-- **JS/TS/JSON/MD (`*.{js,jsx,ts,tsx,md,json}` and mdx as applicable)**: `npx prettier --config prettier.config.js --write <files>` on changed files.
+- **JS/TS/JSON/MD (`*.{js,jsx,ts,tsx,md,json}` and mdx as applicable)**: `node ./node_modules/prettier/bin/prettier.cjs --config prettier.config.js --write <files>` on changed files. Do not use `npx prettier` — it can resolve Storybook's nested Prettier and fail with `require() cannot be used on an ESM graph with top-level await` from `prettier-plugin-tailwindcss`.
 
 lint-staged runs `prettier --check` and `cargo fmt --check` only — it does not auto-fix. Fix formatting, re-stage, then commit.
 

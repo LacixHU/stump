@@ -392,6 +392,11 @@ pub fn cover_category_for_platform(platform: Option<&str>) -> &'static str {
 			"ZX Spectrum game covers"
 		},
 		Some(p) if p.contains("amiga") => "Amiga game covers",
+		Some(p)
+			if p == "dos" || p == "pc" || p.contains("msdos") || p.contains("ms-dos") =>
+		{
+			"MS-DOS game covers"
+		},
 		_ => "Video game covers",
 	}
 }
@@ -624,6 +629,10 @@ mod tests {
 		assert_eq!(
 			cover_category_for_platform(Some("amiga")),
 			"Amiga game covers"
+		);
+		assert_eq!(
+			cover_category_for_platform(Some("dos")),
+			"MS-DOS game covers"
 		);
 		assert_eq!(cover_category_for_platform(None), "Video game covers");
 	}

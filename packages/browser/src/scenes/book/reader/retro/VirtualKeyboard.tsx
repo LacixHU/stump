@@ -378,6 +378,99 @@ const AMIGA_ROWS: CapRow[] = [
 	],
 ]
 
+const DOS_CTRL: Modifier = { key: 'ctrl', name: 'ctrl' }
+const DOS_ALT: Modifier = { key: 'alt', name: 'alt' }
+const DOS_SHIFT: Modifier = { key: 'shift', name: 'shift' }
+
+const DOS_ROWS: CapRow[] = [
+	[
+		key('runstop', 'Esc', undefined, { width: 1.25, aria: 'Escape' }),
+		amigaFn('f1', 'F1'),
+		amigaFn('f2', 'F2'),
+		amigaFn('f3', 'F3'),
+		amigaFn('f4', 'F4'),
+		amigaFn('f5', 'F5'),
+		amigaFn('f6', 'F6'),
+		amigaFn('f7', 'F7'),
+		amigaFn('f8', 'F8'),
+		amigaFn('f9', 'F9'),
+		amigaFn('f10', 'F10'),
+		key('delete', 'Del', undefined, { width: 1.75, aria: 'Delete' }),
+		key('home', 'Home', undefined, { width: 2 }),
+	],
+	[
+		key('backquote', '`', '~'),
+		key('1', '1', '!'),
+		key('2', '2', '@'),
+		key('3', '3', '#'),
+		key('4', '4', '$'),
+		key('5', '5', '%'),
+		key('6', '6', '^'),
+		key('7', '7', '&'),
+		key('8', '8', '*'),
+		key('9', '9', '('),
+		key('0', '0', ')'),
+		key('minus', '-', '_'),
+		key('equals', '=', '+'),
+		key('backslash', '\\', '|'),
+		key('instdel', 'Backspace', undefined, { aria: 'Backspace' }),
+	],
+	[
+		key('tab', 'Tab', undefined, { width: 1.5 }),
+		key('q', 'Q'),
+		key('w', 'W'),
+		key('e', 'E'),
+		key('r', 'R'),
+		key('t', 'T'),
+		key('y', 'Y'),
+		key('u', 'U'),
+		key('i', 'I'),
+		key('o', 'O'),
+		key('p', 'P'),
+		key('bracketleft', '[', '{'),
+		key('bracketright', ']', '}'),
+		key('return', 'Enter', undefined, { width: 1.5, aria: 'Enter' }),
+	],
+	[
+		{ label: 'Ctrl', modifier: DOS_CTRL, width: 1.5 },
+		key('capslock', 'Caps Lock', undefined, { width: 2.5, aria: 'Caps lock' }),
+		key('a', 'A'),
+		key('s', 'S'),
+		key('d', 'D'),
+		key('f', 'F'),
+		key('g', 'G'),
+		key('h', 'H'),
+		key('j', 'J'),
+		key('k', 'K'),
+		key('l', 'L'),
+		key('semicolon', ';', ':'),
+		key('quote', "'", '"'),
+	],
+	[
+		{ aria: 'Shift left', label: 'Shift', modifier: DOS_SHIFT, width: 2.5 },
+		key('z', 'Z'),
+		key('x', 'X'),
+		key('c', 'C'),
+		key('v', 'V'),
+		key('b', 'B'),
+		key('n', 'N'),
+		key('m', 'M'),
+		key('comma', ',', '<'),
+		key('period', '.', '>'),
+		key('slash', '/', '?'),
+		{ aria: 'Shift right', label: 'Shift', modifier: DOS_SHIFT, width: 2.5 },
+	],
+	[
+		{ aria: 'Ctrl', label: 'Ctrl', modifier: DOS_CTRL, width: 1.5 },
+		{ aria: 'Alt', label: 'Alt', modifier: DOS_ALT, width: 1.5 },
+		key('space', 'Space', undefined, { width: 8, aria: 'Space' }),
+		key('cursorleft', '←', undefined, { aria: 'Cursor left' }),
+		key('cursordown', '↓', undefined, { aria: 'Cursor down' }),
+		key('cursorup', '↑', undefined, { aria: 'Cursor up' }),
+		key('cursorright', '→', undefined, { aria: 'Cursor right' }),
+	],
+]
+
 /**
  * Univers 67 Bold Condensed on a breadbin C64; Helvetica Bold on a 48K Spectrum
  * rubber key and on an A500 cap. System faces stand in — the originals are not
@@ -435,6 +528,22 @@ const LAYOUTS: Partial<Record<RetroPlatform, Layout>> = {
 			textActive: '#ffffff',
 		},
 		rows: AMIGA_ROWS,
+	},
+	dos: {
+		font: SWISS_KEYCAP_FONT,
+		modifiers: [DOS_SHIFT, DOS_CTRL, DOS_ALT],
+		palette: {
+			cap: '#d8dce3',
+			capActive: '#2f6fed',
+			edge: 'rgba(0, 0, 0, 0.28)',
+			fn: '#c5ccd6',
+			fnText: '#1c2330',
+			legend: 'rgba(28, 35, 48, 0.65)',
+			panel: '#9aa3b0',
+			text: '#1c2330',
+			textActive: '#ffffff',
+		},
+		rows: DOS_ROWS,
 	},
 }
 

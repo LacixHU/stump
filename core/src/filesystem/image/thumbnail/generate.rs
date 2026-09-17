@@ -109,9 +109,11 @@ fn is_generic_cover_folder(name: &str) -> bool {
 			| "commodore"
 			| "spectrum"
 			| "zx" | "amiga"
-			| "games" | "game"
-			| "retro" | "roms"
-			| "disks" | "tapes"
+			| "dos" | "msdos"
+			| "pc" | "games"
+			| "game" | "retro"
+			| "roms" | "disks"
+			| "tapes"
 	)
 }
 

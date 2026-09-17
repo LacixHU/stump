@@ -24,6 +24,7 @@ pub enum RetroPlatform {
 	C64,
 	Spectrum,
 	Amiga,
+	Dos,
 }
 
 impl RetroPlatform {
@@ -32,6 +33,7 @@ impl RetroPlatform {
 			Self::C64 => "c64",
 			Self::Spectrum => "spectrum",
 			Self::Amiga => "amiga",
+			Self::Dos => "dos",
 		}
 	}
 
@@ -59,6 +61,7 @@ pub fn resolve_retro_platform(path: &str, extension: &str) -> RetroPlatform {
 		"d64" | "t64" | "prg" | "g64" => RetroPlatform::C64,
 		"tzx" | "z80" | "sna" => RetroPlatform::Spectrum,
 		"adf" | "adz" => RetroPlatform::Amiga,
+		"img" | "ima" | "exe" | "com" | "dosz" => RetroPlatform::Dos,
 		"tap" => resolve_tap_platform(path),
 		_ => {
 			tracing::warn!(
@@ -107,6 +110,14 @@ pub fn platform_from_path_hints(path: &str) -> Option<RetroPlatform> {
 		if *segment == "amiga" || segment.contains("amiga") {
 			return Some(RetroPlatform::Amiga);
 		}
+		if *segment == "dos"
+			|| *segment == "msdos"
+			|| *segment == "pc"
+			|| segment.contains("msdos")
+			|| segment.contains("ms-dos")
+		{
+			return Some(RetroPlatform::Dos);
+		}
 	}
 
 	None
@@ -123,6 +134,7 @@ where
 			"platform:c64" => return Some(RetroPlatform::C64),
 			"platform:spectrum" => return Some(RetroPlatform::Spectrum),
 			"platform:amiga" => return Some(RetroPlatform::Amiga),
+			"platform:dos" => return Some(RetroPlatform::Dos),
 			_ => {},
 		}
 	}
@@ -143,6 +155,7 @@ where
 		"d64" | "t64" | "prg" | "g64" => RetroPlatform::C64,
 		"tzx" | "z80" | "sna" => RetroPlatform::Spectrum,
 		"adf" | "adz" => RetroPlatform::Amiga,
+		"img" | "ima" | "exe" | "com" | "dosz" => RetroPlatform::Dos,
 		"tap" => {
 			if let Some(p) = platform_from_path_hints(path) {
 				return p;
@@ -606,6 +619,22 @@ mod tests {
 			resolve_retro_platform("/games/foo.adz", "adz"),
 			RetroPlatform::Amiga
 		);
+		assert_eq!(
+			resolve_retro_platform("/games/foo.img", "img"),
+			RetroPlatform::Dos
+		);
+		assert_eq!(
+			resolve_retro_platform("/games/foo.ima", "ima"),
+			RetroPlatform::Dos
+		);
+		assert_eq!(
+			resolve_retro_platform("/games/foo.exe", "exe"),
+			RetroPlatform::Dos
+		);
+		assert_eq!(
+			resolve_retro_platform("/games/foo.dosz", "dosz"),
+			RetroPlatform::Dos
+		);
 	}
 
 	#[test]
@@ -625,6 +654,10 @@ mod tests {
 		assert_eq!(
 			resolve_retro_platform("/Retro/zx/x.tap", "tap"),
 			RetroPlatform::Spectrum
+		);
+		assert_eq!(
+			resolve_retro_platform("/Retro/DOS/doom/doom.exe", "exe"),
+			RetroPlatform::Dos
 		);
 	}
 

@@ -43,6 +43,10 @@ describe('hasVirtualKeyboard', () => {
 	it('offers a layout for the Amiga', () => {
 		expect(hasVirtualKeyboard('amiga')).toBe(true)
 	})
+
+	it('offers a layout for DOS', () => {
+		expect(hasVirtualKeyboard('dos')).toBe(true)
+	})
 })
 
 describe('VirtualKeyboard', () => {
@@ -360,6 +364,36 @@ describe('VirtualKeyboard (Amiga)', () => {
 		expect(sendKey.mock.calls).toEqual([
 			['alt', true],
 			['alt', false],
+		])
+	})
+})
+
+describe('VirtualKeyboard (DOS)', () => {
+	it('draws a PC keyboard: six rows of 15 cap units', () => {
+		const { container } = render(<VirtualKeyboard platform="dos" />)
+		const rows = Array.from(container.firstElementChild?.children ?? [])
+
+		expect(rows).toHaveLength(6)
+		for (const row of rows) {
+			const units = Array.from(row.children).reduce(
+				(total, cap) => total + Number((cap as HTMLElement).style.flexGrow),
+				0,
+			)
+			expect(units).toBeCloseTo(15)
+		}
+	})
+
+	it('sends Enter and Esc through the emulator handle', () => {
+		const sendKey = jest.fn()
+		render(<VirtualKeyboard platform="dos" sendKey={sendKey} />)
+		tap('Enter')
+		tap('Escape')
+
+		expect(sendKey.mock.calls).toEqual([
+			['return', true, { shiftKey: false }],
+			['return', false, { shiftKey: false }],
+			['runstop', true, { shiftKey: false }],
+			['runstop', false, { shiftKey: false }],
 		])
 	})
 })

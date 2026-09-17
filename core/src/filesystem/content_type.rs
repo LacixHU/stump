@@ -27,7 +27,7 @@ pub enum ContentType {
 	WEBP,
 	GIF,
 	TXT,
-	/// Retro computer disk/tape image (C64, Spectrum, Amiga, etc.)
+	/// Retro computer disk/tape image (C64, Spectrum, Amiga, DOS, etc.)
 	RETRO,
 	#[default]
 	UNKNOWN,
@@ -90,7 +90,7 @@ impl ContentType {
 			"txt" => ContentType::TXT,
 			// Retro disk/tape images — extension-first; infer usually fails
 			"d64" | "t64" | "prg" | "g64" | "tap" | "tzx" | "z80" | "sna" | "adf"
-			| "adz" => ContentType::RETRO,
+			| "adz" | "img" | "ima" | "exe" | "com" | "dosz" => ContentType::RETRO,
 			_ => temporary_content_workarounds(extension),
 		}
 	}
@@ -98,7 +98,8 @@ impl ContentType {
 	/// Extensions treated as retro computer media (disk/tape images).
 	pub fn retro_extensions() -> &'static [&'static str] {
 		&[
-			"d64", "t64", "prg", "g64", "tap", "tzx", "z80", "sna", "adf", "adz",
+			"d64", "t64", "prg", "g64", "tap", "tzx", "z80", "sna", "adf", "adz", "img",
+			"ima", "exe", "com", "dosz",
 		]
 	}
 
@@ -405,7 +406,10 @@ impl From<&str> for ContentType {
 			| "application/x-z80"
 			| "application/x-sna"
 			| "application/x-adf"
-			| "application/x-adz" => ContentType::RETRO,
+			| "application/x-adz"
+			| "application/x-ima"
+			| "application/x-msdownload"
+			| "application/x-dosz" => ContentType::RETRO,
 			_ => ContentType::UNKNOWN,
 		}
 	}
@@ -516,6 +520,9 @@ mod tests {
 		assert_eq!(ContentType::from_extension("adf"), ContentType::RETRO);
 		assert_eq!(ContentType::from_extension("tzx"), ContentType::RETRO);
 		assert_eq!(ContentType::from_extension("tap"), ContentType::RETRO);
+		assert_eq!(ContentType::from_extension("img"), ContentType::RETRO);
+		assert_eq!(ContentType::from_extension("exe"), ContentType::RETRO);
+		assert_eq!(ContentType::from_extension("dosz"), ContentType::RETRO);
 	}
 
 	#[test]
@@ -676,6 +683,8 @@ mod tests {
 		assert!(ContentType::RETRO.is_retro());
 		assert!(ContentType::is_retro_extension("d64"));
 		assert!(ContentType::is_retro_extension("ADF"));
+		assert!(ContentType::is_retro_extension("img"));
+		assert!(ContentType::is_retro_extension("DOSZ"));
 		assert!(!ContentType::is_retro_extension("cbz"));
 		assert!(!ContentType::PDF.is_retro());
 	}
