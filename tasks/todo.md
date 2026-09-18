@@ -1048,6 +1048,61 @@ All three re-read their row after generating, because the generator writes the n
 thumbnail path itself and returning the pre-generation model would hand the client a path
 it already had.
 
+### Follow-up: the lookup never actually reached the right article
+
+The first game tried after shipping, `Pirates [Side B].d64`, found nothing. Probing the
+live API turned up three bugs that no amount of reading the code had shown, all of them
+older than this change:
+
+1. **The qualified search was dead code.** `lookup_article_cover` only tried
+   `"{title} video game"` when the plain title search returned _zero_ hits. A generic name
+   like "Pirates" never returns zero -- it returns Piracy, Pittsburgh Pirates, a
+   disambiguation page -- so the fallback never fired for the titles that needed it.
+2. **A sequel outranked the original.** `titles_similar`'s `a.contains(&q)` shortcut
+   accepted "Shadow of the Beast II" for "Shadow of the Beast"; the sequel's title contains
+   the original's and also scores well on edit distance.
+3. **The right article did not call itself a video game.** `is_video_game_page` required
+   the literal words "video game", but the 1989 Shadow of the Beast article says "platform
+   game", so it was skipped in favour of the 2016 remake.
+
+What changed as a result:
+
+- `lookup_article_cover` now runs all three searches in order of how tightly they pin the
+  game down -- bare title, title + machine, title + "video game" -- deduplicating articles
+  across them and capping summary requests at `MAX_ARTICLE_SUMMARY_FETCHES`. Adding the
+  machine is what lifts "Sid Meier's Pirates!" to the top of the list.
+- `introduces_sequel` rejects an article carrying an entry marker the query does not, so a
+  sequel can no longer stand in for the original. Small numbers and unambiguous roman
+  numerals count; a four-digit year is a date, not an entry.
+- `strip_title_qualifier` drops Wikipedia's `(1989 video game)` disambiguator before
+  comparing, which is what lets a short name like "Elite" match its own article at all.
+- `article_ends_with_title` accepts a dropped prefix -- "Pirates" for "Sid Meier's
+  Pirates!" -- but only end-anchored, so "Pirates of the Barbary Coast" and "Pirates! Gold"
+  stay rejected, and only when the article also names the machine.
+- `is_video_game_page` takes the platform and accepts a page that names it, backed by a
+  wider genre list. That second signal is what separates the 1987 Commodore 64 original
+  (whose article says so) from the 2004 remake (whose article does not).
+- `CoverPlatform` replaces three parallel `match` arms with one table: the cover category,
+  the term to search with, and the names the machine goes by in prose.
+
+`lookup_cover_url` also went back to article-first. The earlier category-first ordering was
+only ever justified by the Pirates failure, and the platform-qualified article search is
+what actually fixed that -- meanwhile the category file search matches on loose token
+overlap and was offering "Shadow of the Beast 3" for "Shadow of the Beast".
+
+Measured against live Wikipedia via the new `cover_lookup` example:
+
+| disk name              | platform | before           | after                           |
+| ---------------------- | -------- | ---------------- | ------------------------------- |
+| Pirates [Side B]       | c64      | nothing          | Sid Meier's Pirates! (1987)     |
+| Shadow of the Beast    | amiga    | Beast II's cover | the 1989 original's cover       |
+| Shadow of the Beast II | amiga    | Beast II's cover | unchanged, still correct        |
+| The Last Ninja         | c64      | -                | `LastNinja-c64_cover01.jpg`     |
+| Zamzara                | c64      | nothing          | nothing (still a true negative) |
+
+Operation Wolf, Turrican, Turrican II, Uridium, Elite, Manic Miner, Jet Set Willy, Bomb
+Jack and Doom all resolve to their own box art.
+
 ### Notes
 
 - **Force-regen drops a thumbnail it cannot replace.** For a game with no sidecar and no
