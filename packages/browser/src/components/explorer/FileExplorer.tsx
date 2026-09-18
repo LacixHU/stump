@@ -1,22 +1,22 @@
 import GenericEmptyState from '@/components/GenericEmptyState'
 
+import { ExplorerDropzone } from './actions'
 import { useFileExplorerContext } from './context'
 import { FileGrid } from './grid'
 import { FileTable } from './table'
 
-// TODO: each item within the grid or table makes an API call to get the media and then the associated thumbnail
-// This is not optimal, and should be refactored to issue one query and match on the client
-
 export default function FileExplorer() {
 	const { files, layout } = useFileExplorerContext()
 
-	if (!files.length) {
-		return (
-			<div className="px-4 flex h-full w-full items-center justify-center">
-				<GenericEmptyState title="No files" subtitle="This folder is empty" />
-			</div>
-		)
-	}
+	const content = !files.length ? (
+		<div className="px-4 flex h-full w-full items-center justify-center">
+			<GenericEmptyState title="No files" subtitle="This folder is empty" />
+		</div>
+	) : layout === 'grid' ? (
+		<FileGrid />
+	) : (
+		<FileTable />
+	)
 
-	return layout === 'grid' ? <FileGrid /> : <FileTable />
+	return <ExplorerDropzone>{content}</ExplorerDropzone>
 }

@@ -27,6 +27,10 @@ export type IExplorerContext = {
 	refetch: () => Promise<unknown>
 	uploadConfig?: UploadConfig
 	libraryID: string
+	canManageFiles: boolean
+	openCreateFolder: () => void
+	openRename: (file: UseDirectoryListingFile) => void
+	openDelete: (file: UseDirectoryListingFile) => void
 }
 
 export const ExplorerContext = createContext<IExplorerContext | null>(null)

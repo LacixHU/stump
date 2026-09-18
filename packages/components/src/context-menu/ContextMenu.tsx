@@ -23,6 +23,7 @@ export type ContextMenuItem = {
 	shortCut?: React.ReactNode
 	onClick?: () => void
 	subItems?: ContextMenuItem[]
+	isDestructive?: boolean
 }
 export type ContextMenuItemGroup = {
 	title?: string
@@ -66,7 +67,15 @@ export function ContextMenu({
 			}
 
 			return (
-				<ContextMenuPrimitiveItem key={key} onClick={item.onClick}>
+				<ContextMenuPrimitiveItem
+					key={key}
+					onClick={item.onClick}
+					className={
+						item.isDestructive
+							? 'text-destructive focus:bg-destructive/10 focus:text-destructive'
+							: undefined
+					}
+				>
 					{item.leftIcon}
 					<span>{item.label}</span>
 					{item.shortCut && (
@@ -79,7 +88,7 @@ export function ContextMenu({
 
 	return (
 		<ContextMenuPrimitive>
-			<ContextMenuPrimitiveTrigger>{children}</ContextMenuPrimitiveTrigger>
+			<ContextMenuPrimitiveTrigger asChild>{children}</ContextMenuPrimitiveTrigger>
 			<ContextMenuPrimitiveContent className={cn('w-52', contentWrapperClassName)}>
 				{groups.map((group, groupIndex) => (
 					<Fragment key={groupIndex}>

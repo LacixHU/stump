@@ -1,1 +1,6 @@
-export { ContextMenu, type ContextMenuProps } from './ContextMenu'
+export {
+	ContextMenu,
+	type ContextMenuItem,
+	type ContextMenuItemGroup,
+	type ContextMenuProps,
+} from './ContextMenu'

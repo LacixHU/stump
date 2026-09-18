@@ -5,24 +5,24 @@ import { toast } from 'sonner'
 
 import paths from '@/paths'
 
+import { CreateFolderDialog, DeletePathConfirmation, RenameDialog } from './actions'
 import { ExplorerContext, ExplorerLayout, IExplorerContext } from './context'
 import FileExplorer from './FileExplorer'
 import FileExplorerFooter, { FOOTER_HEIGHT } from './FileExplorerFooter'
 import FileExplorerHeader from './FileExplorerHeader'
 import { getBook } from './FileThumbnail'
 
-type Props = Pick<IExplorerContext, 'libraryID' | 'rootPath' | 'uploadConfig'>
+type Props = Pick<IExplorerContext, 'libraryID' | 'rootPath' | 'uploadConfig' | 'canManageFiles'>
 
-// TODO: refactor to match other explore scenes, e.g. sticky header + fixed footer + window scrolling
-
-export default function FileExplorerProvider({ rootPath, ...ctx }: Props) {
+export default function FileExplorerProvider({ rootPath, canManageFiles, ...ctx }: Props) {
 	const navigate = useNavigate()
 	const { sdk } = useSDK()
 
 	const [layout, setLayout] = useState<ExplorerLayout>(() => getDefaultLayout())
+	const [createFolderOpen, setCreateFolderOpen] = useState(false)
+	const [renameTarget, setRenameTarget] = useState<UseDirectoryListingFile | null>(null)
+	const [deleteTarget, setDeleteTarget] = useState<UseDirectoryListingFile | null>(null)
 
-	// TODO: I need to store location.state somewhere so that when the user uses native navigation,
-	// their history, or at the very least where they left off, is persisted.
 	const {
 		entries,
 		setPath,
@@ -77,6 +77,7 @@ export default function FileExplorerProvider({ rootPath, ...ctx }: Props) {
 			value={{
 				canGoBack: canGoBack && path !== rootPath,
 				canGoForward,
+				canManageFiles,
 				currentPath: path,
 				files: entries,
 				goBack,
@@ -84,6 +85,9 @@ export default function FileExplorerProvider({ rootPath, ...ctx }: Props) {
 				layout,
 				navigateToPath: setPath,
 				onSelect: handleSelect,
+				openCreateFolder: () => setCreateFolderOpen(true),
+				openDelete: setDeleteTarget,
+				openRename: setRenameTarget,
 				refetch,
 				rootPath,
 				setLayout: changeLayout,
@@ -104,6 +108,16 @@ export default function FileExplorerProvider({ rootPath, ...ctx }: Props) {
 				</div>
 				<FileExplorerFooter />
 			</div>
+			{canManageFiles && (
+				<>
+					<CreateFolderDialog
+						isOpen={createFolderOpen}
+						onClose={() => setCreateFolderOpen(false)}
+					/>
+					<RenameDialog file={renameTarget} onClose={() => setRenameTarget(null)} />
+					<DeletePathConfirmation file={deleteTarget} onClose={() => setDeleteTarget(null)} />
+				</>
+			)}
 		</ExplorerContext.Provider>
 	)
 }

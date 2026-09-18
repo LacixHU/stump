@@ -9,6 +9,7 @@ mod custom_emoji;
 mod email_device;
 mod emailer;
 mod epub;
+mod filesystem;
 mod job;
 mod library;
 mod log;
@@ -39,6 +40,7 @@ use custom_emoji::CustomEmojiMutation;
 use email_device::EmailDeviceMutation;
 use emailer::EmailerMutation;
 use epub::EpubMutation;
+use filesystem::FilesystemMutation;
 use job::JobMutation;
 use library::LibraryMutation;
 use log::LogMutation;
@@ -78,6 +80,7 @@ struct ContentMutations(
 	EpubMutation,
 	TagMutation,
 	UploadMutation,
+	FilesystemMutation,
 );
 
 #[derive(async_graphql::MergedObject, Default)]

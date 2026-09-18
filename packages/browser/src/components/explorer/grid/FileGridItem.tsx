@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePrefetchBook } from '@/components/book'
 import { usePrefetchBooksAfterCursor } from '@/scenes/book/BooksAfterCursor'
 
+import { FileItemMenu } from '../actions'
 import { useFileExplorerContext } from '../context'
 import FileThumbnail, { getBook, MediaAtPath } from '../FileThumbnail'
 
@@ -45,19 +46,21 @@ export default function FileGridItem({ file }: Props) {
 	)
 
 	return (
-		<button
-			title={tooltipName}
-			className="group w-30 gap-2 p-1 flex cursor-default flex-col items-center rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-			onDoubleClick={() => onSelect(file)}
-			{...(book ? { onMouseEnter: prefetch } : {})}
-		>
-			<div className="p-2 flex w-full items-center justify-center rounded-lg transition-colors group-hover:bg-muted">
-				<FileThumbnail path={path} isDirectory={isDirectory} thumbSize={72} />
-			</div>
+		<FileItemMenu file={file}>
+			<button
+				title={tooltipName}
+				className="group w-30 gap-2 p-1 flex cursor-default flex-col items-center rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+				onDoubleClick={() => onSelect(file)}
+				{...(book ? { onMouseEnter: prefetch } : {})}
+			>
+				<div className="p-2 flex w-full items-center justify-center rounded-lg transition-colors group-hover:bg-muted">
+					<FileThumbnail path={path} isDirectory={isDirectory} thumbSize={72} />
+				</div>
 
-			<span className="px-2 py-0.5 text-sm line-clamp-2 max-w-full rounded-md text-center text-foreground/80 transition-colors group-hover:bg-accent group-hover:text-accent-foreground">
-				{name}
-			</span>
-		</button>
+				<span className="px-2 py-0.5 text-sm line-clamp-2 max-w-full rounded-md text-center text-foreground/80 transition-colors group-hover:bg-accent group-hover:text-accent-foreground">
+					{name}
+				</span>
+			</button>
+		</FileItemMenu>
 	)
 }

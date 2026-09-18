@@ -17,6 +17,7 @@ import { useWindowSize } from 'rooks'
 
 import { SortIcon } from '@/components/table'
 
+import { FileItemMenu } from '../actions'
 import { useFileExplorerContext } from '../context'
 import FileThumbnail from '../FileThumbnail'
 
@@ -110,8 +111,9 @@ export default function FileTable() {
 								const index = props['data-index']
 								const isEven = index % 2 === 0
 								const row = rows[index]
+								const file = row?.original
 
-								return (
+								const rowElement = (
 									<tr
 										{...props}
 										className={cn(
@@ -132,6 +134,12 @@ export default function FileTable() {
 										))}
 									</tr>
 								)
+
+								if (!file) {
+									return rowElement
+								}
+
+								return <FileItemMenu file={file}>{rowElement}</FileItemMenu>
 							},
 						}}
 						fixedHeaderContent={() =>

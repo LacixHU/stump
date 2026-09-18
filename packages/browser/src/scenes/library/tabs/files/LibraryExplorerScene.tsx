@@ -10,10 +10,16 @@ export default function LibraryExplorerScene() {
 	const { library } = useLibraryContext()
 	const { checkPermission } = useAppContext()
 	const { uploadConfig } = useUploadConfig({ enabled: checkPermission(UserPermission.UploadFile) })
+	const canManageFiles = checkPermission(UserPermission.ManageLibrary)
 
 	return (
 		<div className="flex min-h-[50vh] flex-1 flex-col">
-			<FileExplorer libraryID={library.id} rootPath={library.path} uploadConfig={uploadConfig} />
+			<FileExplorer
+				libraryID={library.id}
+				rootPath={library.path}
+				uploadConfig={uploadConfig}
+				canManageFiles={canManageFiles}
+			/>
 		</div>
 	)
 }

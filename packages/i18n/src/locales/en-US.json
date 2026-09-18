@@ -577,6 +577,46 @@
 		}
 	},
 	"fileExplorer": {
+		"actions": {
+			"createFolder": "New folder",
+			"rename": "Rename",
+			"delete": "Delete"
+		},
+		"createFolder": {
+			"title": "Create folder",
+			"description": "The folder will be created in the current directory",
+			"placeholder": "Folder name",
+			"toasts": {
+				"created": "Folder created"
+			}
+		},
+		"rename": {
+			"title": "Rename",
+			"description": "Enter a new name for this item",
+			"confirm": "Rename",
+			"toasts": {
+				"renamed": "Renamed successfully"
+			}
+		},
+		"delete": {
+			"title": {
+				"file": "Delete {{name}}",
+				"directory": "Delete {{name}}"
+			},
+			"description": {
+				"file": "This will permanently delete the file from disk. This action cannot be undone.",
+				"directory": "This will permanently delete the folder and all of its contents from disk. This action cannot be undone."
+			},
+			"toasts": {
+				"deleted": "Deleted successfully"
+			}
+		},
+		"dropzone": {
+			"active": "Drop files to copy them into this folder",
+			"uploading": "Copying files into this folder",
+			"rejected": "Some files were rejected. Please check the file size",
+			"success": "Files copied into this folder"
+		},
 		"uploadModal": {
 			"title": {
 				"books": "Upload books",

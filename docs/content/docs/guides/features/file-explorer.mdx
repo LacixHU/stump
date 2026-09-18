@@ -15,3 +15,19 @@ Certain entities throughout Stump have a file explorer scoped to them, allowing 
 </Callout>
 
 Generally, you can access a file explorer by clicking on the `Files` tab in an entity's page. This will render the file explorer for that entity, which effectively is just sets the root directory of the file explorer to the entity's path.
+
+## Managing files
+
+<Callout title="Permission required">
+	Creating folders, renaming, and deleting files requires the `MANAGE_LIBRARY` permission. Uploading
+	files additionally requires the `UPLOAD_FILE` permission and for uploads to be enabled on the
+	server.
+</Callout>
+
+Administrators can manage files on disk from the file explorer:
+
+- **Create folder** from the header
+- **Rename** or **delete** a file or folder from the right-click menu
+- **Drag and drop** book files onto the explorer to upload them into the current folder
+
+Deletes remove the item from disk and cannot be undone. Renames and deletes also update matching library records and enqueue a scan.

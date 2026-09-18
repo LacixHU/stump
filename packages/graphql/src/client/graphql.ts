@@ -496,6 +496,12 @@ export type CreateCustomEmojiInput = {
   name: Scalars['String']['input'];
 };
 
+export type CreateDirectoryInput = {
+  libraryId: Scalars['String']['input'];
+  name: Scalars['String']['input'];
+  placeAt: Scalars['String']['input'];
+};
+
 /** Input object for creating a metadata provider configuration */
 export type CreateMetadataProviderConfigInput = {
   /** The API token for authenticating with the provider */
@@ -625,6 +631,11 @@ export type DeleteJobHistory = {
   __typename?: 'DeleteJobHistory';
   /** The number of logs deleted that were related to a job */
   affectedRows: Scalars['Int']['output'];
+};
+
+export type DeletePathInput = {
+  libraryId: Scalars['String']['input'];
+  path: Scalars['String']['input'];
 };
 
 export enum Dimension {
@@ -1307,9 +1318,10 @@ export enum LibraryType {
   Manga = 'MANGA',
   Manhwa = 'MANHWA',
   Mixed = 'MIXED',
+  /** Retro computer disk/tape image libraries (C64, Spectrum, Amiga, etc.) */
+  Retro = 'RETRO',
   Webtoon = 'WEBTOON',
-  WebNovel = 'WEB_NOVEL',
-  Retro = 'RETRO'
+  WebNovel = 'WEB_NOVEL'
 }
 
 export enum LibraryViewMode {
@@ -1888,14 +1900,14 @@ export enum MetadataProvider {
   ComicVine = 'COMIC_VINE',
   /** Hardcover (https://hardcover.app) */
   Hardcover = 'HARDCOVER',
-  /** Lemon64 C64 game database */
-  Lemon64 = 'LEMON64',
-  /** World of Spectrum–style Spectrum metadata */
-  WorldOfSpectrum = 'WORLD_OF_SPECTRUM',
-  /** Lemon Amiga */
+  /** Lemon64 C64 game database (HTML/public; no API token) */
+  Lemon_64 = 'LEMON_64',
+  /** Lemon Amiga (or similar); may be stubbed if scrape is fragile */
   LemonAmiga = 'LEMON_AMIGA',
-  /** Wikipedia Category:Video game covers */
-  Wikipedia = 'WIKIPEDIA'
+  /** Wikipedia Category:Video game covers (MediaWiki API; no token) */
+  Wikipedia = 'WIKIPEDIA',
+  /** World of Spectrum–style Spectrum metadata (HTML/public; no API token) */
+  WorldOfSpectrum = 'WORLD_OF_SPECTRUM'
 }
 
 export type MetadataProviderConfigModel = {
@@ -2001,6 +2013,8 @@ export type Mutation = {
   createBookClubMember: BookClubMember;
   /** Create a bookmark for a user */
   createBookmark: Bookmark;
+  /** Create an empty directory under a library path. */
+  createDirectory: Scalars['Boolean']['output'];
   /** Manually create a discussion for a book */
   createDiscussion: BookClubDiscussion;
   createEmailDevice: RegisteredEmailDevice;
@@ -2064,6 +2078,8 @@ export type Mutation = {
   deleteMessage: BookClubDiscussionMessage;
   deleteMetadataProvider: MetadataProviderConfigModel;
   deleteNotifier: Notifier;
+  /** Delete a file or directory on disk and soft-delete matching media/series records. */
+  deletePath: Scalars['Boolean']['output'];
   /**
    * Deletes a reading list by ID.
    *
@@ -2131,6 +2147,8 @@ export type Mutation = {
   removeBookClubMember: BookClubMember;
   /** Remove your own suggestion (only before it's resolved) */
   removeSuggestion: BookClubBookSuggestion;
+  /** Rename a file or directory on disk and update matching media/series paths. */
+  renamePath: Scalars['Boolean']['output'];
   /**
    * Rename a tag. Returns the updated tag, or an error if the tag was not found or the new
    * name already exists.
@@ -2238,6 +2256,8 @@ export type Mutation = {
    * will be generated based on the library's thumbnail configuration.
    */
   updateSeriesThumbnail: Series;
+  /** Show only the series thumbnail in grids (no stacked extra book covers). */
+  updateSeriesUseSingleThumbnail: Series;
   updateSmartList: SmartList;
   updateSmartListView: SmartListView;
   /** Update the status of a suggestion (Admin+) */
@@ -2249,6 +2269,8 @@ export type Mutation = {
   uploadBooks: Scalars['Boolean']['output'];
   /** Upload a new custom emoji */
   uploadCustomEmoji: CustomEmoji;
+  /** Copy uploaded files into a directory under a library path. */
+  uploadFiles: Scalars['Boolean']['output'];
   uploadLibraryThumbnail: Library;
   uploadMediaThumbnail: Media;
   /**
@@ -2398,6 +2420,11 @@ export type MutationCreateBookClubMemberArgs = {
 
 export type MutationCreateBookmarkArgs = {
   input: BookmarkInput;
+};
+
+
+export type MutationCreateDirectoryArgs = {
+  input: CreateDirectoryInput;
 };
 
 
@@ -2558,6 +2585,11 @@ export type MutationDeleteNotifierArgs = {
 };
 
 
+export type MutationDeletePathArgs = {
+  input: DeletePathInput;
+};
+
+
 export type MutationDeleteReadingListArgs = {
   id: Scalars['String']['input'];
 };
@@ -2701,6 +2733,11 @@ export type MutationRemoveBookClubMemberArgs = {
 
 export type MutationRemoveSuggestionArgs = {
   suggestionId: Scalars['ID']['input'];
+};
+
+
+export type MutationRenamePathArgs = {
+  input: RenamePathInput;
 };
 
 
@@ -2943,6 +2980,12 @@ export type MutationUpdateSeriesThumbnailArgs = {
 };
 
 
+export type MutationUpdateSeriesUseSingleThumbnailArgs = {
+  enabled: Scalars['Boolean']['input'];
+  id: Scalars['ID']['input'];
+};
+
+
 export type MutationUpdateSmartListArgs = {
   id: Scalars['ID']['input'];
   input: SaveSmartListInput;
@@ -2992,6 +3035,11 @@ export type MutationUploadBooksArgs = {
 export type MutationUploadCustomEmojiArgs = {
   input: CreateCustomEmojiInput;
   upload: Scalars['Upload']['input'];
+};
+
+
+export type MutationUploadFilesArgs = {
+  input: UploadFilesInput;
 };
 
 
@@ -3883,6 +3931,12 @@ export type RegisteredEmailDevice = {
   sendHistory: Array<EmailerSendRecord>;
 };
 
+export type RenamePathInput = {
+  libraryId: Scalars['String']['input'];
+  newName: Scalars['String']['input'];
+  path: Scalars['String']['input'];
+};
+
 /**
  * the current reading position for a book, derived from the latest session
  * with the highest `readthrough_number`
@@ -4060,6 +4114,8 @@ export type Series = {
   unreadCount: Scalars['Int']['output'];
   upNext: Array<Media>;
   updatedAt?: Maybe<Scalars['DateTime']['output']>;
+  /** When true, library/series grids show only this series thumbnail (no stacked book covers) */
+  useSingleThumbnail: Scalars['Boolean']['output'];
 };
 
 
@@ -4234,7 +4290,8 @@ export enum SeriesModelOrdering {
   Status = 'STATUS',
   ThumbnailMeta = 'THUMBNAIL_META',
   ThumbnailPath = 'THUMBNAIL_PATH',
-  UpdatedAt = 'UPDATED_AT'
+  UpdatedAt = 'UPDATED_AT',
+  UseSingleThumbnail = 'USE_SINGLE_THUMBNAIL'
 }
 
 export type SeriesOrderBy =
@@ -4487,6 +4544,11 @@ export type StumpConfig = {
   enableUpload: Scalars['Boolean']['output'];
   /** The interval at which automatic deleted session cleanup is performed. */
   expiredSessionCleanupInterval: Scalars['Int']['output'];
+  /**
+   * Directory containing user-supplied emulator firmware/BIOS (e.g. Amiga Kickstart).
+   * Never bundle ROMs; default is `{config_dir}/firmware` when unset.
+   */
+  firmwareDir?: Maybe<Scalars['String']['output']>;
   /** The IP address on which to listen on (default: "0.0.0.0"). */
   ip: Scalars['String']['output'];
   /** The directory where the applicaiton logs will be stored */
@@ -4505,6 +4567,17 @@ export type StumpConfig = {
   parallelismMultiplier: Scalars['Int']['output'];
   /** Password hash cost */
   passwordHashCost: Scalars['Int']['output'];
+  /**
+   * Number of bytes to remove from the PDF cache at a time when enforcing
+   * `pdf_cache_max_size_bytes`. Older files are deleted first.
+   */
+  pdfCacheEvictionChunkBytes: Scalars['Int']['output'];
+  /**
+   * Maximum total size of the PDF page cache directory in bytes.
+   * When the cache exceeds this limit, the oldest cached files are gradually
+   * deleted in chunks until the cache is under the limit.
+   */
+  pdfCacheMaxSizeBytes: Scalars['Int']['output'];
   /** Whether to enable disk caching for rendered PDF pages. */
   pdfCachePages: Scalars['Boolean']['output'];
   /** Whether to enable high-quality rendering with smoothing (slower but better quality). */
@@ -4727,6 +4800,12 @@ export type UploadConfig = {
   __typename?: 'UploadConfig';
   enabled: Scalars['Boolean']['output'];
   maxFileUploadSize: Scalars['Int']['output'];
+};
+
+export type UploadFilesInput = {
+  libraryId: Scalars['String']['input'];
+  placeAt: Scalars['String']['input'];
+  uploads: Array<Scalars['Upload']['input']>;
 };
 
 export type UploadSeriesInput = {
@@ -5674,6 +5753,34 @@ export type MediaAtPathQueryVariables = Exact<{
 
 export type MediaAtPathQuery = { __typename?: 'Query', mediaByPath?: { __typename?: 'Media', id: string, resolvedName: string, thumbnail: { __typename?: 'ImageRef', url: string } } | null };
 
+export type CreateExplorerDirectoryMutationVariables = Exact<{
+  input: CreateDirectoryInput;
+}>;
+
+
+export type CreateExplorerDirectoryMutation = { __typename?: 'Mutation', createDirectory: boolean };
+
+export type RenameExplorerPathMutationVariables = Exact<{
+  input: RenamePathInput;
+}>;
+
+
+export type RenameExplorerPathMutation = { __typename?: 'Mutation', renamePath: boolean };
+
+export type DeleteExplorerPathMutationVariables = Exact<{
+  input: DeletePathInput;
+}>;
+
+
+export type DeleteExplorerPathMutation = { __typename?: 'Mutation', deletePath: boolean };
+
+export type UploadExplorerFilesMutationVariables = Exact<{
+  input: UploadFilesInput;
+}>;
+
+
+export type UploadExplorerFilesMutation = { __typename?: 'Mutation', uploadFiles: boolean };
+
 export type UploadLibraryBooksMutationVariables = Exact<{
   input: UploadBooksInput;
 }>;
@@ -6208,13 +6315,6 @@ export type RecentlyAddedMediaQuery = { __typename?: 'Query', recentlyAddedMedia
       & { ' $fragmentRefs'?: { 'RecentlyAddedBookFragment': RecentlyAddedBookFragment } }
     )>, pageInfo: { __typename: 'CursorPaginationInfo', currentCursor?: string | null, nextCursor?: string | null, limit: number } | { __typename: 'OffsetPaginationInfo' } } };
 
-export type RecentlyAddedSeriesQueryVariables = Exact<{
-  pagination: Pagination;
-}>;
-
-
-export type RecentlyAddedSeriesQuery = { __typename?: 'Query', recentlyAddedSeries: { __typename?: 'PaginatedSeriesResponse', nodes: Array<{ __typename?: 'Series', id: string, resolvedName: string, mediaCount: number, percentageCompleted: number, status: FileStatus, createdAt: any, media: Array<{ __typename?: 'Media', id: string, resolvedName: string, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } }>, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } }>, pageInfo: { __typename: 'CursorPaginationInfo', currentCursor?: string | null, nextCursor?: string | null, limit: number } | { __typename: 'OffsetPaginationInfo' } } };
-
 export type LibraryLayoutQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
@@ -6243,15 +6343,6 @@ export type LibraryBooksSceneQuery = { __typename?: 'Query', media: { __typename
       { __typename?: 'Media', id: string }
       & { ' $fragmentRefs'?: { 'BookCardFragment': BookCardFragment;'BookMetadataFragment': BookMetadataFragment } }
     )>, pageInfo: { __typename: 'CursorPaginationInfo' } | { __typename: 'OffsetPaginationInfo', currentPage: number, totalPages: number, pageSize: number, pageOffset: number, zeroBased: boolean } } };
-
-export type LibrarySeriesQueryVariables = Exact<{
-  filter: SeriesFilterInput;
-  orderBy: Array<SeriesOrderBy> | SeriesOrderBy;
-  pagination: Pagination;
-}>;
-
-
-export type LibrarySeriesQuery = { __typename?: 'Query', series: { __typename?: 'PaginatedSeriesResponse', nodes: Array<{ __typename?: 'Series', id: string, resolvedName: string, mediaCount: number, childCount: number, descendantMediaCount: number, percentageCompleted: number, status: FileStatus, media: Array<{ __typename?: 'Media', id: string, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } }>, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } }>, pageInfo: { __typename: 'CursorPaginationInfo' } | { __typename: 'OffsetPaginationInfo', totalPages: number, currentPage: number, pageSize: number, pageOffset: number, zeroBased: boolean } } };
 
 export type LibrarySeriesGridQueryVariables = Exact<{
   id: Scalars['String']['input'];
@@ -10363,6 +10454,26 @@ export const MediaAtPathDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<MediaAtPathQuery, MediaAtPathQueryVariables>;
+export const CreateExplorerDirectoryDocument = new TypedDocumentString(`
+    mutation CreateExplorerDirectory($input: CreateDirectoryInput!) {
+  createDirectory(input: $input)
+}
+    `) as unknown as TypedDocumentString<CreateExplorerDirectoryMutation, CreateExplorerDirectoryMutationVariables>;
+export const RenameExplorerPathDocument = new TypedDocumentString(`
+    mutation RenameExplorerPath($input: RenamePathInput!) {
+  renamePath(input: $input)
+}
+    `) as unknown as TypedDocumentString<RenameExplorerPathMutation, RenameExplorerPathMutationVariables>;
+export const DeleteExplorerPathDocument = new TypedDocumentString(`
+    mutation DeleteExplorerPath($input: DeletePathInput!) {
+  deletePath(input: $input)
+}
+    `) as unknown as TypedDocumentString<DeleteExplorerPathMutation, DeleteExplorerPathMutationVariables>;
+export const UploadExplorerFilesDocument = new TypedDocumentString(`
+    mutation UploadExplorerFiles($input: UploadFilesInput!) {
+  uploadFiles(input: $input)
+}
+    `) as unknown as TypedDocumentString<UploadExplorerFilesMutation, UploadExplorerFilesMutationVariables>;
 export const UploadLibraryBooksDocument = new TypedDocumentString(`
     mutation UploadLibraryBooks($input: UploadBooksInput!) {
   uploadBooks(input: $input)
@@ -11960,54 +12071,6 @@ export const RecentlyAddedMediaDocument = new TypedDocumentString(`
     }
   }
 }`) as unknown as TypedDocumentString<RecentlyAddedMediaQuery, RecentlyAddedMediaQueryVariables>;
-export const RecentlyAddedSeriesDocument = new TypedDocumentString(`
-    query RecentlyAddedSeries($pagination: Pagination!) {
-  recentlyAddedSeries(pagination: $pagination) {
-    nodes {
-      id
-      resolvedName
-      mediaCount
-      percentageCompleted
-      status
-      createdAt
-      media(take: 2, skip: 1, includeDescendants: true) {
-        id
-        resolvedName
-        thumbnail {
-          url
-          metadata {
-            averageColor
-            colors {
-              color
-              percentage
-            }
-            thumbhash
-          }
-        }
-      }
-      thumbnail {
-        url
-        metadata {
-          averageColor
-          colors {
-            color
-            percentage
-          }
-          thumbhash
-        }
-      }
-    }
-    pageInfo {
-      __typename
-      ... on CursorPaginationInfo {
-        currentCursor
-        nextCursor
-        limit
-      }
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<RecentlyAddedSeriesQuery, RecentlyAddedSeriesQueryVariables>;
 export const LibraryLayoutDocument = new TypedDocumentString(`
     query LibraryLayout($id: ID!) {
   libraryById(id: $id) {
@@ -12171,56 +12234,6 @@ fragment BookMetadata on Media {
     number
   }
 }`) as unknown as TypedDocumentString<LibraryBooksSceneQuery, LibraryBooksSceneQueryVariables>;
-export const LibrarySeriesDocument = new TypedDocumentString(`
-    query LibrarySeries($filter: SeriesFilterInput!, $orderBy: [SeriesOrderBy!]!, $pagination: Pagination!) {
-  series(filter: $filter, orderBy: $orderBy, pagination: $pagination) {
-    nodes {
-      id
-      resolvedName
-      mediaCount
-      childCount
-      descendantMediaCount
-      percentageCompleted
-      status
-      media(take: 2, skip: 1, includeDescendants: true) {
-        id
-        thumbnail {
-          url
-          metadata {
-            averageColor
-            colors {
-              color
-              percentage
-            }
-            thumbhash
-          }
-        }
-      }
-      thumbnail {
-        url
-        metadata {
-          averageColor
-          colors {
-            color
-            percentage
-          }
-          thumbhash
-        }
-      }
-    }
-    pageInfo {
-      __typename
-      ... on OffsetPaginationInfo {
-        totalPages
-        currentPage
-        pageSize
-        pageOffset
-        zeroBased
-      }
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<LibrarySeriesQuery, LibrarySeriesQueryVariables>;
 export const LibrarySeriesGridDocument = new TypedDocumentString(`
     query LibrarySeriesGrid($id: String!, $pagination: Pagination) {
   series(filter: {libraryId: {eq: $id}}, pagination: $pagination) {

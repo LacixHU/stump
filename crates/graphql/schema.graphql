@@ -440,6 +440,12 @@ input CreateCustomEmojiInput {
 	isAnimated: Boolean!
 }
 
+input CreateDirectoryInput {
+	libraryId: String!
+	placeAt: String!
+	name: String!
+}
+
 "Input object for creating a metadata provider configuration"
 input CreateMetadataProviderConfigInput {
 	"The provider type"
@@ -568,6 +574,11 @@ type DeleteJobAssociatedLogs {
 type DeleteJobHistory {
 	"The number of logs deleted that were related to a job"
 	affectedRows: Int!
+}
+
+input DeletePathInput {
+	libraryId: String!
+	path: String!
 }
 
 enum Dimension {
@@ -1210,6 +1221,8 @@ enum LibraryType {
 	MIXED
 	WEB_NOVEL
 	WEBTOON
+	"Retro computer disk/tape image libraries (C64, Spectrum, Amiga, etc.)"
+	RETRO
 }
 
 enum LibraryViewMode {
@@ -1774,6 +1787,14 @@ enum MetadataProvider {
 	HARDCOVER
 	"ComicVine (https://comicvine.gamespot.com/api/)"
 	COMIC_VINE
+	"Lemon64 C64 game database (HTML/public; no API token)"
+	LEMON_64
+	"World of Spectrum–style Spectrum metadata (HTML/public; no API token)"
+	WORLD_OF_SPECTRUM
+	"Lemon Amiga (or similar); may be stubbed if scrape is fragile"
+	LEMON_AMIGA
+	"Wikipedia Category:Video game covers (MediaWiki API; no token)"
+	WIKIPEDIA
 }
 
 type MetadataProviderConfigModel {
@@ -1978,6 +1999,8 @@ type Mutation {
 	visitLibrary(id: ID!): Library!
 	analyzeSeries(id: ID!, forceReanalysis: Boolean! = false): Boolean!
 	favoriteSeries(id: ID!, isFavorite: Boolean!): Series!
+	"Show only the series thumbnail in grids (no stacked extra book covers)."
+	updateSeriesUseSingleThumbnail(id: ID!, enabled: Boolean!): Series!
 	"""
 	Update the thumbnail for a series. This will replace the existing thumbnail with the the one
 	associated with the provided input (book). If the book does not have a thumbnail, one
@@ -2043,6 +2066,14 @@ type Mutation {
 	implement multipart uploads for
 	"""
 	uploadMediaThumbnailBase64(id: ID!, image: String!): Media!
+	"Create an empty directory under a library path."
+	createDirectory(input: CreateDirectoryInput!): Boolean!
+	"Copy uploaded files into a directory under a library path."
+	uploadFiles(input: UploadFilesInput!): Boolean!
+	"Rename a file or directory on disk and update matching media/series paths."
+	renamePath(input: RenamePathInput!): Boolean!
+	"Delete a file or directory on disk and soft-delete matching media/series records."
+	deletePath(input: DeletePathInput!): Boolean!
 	deleteLoginActivity: Int!
 	"""
 	Upload an avatar image for either the authenticated viewer or for any user if
@@ -2721,6 +2752,12 @@ type RegisteredEmailDevice {
 	sendHistory: [EmailerSendRecord!]!
 }
 
+input RenamePathInput {
+	libraryId: String!
+	path: String!
+	newName: String!
+}
+
 """
 the current reading position for a book, derived from the latest session
 with the highest `readthrough_number`
@@ -2858,6 +2895,8 @@ type Series {
 	status: FileStatus!
 	thumbnailMeta: ImageMetadata
 	thumbnailPath: String
+	"When true, library/series grids show only this series thumbnail (no stacked book covers)"
+	useSingleThumbnail: Boolean!
 	libraryId: String
 	parentSeriesId: String
 	metadata: SeriesMetadata
@@ -3041,6 +3080,7 @@ enum SeriesModelOrdering {
 	STATUS
 	THUMBNAIL_META
 	THUMBNAIL_PATH
+	USE_SINGLE_THUMBNAIL
 	LIBRARY_ID
 	PARENT_SERIES_ID
 }
@@ -3316,6 +3356,11 @@ type StumpConfig {
 	piperVoicesDir: String
 	"Default Piper voice id (filename stem without `.onnx`)."
 	piperDefaultVoice: String
+	"""
+	Directory containing user-supplied emulator firmware/BIOS (e.g. Amiga Kickstart).
+	Never bundle ROMs; default is `{config_dir}/firmware` when unset.
+	"""
+	firmwareDir: String
 	"Maximum characters accepted per server TTS request."
 	serverTtsMaxChars: Int!
 	"The DPI (dots per inch) to use when rendering PDF pages as images."
@@ -3330,6 +3375,17 @@ type StumpConfig {
 	pdfPrerenderRange: Int!
 	"Whether to enable high-quality rendering with smoothing (slower but better quality)."
 	pdfHighQuality: Boolean!
+	"""
+	Maximum total size of the PDF page cache directory in bytes.
+	When the cache exceeds this limit, the oldest cached files are gradually
+	deleted in chunks until the cache is under the limit.
+	"""
+	pdfCacheMaxSizeBytes: Int!
+	"""
+	Number of bytes to remove from the PDF cache at a time when enforcing
+	`pdf_cache_max_size_bytes`. Older files are deleted first.
+	"""
+	pdfCacheEvictionChunkBytes: Int!
 	"Whether to trust proxy headers for determining client IP and scheme (e.g., X-Forwarded-For)"
 	trustProxyHeaders: Boolean!
 }
@@ -3510,6 +3566,12 @@ input UploadBooksInput {
 type UploadConfig {
 	enabled: Boolean!
 	maxFileUploadSize: Int!
+}
+
+input UploadFilesInput {
+	libraryId: String!
+	placeAt: String!
+	uploads: [Upload!]!
 }
 
 input UploadSeriesInput {

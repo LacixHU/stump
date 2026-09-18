@@ -15,10 +15,16 @@ export default function SeriesExplorerScene() {
 	} = useSeriesContext()
 	const { checkPermission } = useAppContext()
 	const { uploadConfig } = useUploadConfig({ enabled: checkPermission(UserPermission.UploadFile) })
+	const canManageFiles = checkPermission(UserPermission.ManageLibrary)
 
 	return (
 		<div className="flex min-h-[50vh] flex-1 flex-col">
-			<FileExplorer libraryID={libraryId} rootPath={path} uploadConfig={uploadConfig} />
+			<FileExplorer
+				libraryID={libraryId}
+				rootPath={path}
+				uploadConfig={uploadConfig}
+				canManageFiles={canManageFiles}
+			/>
 		</div>
 	)
 }
