@@ -78,6 +78,23 @@ export class MediaAPI extends APIBase {
 	}
 
 	/**
+	 * Whether the current user already has a save state for this book.
+	 *
+	 * Uses HEAD so the player can ask before overwriting without downloading the snapshot.
+	 */
+	async hasSaveState(id: string): Promise<boolean> {
+		try {
+			await this.axios.head(mediaURL(`/${id}/save-state`))
+			return true
+		} catch (error) {
+			if (isAxiosError(error) && error.response?.status === 404) {
+				return false
+			}
+			throw error
+		}
+	}
+
+	/**
 	 * Store the current user's emulator save state for a book, replacing any previous one
 	 */
 	async putSaveState(id: string, data: ArrayBuffer): Promise<void> {

@@ -50,6 +50,34 @@ export function zipEntryNames(bytes: Uint8Array): string[] {
 	return names
 }
 
+export function findDosboxConf(names: string[]): string | null {
+	const confs = names
+		.map((name) => name.replace(/\\/g, '/').replace(/^\.\//, ''))
+		.filter((name) => basenameOf(name).toLowerCase() === 'dosbox.conf')
+	if (!confs.length) return null
+	const jsdos = confs.find((name) => {
+		const lower = name.toLowerCase()
+		return lower === '.jsdos/dosbox.conf' || lower === 'jsdos/dosbox.conf'
+	})
+	if (jsdos) return jsdos
+	const root = confs.find((name) => !name.includes('/'))
+	if (root) return root
+	return [...confs].sort((a, b) => a.split('/').length - b.split('/').length)[0] ?? null
+}
+
+/** Written before a bundle `dosbox.conf` so `[autoexec]` runs after `C:` is mounted. */
+export const STUMP_DOS_MOUNT_CONF = 'stump-mount.conf'
+
+export const STUMP_DOS_MOUNT_CONF_BODY = '[autoexec]\nmount c .\nc:\n'
+
+/**
+ * js-dos always appends `-c mount c . -c c:` *after* conf `[autoexec]`.
+ * A first `-conf` whose autoexec mounts `C:` runs before the bundle conf.
+ */
+export function dosboxConfMainArgs(confPath: string): string[] {
+	return ['-conf', STUMP_DOS_MOUNT_CONF, '-conf', confPath]
+}
+
 export function pickRunnable(names: string[], archiveStem?: string): string | null {
 	const files = names
 		.map((name) => name.split('/').pop() || name)

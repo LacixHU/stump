@@ -198,7 +198,7 @@ Path segments `dos`, `msdos`, or `pc` tag a folder as DOS.
 - A physical keyboard types into DOSBox. The **virtual keyboard** is a PC 101 layout (no keypad); `SHIFT`, `CTRL` and `ALT` are sticky one-shots.
 - The mouse on the canvas is the DOS mouse. On a phone, drag a finger to move the pointer (it is **not** under the finger); tap is left click; a still long-press is right click.
 - On-screen stick and fire send arrow keys and Ctrl. Many DOS games accept that; mouse-only titles use the trackpad.
-- Save states are not available for this core.
+- Save states snapshot the running DOSBox memory (and any files that changed on `C:` / `A:`). Load rewinds you to that point.
 
 ## Covers / thumbnails
 
@@ -230,19 +230,20 @@ Save states are stored **on the server**, one per user per game:
 - They survive clearing site data, since nothing is kept in the browser.
 
 Use the **Save state** and **Load state** buttons in the player header. There is one slot
-per game: saving again replaces the previous snapshot. For a multi-disk game, the slot
-belongs to the book you opened, so swapping disks mid-game does not hide the save behind
-a different disk.
+per game: saving again asks before replacing the previous snapshot. For a multi-disk game,
+the slot belongs to the book you opened, so swapping disks mid-game does not hide the save
+behind a different disk.
 
 Snapshots are written to `save_states/{media_id}/{user_id}.savestate` under the Stump
 config directory, with a small metadata row in the database. Deleting a library removes
-the snapshots belonging to its books. The server accepts snapshots up to **16 MiB**,
-which is comfortably above a C64 snapshot (a few hundred KiB) and an Amiga one
-(a few MiB).
+the snapshots belonging to its books. The server accepts snapshots up to **64 MiB**,
+which covers a C64 snapshot (a few hundred KiB), an Amiga one (a few MiB), and a gzipped
+DOSBox memory dump.
 
 Save states depend on the emulator core being able to write a snapshot. The C64 and Amiga
-cores can; JSSpeccy and js-dos cannot write them, so the save and load buttons are hidden
-for Spectrum and DOS games rather than offered and then refused.
+cores write a native machine image; DOS snapshots the js-dos WASM heap. JSSpeccy cannot
+write a snapshot, so the save and load buttons stay hidden for Spectrum games rather than
+offered and then refused.
 
 ## Legal
 

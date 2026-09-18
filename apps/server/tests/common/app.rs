@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use axum::http::Method;
 use axum_test::{TestResponse, TestServer};
 use sea_orm::DatabaseConnection;
 use serde_json::{json, Value};
@@ -138,6 +139,14 @@ impl TestApp {
 			.await;
 
 		response
+	}
+
+	/// issue a HEAD request to the specified path with auth headers, returning the response directly
+	pub async fn head(&self, path: &str) -> TestResponse {
+		self.server
+			.method(Method::HEAD, path)
+			.add_header("Authorization", self.auth_header().await)
+			.await
 	}
 
 	/// issue a DELETE request to the specified path with auth headers, returning the response directly

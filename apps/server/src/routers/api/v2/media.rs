@@ -41,6 +41,7 @@ pub(crate) fn mount(app_state: AppState) -> Router<AppState> {
 		.route(
 			"/media/{id}/save-state",
 			get(get_media_save_state)
+				.head(head_media_save_state)
 				.put(put_media_save_state)
 				.delete(delete_media_save_state)
 				// Axum's implicit body limit is 2 MiB, which is under the size of an
@@ -105,6 +106,15 @@ pub(crate) async fn get_media_save_state(
 	Extension(req): Extension<AuthContext>,
 ) -> APIResult<impl IntoResponse> {
 	retro_save_state::get_save_state(req, ctx.conn.as_ref(), &ctx.config, id).await
+}
+
+/// Check whether the current user has a save state, without transferring the snapshot.
+pub(crate) async fn head_media_save_state(
+	Path(id): Path<String>,
+	State(ctx): State<AppState>,
+	Extension(req): Extension<AuthContext>,
+) -> APIResult<impl IntoResponse> {
+	retro_save_state::head_save_state(req, ctx.conn.as_ref(), &ctx.config, id).await
 }
 
 /// Store the current user's save state for a retro book (library access).

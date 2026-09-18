@@ -41,6 +41,7 @@ pub fn get_cors_layer(config: StumpConfig) -> CorsLayer {
 	cors_layer = cors_layer
 		.allow_methods([
 			Method::GET,
+			Method::HEAD,
 			Method::PUT,
 			Method::POST,
 			Method::PATCH,

@@ -842,12 +842,13 @@ mod tests {
 // ---------------------------------------------------------------------------
 
 /// The largest snapshot the server will accept. A C64 snapshot is a few hundred KiB;
-/// an Amiga snapshot with 2 MB of chip RAM is several MiB. This is deliberately well
-/// above both so the cap only ever catches something pathological.
+/// an Amiga snapshot with 2 MB of chip RAM is several MiB; a gzipped DOSBox WASM heap
+/// can be tens of MiB. This is deliberately well above the first two so the cap only
+/// ever catches something pathological.
 ///
 /// Note that axum applies an implicit 2 MiB body limit unless told otherwise, so any
 /// route accepting a save state must also layer `DefaultBodyLimit::max` with this value.
-pub const RETRO_SAVE_STATE_MAX_BYTES: usize = 16 * 1024 * 1024;
+pub const RETRO_SAVE_STATE_MAX_BYTES: usize = 64 * 1024 * 1024;
 
 const SAVE_STATE_EXTENSION: &str = "savestate";
 

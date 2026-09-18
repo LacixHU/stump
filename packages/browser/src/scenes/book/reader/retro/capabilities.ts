@@ -15,6 +15,7 @@ export type RetroPlayerCapabilities = {
 	loadSpeed: boolean
 	reset: boolean
 	saveState: boolean
+	mouseSensitivity: boolean
 	machines: readonly RetroOption[]
 	joystickSchemes: readonly RetroOption[]
 }
@@ -25,6 +26,7 @@ export const NO_CAPABILITIES: RetroPlayerCapabilities = {
 	joystickSchemes: [],
 	loadSpeed: false,
 	machines: [],
+	mouseSensitivity: false,
 	reset: false,
 	saveState: false,
 }
@@ -36,6 +38,7 @@ export function describeCapabilities(handle: RetroEmulatorHandle): RetroPlayerCa
 		joystickSchemes: handle.setJoystickScheme ? (handle.joystickSchemes ?? []) : [],
 		loadSpeed: !!handle.setDiskSpeed,
 		machines: handle.setMachine ? (handle.machines ?? []) : [],
+		mouseSensitivity: !!handle.setMouseSensitivity,
 		reset: !!handle.reset,
 		saveState: !!handle.saveState && !!handle.loadState,
 	}
@@ -52,6 +55,7 @@ export function hasSettings(
 		capabilities.loadSpeed ||
 		capabilities.machines.length > 0 ||
 		capabilities.joystickSchemes.length > 0 ||
+		capabilities.mouseSensitivity ||
 		canEditOverlay
 	)
 }

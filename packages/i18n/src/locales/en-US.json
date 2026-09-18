@@ -2862,7 +2862,11 @@
 			"virtualKeyboard": "Virtual keyboard",
 			"diskSpeed": "Disk speed",
 			"diskSpeedInstant": "Instant",
-			"diskSpeedAuthentic": "Authentic"
+			"diskSpeedAuthentic": "Authentic",
+			"mouseSensitivity": "Mouse sensitivity",
+			"overwriteSaveTitle": "Overwrite save state?",
+			"overwriteSaveDescription": "A save state already exists for this game. Saving will replace it.",
+			"overwriteSaveConfirm": "Overwrite"
 		},
 		"addBookmark": "Add bookmark",
 		"removeBookmark": "Remove bookmark",

@@ -1,13 +1,31 @@
 import type { Dispatchable } from '../keys'
-import { dispatchableKeyCode } from './dos-keys'
+import {
+	clampMouseSensitivity,
+	createMouseDeltaRemainder,
+	DEFAULT_MOUSE_SENSITIVITY,
+	takeScaledMouseDelta,
+} from '../mouse-sensitivity'
 import {
 	basenameOf,
+	dosboxConfMainArgs,
 	extensionOf,
+	findDosboxConf,
 	isZipBytes,
 	pickRunnable,
+	STUMP_DOS_MOUNT_CONF,
+	STUMP_DOS_MOUNT_CONF_BODY,
 	toDos83,
 	zipEntryNames,
 } from './dos-images'
+import { dispatchableKeyCode, swallowDosKeyRepeat } from './dos-keys'
+import {
+	type DosFsStamp,
+	type DosSaveFile,
+	packDosSaveV2,
+	selectChangedPaths,
+	shouldSkipDosPath,
+	unpackDosSave,
+} from './dos-saves'
 import {
 	createTouchMouseState,
 	LONG_PRESS_MS,
@@ -24,9 +42,40 @@ const ASSET_BASE = '/retro/dos'
 const SCRIPT_URL = `${ASSET_BASE}/js-dos.js`
 const WDOSBOX_URL = `${ASSET_BASE}/wdosbox.js`
 
+type EmscriptenFS = {
+	readdir: (path: string) => string[]
+	stat: (path: string) => { mode: number; size: number; mtime: Date | number }
+	isDir: (mode: number) => boolean
+	isFile: (mode: number) => boolean
+	readFile: (path: string, opts?: { encoding: string }) => Uint8Array
+	writeFile: (path: string, data: Uint8Array, opts?: { encoding: string }) => void
+	mkdir: (path: string) => void
+}
+
+type DosSdlAudio = {
+	caller?: () => void
+	nextPlayTime?: number
+	numAudioTimersPending?: number
+	paused?: boolean
+	timer?: number
+}
+
+type DosEmscriptenModule = {
+	Asyncify?: { currData: unknown; state: number }
+	FS?: EmscriptenFS
+	HEAPU8?: Uint8Array
+	SDL?: {
+		audio?: DosSdlAudio
+		audioContext?: AudioContext
+	}
+	wasmMemory?: WebAssembly.Memory
+}
+
 type DosFS = {
 	createFile: (file: string, body: ArrayBuffer | Uint8Array | string) => void
+	em?: DosEmscriptenModule
 	extract: (url: string, mountPoint?: string) => Promise<void>
+	fs?: EmscriptenFS
 }
 
 type DosCommandInterface = {
@@ -108,8 +157,14 @@ async function mountImage(fs: DosFS, image: ArrayBuffer, fileName?: string): Pro
 		} finally {
 			URL.revokeObjectURL(url)
 		}
+		const names = zipEntryNames(bytes)
+		const conf = findDosboxConf(names)
+		if (conf) {
+			fs.createFile(STUMP_DOS_MOUNT_CONF, STUMP_DOS_MOUNT_CONF_BODY)
+			return dosboxConfMainArgs(conf)
+		}
 		const stem = name.replace(/\.[^.]+$/, '')
-		const runnable = pickRunnable(zipEntryNames(bytes), stem)
+		const runnable = pickRunnable(names, stem)
 		return runnable ? ['-c', runnable] : []
 	}
 
@@ -117,9 +172,191 @@ async function mountImage(fs: DosFS, image: ArrayBuffer, fileName?: string): Pro
 	return ['-c', dosName]
 }
 
+function emscriptenFs(fs: DosFS): EmscriptenFS | null {
+	const inner = fs.fs ?? fs.em?.FS
+	if (!inner?.readdir || !inner.readFile || !inner.writeFile || !inner.stat) return null
+	return inner
+}
+
+function stampOf(stat: { size: number; mtime: Date | number }): DosFsStamp {
+	return {
+		mtimeMs: typeof stat.mtime === 'number' ? stat.mtime : stat.mtime.getTime(),
+		size: stat.size,
+	}
+}
+
+function walkDosFs(fs: EmscriptenFS, dir: string, stamps: Map<string, DosFsStamp>) {
+	let names: string[]
+	try {
+		names = fs.readdir(dir)
+	} catch {
+		return
+	}
+	for (const name of names) {
+		if (name === '.' || name === '..') continue
+		const path = dir === '/' ? `/${name}` : `${dir}/${name}`
+		if (shouldSkipDosPath(path)) continue
+		let stat: { mode: number; size: number; mtime: Date | number }
+		try {
+			stat = fs.stat(path)
+		} catch {
+			continue
+		}
+		if (fs.isDir(stat.mode)) {
+			walkDosFs(fs, path, stamps)
+			continue
+		}
+		if (!fs.isFile(stat.mode)) continue
+		stamps.set(path, stampOf(stat))
+	}
+}
+
+function snapshotDosFs(fs: EmscriptenFS): Map<string, DosFsStamp> {
+	const stamps = new Map<string, DosFsStamp>()
+	walkDosFs(fs, '/', stamps)
+	return stamps
+}
+
+function readDosFile(fs: EmscriptenFS, path: string): Uint8Array {
+	const raw = fs.readFile(path, { encoding: 'binary' })
+	return raw instanceof Uint8Array ? raw.slice() : new Uint8Array(raw)
+}
+
+function collectChangedFiles(fs: EmscriptenFS, baseline: Map<string, DosFsStamp>): DosSaveFile[] {
+	const current = snapshotDosFs(fs)
+	return selectChangedPaths(baseline, current).map((path) => ({
+		data: readDosFile(fs, path),
+		path,
+	}))
+}
+
+function ensureParentDir(fs: EmscriptenFS, filePath: string) {
+	const parts = filePath.split('/').filter(Boolean)
+	parts.pop()
+	let current = ''
+	for (const part of parts) {
+		current += `/${part}`
+		try {
+			const stat = fs.stat(current)
+			if (!fs.isDir(stat.mode)) {
+				throw new Error(`Cannot restore ${filePath}`)
+			}
+		} catch (error) {
+			if (error instanceof Error && error.message.startsWith('Cannot restore')) throw error
+			fs.mkdir(current)
+		}
+	}
+}
+
+function restoreDosFiles(fs: EmscriptenFS, files: DosSaveFile[]) {
+	for (const file of files) {
+		ensureParentDir(fs, file.path)
+		fs.writeFile(file.path, file.data, { encoding: 'binary' })
+	}
+}
+
+async function gzipBytes(bytes: Uint8Array): Promise<Uint8Array> {
+	if (typeof CompressionStream === 'undefined') {
+		throw new Error('This browser cannot compress a DOS save state')
+	}
+	const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))
+	return new Uint8Array(await new Response(stream).arrayBuffer())
+}
+
+async function gunzipBytes(bytes: Uint8Array): Promise<Uint8Array> {
+	if (typeof DecompressionStream === 'undefined') {
+		throw new Error('This browser cannot decompress a DOS save state')
+	}
+	const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))
+	return new Uint8Array(await new Response(stream).arrayBuffer())
+}
+
+function liveHeap(em: DosEmscriptenModule | undefined): Uint8Array | null {
+	if (em?.HEAPU8?.byteLength) return em.HEAPU8
+	const buffer = em?.wasmMemory?.buffer
+	if (!buffer || buffer.byteLength < 1) return null
+	return new Uint8Array(buffer)
+}
+
+function freezeDosRuntime(em: DosEmscriptenModule) {
+	const audio = em.SDL?.audio
+	if (audio) {
+		audio.paused = true
+		if (audio.timer != null) {
+			window.clearTimeout(audio.timer)
+			audio.timer = undefined
+			audio.numAudioTimersPending = 0
+		}
+		audio.nextPlayTime = 0
+	}
+	void em.SDL?.audioContext?.suspend?.()
+}
+
+function thawDosRuntime(em: DosEmscriptenModule, reset = false) {
+	if (reset && em.Asyncify) {
+		em.Asyncify.currData = null
+		em.Asyncify.state = 0
+	}
+	const sdl = em.SDL
+	if (reset && sdl?.audioContext) {
+		void sdl.audioContext.close()
+		sdl.audioContext = new AudioContext()
+	}
+	const audio = sdl?.audio
+	if (audio) {
+		audio.nextPlayTime = 0
+		audio.numAudioTimersPending = 0
+		audio.paused = false
+		if (audio.caller) {
+			audio.numAudioTimersPending = 1
+			audio.timer = window.setTimeout(audio.caller, 1)
+		}
+	}
+	void sdl?.audioContext?.resume?.()
+}
+
+function withFrozenRuntime<T>(em: DosEmscriptenModule, fn: () => T, reset = false): T {
+	freezeDosRuntime(em)
+	try {
+		return fn()
+	} finally {
+		thawDosRuntime(em, reset)
+	}
+}
+
 async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandle> {
 	const { canvas, image, fileName } = options
 	const Dos = await loadDos()
+	let mouseSensitivity = DEFAULT_MOUSE_SENSITIVITY
+	const mouseRemainder = createMouseDeltaRemainder()
+	const onHostMouseMove = (event: MouseEvent) => {
+		if (!event.isTrusted || isCompatTouchMouse(event)) return
+		const locked = document.pointerLockElement === canvas
+		if (!locked && event.target !== canvas) return
+		if (mouseSensitivity === DEFAULT_MOUSE_SENSITIVITY) return
+		event.stopImmediatePropagation()
+		const scaled = takeScaledMouseDelta(
+			mouseRemainder,
+			event.movementX,
+			event.movementY,
+			mouseSensitivity,
+		)
+		if (!scaled.dx && !scaled.dy) return
+		canvas.dispatchEvent(
+			new MouseEvent('mousemove', {
+				bubbles: true,
+				button: event.button,
+				buttons: event.buttons,
+				cancelable: true,
+				clientX: event.clientX,
+				clientY: event.clientY,
+				movementX: scaled.dx,
+				movementY: scaled.dy,
+			}),
+		)
+	}
+	window.addEventListener('mousemove', onHostMouseMove, true)
+
 	const runtime = await Dos(canvas, {
 		autolock: false,
 		cycles: 'max',
@@ -130,6 +367,9 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		wdosboxUrl: WDOSBOX_URL,
 	})
 	const args = await mountImage(runtime.fs, image, fileName)
+	const em = runtime.fs.em
+	const memfs = emscriptenFs(runtime.fs)
+	let baseline = memfs ? snapshotDosFs(memfs) : new Map<string, DosFsStamp>()
 	const ci = await runtime.main(args)
 
 	canvas.tabIndex = 0
@@ -137,7 +377,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 
 	const touch = createTouchMouseState()
 	let longPressTimer: number | null = null
-	let virtual = { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 }
+	const virtual = { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 }
 
 	const clearLongPress = () => {
 		if (longPressTimer !== null) {
@@ -209,7 +449,13 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		onTouchMouseCancel(touch, event.pointerId)
 	}
 	const onCompatMouse = (event: MouseEvent) => {
-		if (isCompatTouchMouse(event)) event.stopImmediatePropagation()
+		if (isCompatTouchMouse(event)) {
+			event.stopImmediatePropagation()
+			return
+		}
+		if (event.type === 'mousedown' && document.pointerLockElement !== canvas) {
+			void canvas.requestPointerLock?.()
+		}
 	}
 	const onContextMenu = (event: Event) => event.preventDefault()
 
@@ -221,10 +467,14 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	canvas.addEventListener('mouseup', onCompatMouse, true)
 	canvas.addEventListener('mousemove', onCompatMouse, true)
 	canvas.addEventListener('contextmenu', onContextMenu)
+	window.addEventListener('keydown', swallowDosKeyRepeat, true)
 
 	return {
 		destroy: () => {
 			clearLongPress()
+			window.removeEventListener('mousemove', onHostMouseMove, true)
+			window.removeEventListener('keydown', swallowDosKeyRepeat, true)
+			if (document.pointerLockElement === canvas) document.exitPointerLock()
 			canvas.removeEventListener('pointerdown', onPointerDown)
 			canvas.removeEventListener('pointermove', onPointerMove)
 			canvas.removeEventListener('pointerup', onPointerUp)
@@ -235,10 +485,59 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			canvas.removeEventListener('contextmenu', onContextMenu)
 			ci.exit()
 		},
+		saveState: async () => {
+			if (!em) {
+				throw new Error('DOS memory snapshot is not available')
+			}
+			const snapshot = withFrozenRuntime(em, () => {
+				const heap = liveHeap(em)
+				if (!heap) {
+					throw new Error('DOS memory snapshot is not available')
+				}
+				return {
+					files: memfs ? collectChangedFiles(memfs, baseline) : [],
+					heap: heap.slice(),
+				}
+			})
+			return packDosSaveV2(snapshot.heap.byteLength, await gzipBytes(snapshot.heap), snapshot.files)
+		},
+		loadState: async (data) => {
+			const unpacked = unpackDosSave(data)
+			if (unpacked.version !== 2) {
+				throw new Error('This DOS save cannot rewind the game. Save again, then load.')
+			}
+			const restored = await gunzipBytes(unpacked.heapGzip)
+			if (!em) {
+				throw new Error('DOS memory snapshot is not available')
+			}
+			withFrozenRuntime(
+				em,
+				() => {
+					const heap = liveHeap(em)
+					if (!heap) {
+						throw new Error('DOS memory snapshot is not available')
+					}
+					if (restored.byteLength !== unpacked.heapLen || restored.byteLength !== heap.byteLength) {
+						throw new Error('DOS save state does not match this emulator session')
+					}
+					heap.set(restored)
+					if (memfs) {
+						restoreDosFiles(memfs, unpacked.files)
+						baseline = snapshotDosFs(memfs)
+					}
+				},
+				true,
+			)
+		},
 		sendKey: (target: Dispatchable, down) => {
 			const code = dispatchableKeyCode(target)
 			if (code === null) return
 			ci.simulateKeyEvent(code, down)
+		},
+		setMouseSensitivity: (value) => {
+			mouseSensitivity = clampMouseSensitivity(value)
+			mouseRemainder.x = 0
+			mouseRemainder.y = 0
 		},
 	}
 }

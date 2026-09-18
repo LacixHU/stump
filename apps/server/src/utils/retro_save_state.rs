@@ -26,7 +26,7 @@ use stump_core::{
 			read_save_state, remove_save_state, save_state_path, write_save_state,
 			RETRO_SAVE_STATE_MAX_BYTES,
 		},
-		ContentType, FileParts, PathUtils,
+		ContentType, FileError, FileParts, PathUtils,
 	},
 };
 
@@ -124,6 +124,43 @@ pub async fn get_save_state(
 		bytes,
 	)
 		.into_response())
+}
+
+/// Answer whether the current user has a save state, without sending the bytes.
+///
+/// Used by the player to prompt before overwriting. 404 is the normal "never saved"
+/// case and is a bare status so it is not logged as an error.
+pub async fn head_save_state(
+	req: AuthContext,
+	conn: &DatabaseConnection,
+	config: &StumpConfig,
+	media_id: String,
+) -> APIResult<Response> {
+	let (user, book) = resolve_retro_book(&req, conn, media_id).await?;
+
+	let Some(row) = media_save_state::Entity::find_for_user_and_media_id(&user, &book.id)
+		.one(conn)
+		.await?
+	else {
+		return Ok(StatusCode::NOT_FOUND.into_response());
+	};
+
+	let path = save_state_path(&config.get_save_states_dir(), &book.id, &user.id);
+	let exists = tokio::fs::try_exists(&path)
+		.await
+		.map_err(FileError::from)?;
+
+	if !exists {
+		tracing::warn!(
+			media_id = %book.id,
+			path = %path.display(),
+			"Save state row has no file on disk, removing the stale row"
+		);
+		row.into_active_model().delete(conn).await?;
+		return Ok(StatusCode::NOT_FOUND.into_response());
+	}
+
+	Ok(([(header::CACHE_CONTROL, "no-store")], StatusCode::OK).into_response())
 }
 
 /// Store (or replace) the current user's save state for this book.

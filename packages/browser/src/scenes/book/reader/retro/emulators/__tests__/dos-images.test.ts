@@ -1,8 +1,11 @@
 import {
 	basenameOf,
+	dosboxConfMainArgs,
 	extensionOf,
+	findDosboxConf,
 	isZipBytes,
 	pickRunnable,
+	STUMP_DOS_MOUNT_CONF,
 	toDos83,
 	zipEntryNames,
 } from '../dos-images'
@@ -39,5 +42,23 @@ describe('DOS image helpers', () => {
 		header[29] = 0
 		for (let i = 0; i < name.length; i += 1) header[46 + i] = name.charCodeAt(i)
 		expect(zipEntryNames(header)).toEqual(['GAME.EXE'])
+	})
+
+	it('prefers .jsdos/dosbox.conf then a root dosbox.conf', () => {
+		expect(findDosboxConf(['GAME.EXE', '.jsdos/dosbox.conf', 'dosbox.conf'])).toBe(
+			'.jsdos/dosbox.conf',
+		)
+		expect(findDosboxConf(['GAME.EXE', 'dosbox.conf'])).toBe('dosbox.conf')
+		expect(findDosboxConf(['game/dosbox.conf', 'game/DOOM.EXE'])).toBe('game/dosbox.conf')
+		expect(findDosboxConf(['GAME.EXE', 'AUTOEXEC.BAT'])).toBeNull()
+	})
+
+	it('loads a mount conf before the bundle dosbox.conf so autoexec sees C:', () => {
+		expect(dosboxConfMainArgs('dosbox.conf')).toEqual([
+			'-conf',
+			STUMP_DOS_MOUNT_CONF,
+			'-conf',
+			'dosbox.conf',
+		])
 	})
 })

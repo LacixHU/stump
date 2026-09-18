@@ -152,3 +152,9 @@ export function dispatchableKeyCode(target: Dispatchable): number | null {
 	if (typeof target === 'string') return overlayKeyCode(target)
 	return DOS_KEY_CODES[target.code] ?? null
 }
+
+export function swallowDosKeyRepeat(event: KeyboardEvent): void {
+	if (!event.repeat) return
+	event.preventDefault()
+	event.stopImmediatePropagation()
+}

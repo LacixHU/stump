@@ -53,6 +53,8 @@ export type RetroEmulatorHandle = {
 	/** Id of the scheme currently in use, from `joystickSchemes`. */
 	joystickScheme?: string
 	setJoystickScheme?: (id: string) => void
+	/** Live multiplier for host mouse deltas (not touch). */
+	setMouseSensitivity?: (value: number) => void
 }
 
 export type RetroEmulatorModule = {

@@ -65,6 +65,30 @@ async fn test_get_without_save_state_is_not_found() {
 	assert_eq!(count_rows(&app, &book.id).await, 0);
 }
 
+/// HEAD is the existence probe the player uses before asking to overwrite
+#[tokio::test]
+async fn test_head_without_save_state_is_not_found() {
+	let (app, book) = setup_retro_book().await;
+
+	let response = app.head(&save_state_url(&book.id)).await;
+
+	assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
+	assert_eq!(count_rows(&app, &book.id).await, 0);
+}
+
+/// HEAD after a save should be 200 without transferring the snapshot
+#[tokio::test]
+async fn test_head_after_put_is_ok() {
+	let (app, book) = setup_retro_book().await;
+
+	app.put_bytes(&save_state_url(&book.id), vec![3u8; 64])
+		.await
+		.assert_status_ok();
+
+	let response = app.head(&save_state_url(&book.id)).await;
+	assert_eq!(response.status_code(), StatusCode::OK);
+}
+
 /// the exact snapshot bytes that went in should come back out
 #[tokio::test]
 async fn test_put_then_get_round_trips_bytes() {

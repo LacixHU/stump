@@ -5,7 +5,7 @@ import {
 	useSDK,
 	useSuspenseGraphQL,
 } from '@stump/client'
-import { Button, cn } from '@stump/components'
+import { Button, cn, ConfirmationModal } from '@stump/components'
 import { TypedDocumentString, UserPermission } from '@stump/graphql'
 import { useLocaleContext } from '@stump/i18n'
 import { Fullscreen, HardDrive, Keyboard, RotateCcw, Save } from 'lucide-react'
@@ -16,6 +16,7 @@ import { toast } from 'sonner'
 
 import { useAppContext } from '@/context'
 import { usePaths } from '@/paths'
+import { useUserStore } from '@/stores'
 
 import {
 	describeCapabilities,
@@ -30,6 +31,11 @@ import {
 	type RetroInputMode,
 } from './retro/emulators'
 import { type Dispatchable, dispatchKey, type KeyModifiers } from './retro/keys'
+import {
+	DEFAULT_MOUSE_SENSITIVITY,
+	getMouseSensitivity,
+	setMouseSensitivity,
+} from './retro/mouse-sensitivity'
 import {
 	defaultOverlayKeys,
 	hasOverlayControls,
@@ -112,9 +118,11 @@ function RetroPlayerScene({ id }: { id: string }) {
 	const { t } = useLocaleContext()
 	const { sdk } = useSDK()
 	const { checkPermission } = useAppContext()
+	const userId = useUserStore((state) => state.user?.id)
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 	const playfieldRef = useRef<HTMLDivElement>(null)
 	const handleRef = useRef<RetroEmulatorHandle | null>(null)
+	const hasSaveStateRef = useRef(false)
 	const canEditOverlay = checkPermission(UserPermission.ManageLibrary)
 
 	const {
@@ -133,6 +141,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 	const [machine, setMachine] = useState<string | undefined>(undefined)
 	const [joystickScheme, setJoystickScheme] = useState<string | undefined>(undefined)
 	const [capabilities, setCapabilities] = useState<RetroPlayerCapabilities>(NO_CAPABILITIES)
+	const [mouseSensitivity, setMouseSensitivityValue] = useState(DEFAULT_MOUSE_SENSITIVITY)
 	const [overlayKeys, setOverlayKeys] = useState<OverlayKeyPlacement[]>(() =>
 		defaultOverlayKeys('c64'),
 	)
@@ -142,6 +151,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 	const [editingOverlay, setEditingOverlay] = useState(false)
 	const [isFullscreen, setIsFullscreen] = useState(false)
 	const [showKeyboard, setShowKeyboard] = useState(false)
+	const [overwriteSaveOpen, setOverwriteSaveOpen] = useState(false)
 	const isMobile = useMediaMatch('(max-width: 768px)')
 
 	const disks = useMemo(() => {
@@ -287,14 +297,27 @@ function RetroPlayerScene({ id }: { id: string }) {
 					diskSpeed: speed,
 				})
 				handleRef.current = handle
+				hasSaveStateRef.current = false
+				setOverwriteSaveOpen(false)
 				setActiveMediaId(mediaId)
 				setInputMode('mixed')
 				setJoystickPort(2)
 				setDiskSpeed(speed)
+				const sensitivity = getMouseSensitivity(userId, id)
+				setMouseSensitivityValue(sensitivity)
+				handle.setMouseSensitivity?.(sensitivity)
 				setCapabilities(describeCapabilities(handle))
 				setMachine(handle.machine)
 				setJoystickScheme(handle.joystickScheme)
 				setStatus('playing')
+				if (handle.saveState && handle.loadState) {
+					void sdk.media
+						.hasSaveState(id)
+						.then((exists) => {
+							if (handleRef.current) hasSaveStateRef.current = exists
+						})
+						.catch(() => undefined)
+				}
 				if (hasOverlayControls(resolved)) {
 					void fetchControls(mediaId, resolved)
 				} else {
@@ -307,7 +330,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 				toast.error(message)
 			}
 		},
-		[activeDisk, fetchControls, fetchFirmware, fetchImage, stopEmulator],
+		[activeDisk, fetchControls, fetchFirmware, fetchImage, id, sdk, stopEmulator, userId],
 	)
 
 	useEffect(() => {
@@ -341,7 +364,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 	// safe -- two overlapping saves would race each other onto the same server slot.
 	const saveStateBusyRef = useRef(false)
 
-	const onSave = async () => {
+	const performSave = async () => {
 		if (!handleRef.current?.saveState) {
 			toast.message('Save states not available for this emulator yet')
 			return
@@ -359,12 +382,35 @@ function RetroPlayerScene({ id }: { id: string }) {
 			// game is one game, so swapping to disk 2 must not hide the save behind a
 			// different media id.
 			await sdk.media.putSaveState(id, data)
+			hasSaveStateRef.current = true
 			toast.success('Save state saved to the server')
 		} catch (e) {
 			toast.error(saveStateErrorMessage(e, 'Failed to save state'))
 		} finally {
 			saveStateBusyRef.current = false
 		}
+	}
+
+	const onSave = async () => {
+		if (!handleRef.current?.saveState) {
+			toast.message('Save states not available for this emulator yet')
+			return
+		}
+		if (saveStateBusyRef.current || overwriteSaveOpen) return
+
+		try {
+			const exists = hasSaveStateRef.current || (await sdk.media.hasSaveState(id))
+			hasSaveStateRef.current = exists
+			if (exists) {
+				setOverwriteSaveOpen(true)
+				return
+			}
+		} catch (e) {
+			toast.error(saveStateErrorMessage(e, 'Failed to save state'))
+			return
+		}
+
+		await performSave()
 	}
 
 	const onLoad = async () => {
@@ -382,6 +428,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 				return
 			}
 			await handleRef.current.loadState(data)
+			hasSaveStateRef.current = true
 			toast.success('Save state loaded')
 		} catch (e) {
 			toast.error(saveStateErrorMessage(e, 'Failed to load state'))
@@ -443,9 +490,15 @@ function RetroPlayerScene({ id }: { id: string }) {
 		}
 	}
 
-	const onChangeJoystickScheme = (id: string) => {
-		setJoystickScheme(id)
-		handleRef.current?.setJoystickScheme?.(id)
+	const onChangeJoystickScheme = (schemeId: string) => {
+		setJoystickScheme(schemeId)
+		handleRef.current?.setJoystickScheme?.(schemeId)
+	}
+
+	const onChangeMouseSensitivity = (value: number) => {
+		const next = setMouseSensitivity(userId, id, value)
+		setMouseSensitivityValue(next)
+		handleRef.current?.setMouseSensitivity?.(next)
 	}
 
 	const focusCanvas = () => {
@@ -499,6 +552,20 @@ function RetroPlayerScene({ id }: { id: string }) {
 
 	return (
 		<div className="min-h-0 bg-black flex h-[100dvh] flex-col">
+			<ConfirmationModal
+				isOpen={overwriteSaveOpen}
+				title={t('reader.retro.overwriteSaveTitle', { defaultValue: 'Overwrite save state?' })}
+				description={t('reader.retro.overwriteSaveDescription', {
+					defaultValue: 'A save state already exists for this game. Saving will replace it.',
+				})}
+				confirmText={t('reader.retro.overwriteSaveConfirm', { defaultValue: 'Overwrite' })}
+				cancelText={t('common.cancel', { defaultValue: 'Cancel' })}
+				onClose={() => setOverwriteSaveOpen(false)}
+				onConfirm={() => {
+					setOverwriteSaveOpen(false)
+					void performSave()
+				}}
+			/>
 			<header className="border-edge gap-2 px-3 py-2 flex shrink-0 flex-wrap items-center border-b bg-background">
 				<Button size="sm" variant="ghost" onClick={() => navigate(paths.bookOverview(id))}>
 					{t('common.back', { defaultValue: 'Back' })}
@@ -547,6 +614,8 @@ function RetroPlayerScene({ id }: { id: string }) {
 							onJoystickScheme={onChangeJoystickScheme}
 							canEditOverlay={canEditOverlay}
 							onEditOverlay={onEditOverlay}
+							mouseSensitivity={mouseSensitivity}
+							onMouseSensitivity={onChangeMouseSensitivity}
 							t={t}
 						/>
 					) : null}

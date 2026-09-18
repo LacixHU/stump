@@ -1,5 +1,11 @@
 import type { Dispatchable, OverlayKeyId } from '../keys'
 import {
+	clampMouseSensitivity,
+	createMouseDeltaRemainder,
+	DEFAULT_MOUSE_SENSITIVITY,
+	takeScaledMouseDelta,
+} from '../mouse-sensitivity'
+import {
 	AUDIO_FRAMES,
 	AUDIO_GAIN,
 	AUDIO_SAMPLE_RATE,
@@ -380,6 +386,13 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		dropTouchGesture()
 	}
 
+	let mouseSensitivity = DEFAULT_MOUSE_SENSITIVITY
+	const mouseRemainder = createMouseDeltaRemainder()
+	const sendRelativeMouse = (dx: number, dy: number) => {
+		const scaled = takeScaledMouseDelta(mouseRemainder, dx, dy, mouseSensitivity)
+		if (scaled.dx || scaled.dy) module._wasm_mouse(1, scaled.dx, scaled.dy)
+	}
+
 	const scaleTouchDelta = (dx: number, dy: number) => {
 		if (!canvas.width || !canvas.height || !clip.height) return { dx: 0, dy: 0 }
 		const rect = canvas.getBoundingClientRect()
@@ -495,7 +508,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	const onMouseMove = (event: MouseEvent) => {
 		if (isCompatTouchMouse(event)) return
 		if (document.pointerLockElement === canvas) {
-			module._wasm_mouse(1, event.movementX, event.movementY)
+			sendRelativeMouse(event.movementX, event.movementY)
 			return
 		}
 		const point = framebufferFromEvent(event)
@@ -504,7 +517,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			return
 		}
 		if (lastMouse) {
-			module._wasm_mouse(1, Math.round(point.x - lastMouse.x), Math.round(point.y - lastMouse.y))
+			sendRelativeMouse(point.x - lastMouse.x, point.y - lastMouse.y)
 		}
 		lastMouse = point
 	}
@@ -617,6 +630,9 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		setJoystickPort: (port) => {
 			onBlur()
 			joystickPort = port
+		},
+		setMouseSensitivity: (value) => {
+			mouseSensitivity = clampMouseSensitivity(value)
 		},
 		setDiskSpeed: (speed) => {
 			diskSpeed = speed

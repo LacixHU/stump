@@ -1,4 +1,9 @@
-import { dispatchableKeyCode, DOS_KEY_CODES, overlayKeyCode } from '../dos-keys'
+import {
+	dispatchableKeyCode,
+	DOS_KEY_CODES,
+	overlayKeyCode,
+	swallowDosKeyRepeat,
+} from '../dos-keys'
 
 describe('DOS key codes', () => {
 	it('maps a QWERTY row to JS keyCodes', () => {
@@ -21,5 +26,30 @@ describe('DOS key codes', () => {
 
 	it('resolves a physical KeySpec', () => {
 		expect(dispatchableKeyCode({ code: 'ArrowLeft', key: 'ArrowLeft' })).toBe(37)
+	})
+
+	it('lets the first keydown through and stops browser auto-repeat', () => {
+		const first = new KeyboardEvent('keydown', {
+			bubbles: true,
+			code: 'ArrowLeft',
+			key: 'ArrowLeft',
+		})
+		const spyFirstPrevent = jest.spyOn(first, 'preventDefault')
+		const spyFirstStop = jest.spyOn(first, 'stopImmediatePropagation')
+		swallowDosKeyRepeat(first)
+		expect(spyFirstPrevent).not.toHaveBeenCalled()
+		expect(spyFirstStop).not.toHaveBeenCalled()
+
+		const repeat = new KeyboardEvent('keydown', {
+			bubbles: true,
+			code: 'ArrowLeft',
+			key: 'ArrowLeft',
+			repeat: true,
+		})
+		const spyRepeatPrevent = jest.spyOn(repeat, 'preventDefault')
+		const spyRepeatStop = jest.spyOn(repeat, 'stopImmediatePropagation')
+		swallowDosKeyRepeat(repeat)
+		expect(spyRepeatPrevent).toHaveBeenCalled()
+		expect(spyRepeatStop).toHaveBeenCalled()
 	})
 })

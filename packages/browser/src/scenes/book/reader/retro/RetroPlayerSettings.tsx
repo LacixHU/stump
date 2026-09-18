@@ -1,9 +1,14 @@
-import { Button, Dropdown } from '@stump/components'
+import { Button, Dropdown, Slider } from '@stump/components'
 import { Settings } from 'lucide-react'
 import { Fragment, type ReactNode } from 'react'
 
 import type { RetroPlayerCapabilities } from './capabilities'
 import type { RetroDiskSpeed, RetroInputMode } from './emulators'
+import {
+	MAX_MOUSE_SENSITIVITY,
+	MIN_MOUSE_SENSITIVITY,
+	MOUSE_SENSITIVITY_STEP,
+} from './mouse-sensitivity'
 
 type RetroPlayerSettingsProps = {
 	/** Which sections the running emulator can actually act on. */
@@ -20,6 +25,8 @@ type RetroPlayerSettingsProps = {
 	onJoystickScheme: (id: string) => void
 	canEditOverlay?: boolean
 	onEditOverlay?: () => void
+	mouseSensitivity: number
+	onMouseSensitivity: (value: number) => void
 	t: (key: string, options?: Record<string, unknown>) => string
 }
 
@@ -37,6 +44,8 @@ export function RetroPlayerSettings({
 	onJoystickScheme,
 	canEditOverlay,
 	onEditOverlay,
+	mouseSensitivity,
+	onMouseSensitivity,
 	t,
 }: RetroPlayerSettingsProps) {
 	// Every section is optional, so the separators are drawn between whichever ones
@@ -158,6 +167,35 @@ export function RetroPlayerSettings({
 		})
 	}
 
+	if (capabilities.mouseSensitivity) {
+		sections.push({
+			content: (
+				<div className="px-2 py-1.5" onPointerDown={(event) => event.preventDefault()}>
+					<Dropdown.Label className="px-0">
+						{t('reader.retro.mouseSensitivity', { defaultValue: 'Mouse sensitivity' })}
+					</Dropdown.Label>
+					<div className="gap-2 mt-1 flex items-center">
+						<Slider
+							min={MIN_MOUSE_SENSITIVITY}
+							max={MAX_MOUSE_SENSITIVITY}
+							step={MOUSE_SENSITIVITY_STEP}
+							value={[mouseSensitivity]}
+							onValueChange={(values) => {
+								const next = values[0]
+								if (next != null) onMouseSensitivity(next)
+							}}
+							className="w-28"
+						/>
+						<span className="w-10 text-xs text-muted-foreground tabular-nums">
+							{mouseSensitivity}×
+						</span>
+					</div>
+				</div>
+			),
+			key: 'mouse-sensitivity',
+		})
+	}
+
 	if (canEditOverlay) {
 		sections.push({
 			content: (
@@ -180,7 +218,7 @@ export function RetroPlayerSettings({
 					<Settings className="h-4 w-4" />
 				</Button>
 			</Dropdown.Trigger>
-			<Dropdown.Content align="end" className="w-52">
+			<Dropdown.Content align="end" className="w-56">
 				{sections.map((section, index) => (
 					<Fragment key={section.key}>
 						{index > 0 ? <Dropdown.Separator /> : null}
