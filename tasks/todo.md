@@ -1117,3 +1117,49 @@ Jack and Doom all resolve to their own box art.
   `GENERIC_COVER_CATEGORY`, or the search silently widens to every system again.
 - **The explorer work was committed mid-task** (`f7d3988c`) by another session sharing this
   checkout. Nothing here touches those files.
+
+## DOS: `QUAKE.dosz` never starts
+
+Reported as "DOS game F:\Retro\DOS\Quake is not starting". Reproduced headless (esbuild the
+module, static-serve it next to `packages/browser/public/`, drive Chrome over CDP) against the
+real bundle.
+
+### Root cause
+
+`QUAKE.dosz` stores four entries and **no directory entries** -- `ID1/` exists only as a path
+prefix on `ID1/CONFIG.CFG` and `ID1/PAK0.PAK`. js-dos 6.22's `_extract_zip` opens each entry
+without creating its parent, so the very first write into `ID1/` failed and the extractor
+called `exit(101)`:
+
+```
+extracting: 'CWSDPMI.EXE', size: 25920     <- written
+extracting: 'ID1/CONFIG.CFG', size: 1851   <- fopen failed
+extract-zip: No error
+EXTRACT THREW: {"name":"ExitStatus","message":"Program terminated with exit(101)","status":101}
+```
+
+`exit(101)` tears down the whole DOSBox runtime _and_ escapes the `Xhr` success callback, so
+`fs.extract`'s promise never settles -- `mountImage` hangs forever rather than rejecting. That
+is why the player showed no error, it just never started.
+
+### Fix
+
+`zipDirectories(names)` (pure, in `dos-images.ts`) derives the implied directories outermost
+first; `ensureZipDirs` in `dos.ts` `mkdir`s them into MEMFS before `fs.extract` runs. Entry
+names were already parsed by `zipEntryNames`, so this only moves that call above the extract.
+
+### Verification
+
+Booted the real 8.7MB bundle through the unmodified `mountImage`: all four entries extract,
+retcode 0, DOSBox starts, and Quake reaches its main menu after SPACE + two ESCs (screenshots
+in the session scratchpad). 18 `dos-*` tests pass; `tsc` clean for both touched files.
+
+### Notes
+
+- **Only Quake was affected in this library.** Blackthorne and Wolf3D are flat; Duke Nukem 3D
+  has subdirectories but its zip _declares_ `TEN/`, so it extracted fine. The bug needs both a
+  subdirectory and a zip writer that omits directory entries -- common enough (`zip -D`, many
+  GUI tools) that it would have kept recurring.
+- **The extractor's failure mode is silent.** `extract-zip: No error` is libzip reporting no
+  zip-level error because the failure was the MEMFS write. Worth remembering if another
+  bundle stalls at mount: check the emscripten FS, not the archive.

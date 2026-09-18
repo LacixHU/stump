@@ -15,6 +15,7 @@ import {
 	STUMP_DOS_MOUNT_CONF,
 	STUMP_DOS_MOUNT_CONF_BODY,
 	toDos83,
+	zipDirectories,
 	zipEntryNames,
 } from './dos-images'
 import { dispatchableKeyCode, swallowDosKeyRepeat } from './dos-keys'
@@ -134,6 +135,25 @@ function isTouchPointer(event: PointerEvent): boolean {
 	return event.pointerType === 'touch' || event.pointerType === 'pen'
 }
 
+/**
+ * Lay down the directories a zip only implies.
+ *
+ * The js-dos extractor opens each entry without creating its parent, and one failed open
+ * aborts the whole DOSBox runtime with `exit(101)` — the mount never settles. Zips written
+ * without explicit directory entries are the common case, so the tree goes down first.
+ */
+function ensureZipDirs(fs: DosFS, names: string[]) {
+	const memfs = emscriptenFs(fs)
+	if (!memfs) return
+	for (const dir of zipDirectories(names)) {
+		try {
+			memfs.mkdir(`/${dir}`)
+		} catch {
+			// Already present, or taken by a file — extraction reports the real failure.
+		}
+	}
+}
+
 async function mountImage(fs: DosFS, image: ArrayBuffer, fileName?: string): Promise<string[]> {
 	const bytes = new Uint8Array(image)
 	const name = basenameOf(fileName)
@@ -151,13 +171,14 @@ async function mountImage(fs: DosFS, image: ArrayBuffer, fileName?: string): Pro
 	}
 
 	if (ext === 'dosz' || isZipBytes(bytes)) {
+		const names = zipEntryNames(bytes)
+		ensureZipDirs(fs, names)
 		const url = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }))
 		try {
 			await fs.extract(url, '/')
 		} finally {
 			URL.revokeObjectURL(url)
 		}
-		const names = zipEntryNames(bytes)
 		const conf = findDosboxConf(names)
 		if (conf) {
 			fs.createFile(STUMP_DOS_MOUNT_CONF, STUMP_DOS_MOUNT_CONF_BODY)

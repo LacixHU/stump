@@ -50,6 +50,26 @@ export function zipEntryNames(bytes: Uint8Array): string[] {
 	return names
 }
 
+/**
+ * Directories implied by `names`, outermost first.
+ *
+ * Most zips carry no explicit directory entries, and the js-dos extractor opens every file
+ * without creating its parent, so the tree has to exist before extraction starts.
+ */
+export function zipDirectories(names: string[]): string[] {
+	const dirs = new Set<string>()
+	for (const name of names) {
+		const parts = name.split('/').filter(Boolean)
+		parts.pop()
+		let current = ''
+		for (const part of parts) {
+			current = current ? `${current}/${part}` : part
+			dirs.add(current)
+		}
+	}
+	return [...dirs].sort((a, b) => a.split('/').length - b.split('/').length)
+}
+
 export function findDosboxConf(names: string[]): string | null {
 	const confs = names
 		.map((name) => name.replace(/\\/g, '/').replace(/^\.\//, ''))

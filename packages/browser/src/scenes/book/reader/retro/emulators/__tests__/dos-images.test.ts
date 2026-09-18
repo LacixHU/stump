@@ -7,6 +7,7 @@ import {
 	pickRunnable,
 	STUMP_DOS_MOUNT_CONF,
 	toDos83,
+	zipDirectories,
 	zipEntryNames,
 } from '../dos-images'
 
@@ -20,6 +21,14 @@ describe('DOS image helpers', () => {
 	it('reads basename and extension', () => {
 		expect(basenameOf('C:\\GAMES\\DOOM.EXE')).toBe('DOOM.EXE')
 		expect(extensionOf('pack.dosz')).toBe('dosz')
+	})
+
+	it('derives the directories a zip only implies, outermost first', () => {
+		expect(zipDirectories(['CWSDPMI.EXE', 'ID1/CONFIG.CFG', 'ID1/PAK0.PAK', 'QUAKE.EXE'])).toEqual([
+			'ID1',
+		])
+		expect(zipDirectories(['a/b/c/game.exe', 'a/readme.txt'])).toEqual(['a', 'a/b', 'a/b/c'])
+		expect(zipDirectories(['GAME.EXE'])).toEqual([])
 	})
 
 	it('picks AUTOEXEC.BAT over a random EXE', () => {
