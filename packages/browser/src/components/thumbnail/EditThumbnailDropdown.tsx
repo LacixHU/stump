@@ -15,9 +15,21 @@ type Props = {
 	label?: string
 	onChooseSelector: () => void
 	onUploadImage: (file: File) => Promise<void>
+	/**
+	 * Rebuild the thumbnail from its source. Omit to leave the option out entirely, for a
+	 * caller that has nothing to rebuild from.
+	 */
+	onRegenerate?: () => Promise<void> | void
+	isRegenerating?: boolean
 }
 
-export default function EditThumbnailDropdown({ label, onChooseSelector, onUploadImage }: Props) {
+export default function EditThumbnailDropdown({
+	label,
+	onChooseSelector,
+	onUploadImage,
+	onRegenerate,
+	isRegenerating,
+}: Props) {
 	const { t } = useLocaleContext()
 	const { checkPermission } = useAppContext()
 
@@ -36,7 +48,7 @@ export default function EditThumbnailDropdown({ label, onChooseSelector, onUploa
 				align="start"
 				contentWrapperClassName="w-18"
 				trigger={
-					<Button className="border border-border">
+					<Button className="border border-border" isLoading={isRegenerating}>
 						{label || t(withLocaleKey('label'))}
 						<ChevronDown className="ml-2 h-4 w-4" />
 					</Button>
@@ -53,6 +65,15 @@ export default function EditThumbnailDropdown({ label, onChooseSelector, onUploa
 										{
 											label: t(withLocaleKey('options.uploadImage')),
 											onClick: () => setShowUploadModal(true),
+										},
+									]
+								: []),
+							...(onRegenerate
+								? [
+										{
+											label: t(withLocaleKey('options.regenerate')),
+											onClick: () => void onRegenerate(),
+											disabled: isRegenerating,
 										},
 									]
 								: []),

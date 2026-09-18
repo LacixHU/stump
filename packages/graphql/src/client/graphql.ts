@@ -2137,6 +2137,26 @@ export type Mutation = {
   /** Pin or unpin a message (Moderator+) */
   pinMessage: Scalars['Boolean']['output'];
   processLibraryThumbnails: Scalars['Boolean']['output'];
+  /**
+   * Rebuild the thumbnail for a library from its contents, discarding whatever is there
+   * now. The cover is taken from the first book of its first series, whose own thumbnail
+   * is generated first if it does not have one yet.
+   */
+  regenerateLibraryThumbnail: Library;
+  /**
+   * Rebuild the thumbnail for a book from its source file, discarding whatever is there
+   * now. For a game this re-runs cover discovery -- a sidecar image beside the file,
+   * then a Wikipedia lookup narrowed to the system the game runs on -- which is how a
+   * game scanned before its cover existed finally gets one. For a page-based book it
+   * re-extracts the cover page.
+   */
+  regenerateMediaThumbnail: Media;
+  /**
+   * Rebuild the thumbnail for a series from the contents of its folder, discarding
+   * whatever is there now. The cover is taken from the first book inside, whose own
+   * thumbnail is generated first if it does not have one yet.
+   */
+  regenerateSeriesThumbnail: Series;
   /** Reject all pending metadata matches, setting their status to NoMatch */
   rejectAllPendingMatches: Scalars['Int']['output'];
   /** Reject the current match candidates for a media item */
@@ -2709,6 +2729,21 @@ export type MutationPinMessageArgs = {
 
 export type MutationProcessLibraryThumbnailsArgs = {
   forceRegenerate?: Scalars['Boolean']['input'];
+  id: Scalars['ID']['input'];
+};
+
+
+export type MutationRegenerateLibraryThumbnailArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type MutationRegenerateMediaThumbnailArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type MutationRegenerateSeriesThumbnailArgs = {
   id: Scalars['ID']['input'];
 };
 
@@ -6183,6 +6218,13 @@ export type BookThumbnailSelectorUploadMutationVariables = Exact<{
 
 export type BookThumbnailSelectorUploadMutation = { __typename?: 'Mutation', uploadMediaThumbnail: { __typename?: 'Media', id: string, thumbnail: { __typename?: 'ImageRef', url: string } } };
 
+export type BookThumbnailSelectorRegenerateMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type BookThumbnailSelectorRegenerateMutation = { __typename?: 'Mutation', regenerateMediaThumbnail: { __typename?: 'Media', id: string, thumbnail: { __typename?: 'ImageRef', url: string } } };
+
 export type BookClubLayoutQueryVariables = Exact<{
   slug: Scalars['String']['input'];
 }>;
@@ -6474,6 +6516,13 @@ export type LibraryThumbnailSelectorUploadMutationVariables = Exact<{
 
 export type LibraryThumbnailSelectorUploadMutation = { __typename?: 'Mutation', uploadLibraryThumbnail: { __typename?: 'Library', id: string, thumbnail: { __typename?: 'ImageRef', url: string } } };
 
+export type LibraryThumbnailSelectorRegenerateMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type LibraryThumbnailSelectorRegenerateMutation = { __typename?: 'Mutation', regenerateLibraryThumbnail: { __typename?: 'Library', id: string, thumbnail: { __typename?: 'ImageRef', url: string } } };
+
 export type ProcessLibraryThumbnailsMutationVariables = Exact<{
   id: Scalars['ID']['input'];
   forceRegenerate: Scalars['Boolean']['input'];
@@ -6594,6 +6643,13 @@ export type SeriesThumbnailSelectorUploadMutationVariables = Exact<{
 
 
 export type SeriesThumbnailSelectorUploadMutation = { __typename?: 'Mutation', uploadSeriesThumbnail: { __typename?: 'Series', id: string, thumbnail: { __typename?: 'ImageRef', url: string } } };
+
+export type SeriesThumbnailSelectorRegenerateMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type SeriesThumbnailSelectorRegenerateMutation = { __typename?: 'Mutation', regenerateSeriesThumbnail: { __typename?: 'Series', id: string, thumbnail: { __typename?: 'ImageRef', url: string } } };
 
 export type ApiKeyTableQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -11704,6 +11760,16 @@ export const BookThumbnailSelectorUploadDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<BookThumbnailSelectorUploadMutation, BookThumbnailSelectorUploadMutationVariables>;
+export const BookThumbnailSelectorRegenerateDocument = new TypedDocumentString(`
+    mutation BookThumbnailSelectorRegenerate($id: ID!) {
+  regenerateMediaThumbnail(id: $id) {
+    id
+    thumbnail {
+      url
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<BookThumbnailSelectorRegenerateMutation, BookThumbnailSelectorRegenerateMutationVariables>;
 export const BookClubLayoutDocument = new TypedDocumentString(`
     query BookClubLayout($slug: String!) {
   bookClubBySlug(slug: $slug) {
@@ -12425,6 +12491,16 @@ export const LibraryThumbnailSelectorUploadDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<LibraryThumbnailSelectorUploadMutation, LibraryThumbnailSelectorUploadMutationVariables>;
+export const LibraryThumbnailSelectorRegenerateDocument = new TypedDocumentString(`
+    mutation LibraryThumbnailSelectorRegenerate($id: ID!) {
+  regenerateLibraryThumbnail(id: $id) {
+    id
+    thumbnail {
+      url
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<LibraryThumbnailSelectorRegenerateMutation, LibraryThumbnailSelectorRegenerateMutationVariables>;
 export const ProcessLibraryThumbnailsDocument = new TypedDocumentString(`
     mutation ProcessLibraryThumbnails($id: ID!, $forceRegenerate: Boolean!) {
   processLibraryThumbnails(id: $id, forceRegenerate: $forceRegenerate)
@@ -12736,6 +12812,16 @@ export const SeriesThumbnailSelectorUploadDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SeriesThumbnailSelectorUploadMutation, SeriesThumbnailSelectorUploadMutationVariables>;
+export const SeriesThumbnailSelectorRegenerateDocument = new TypedDocumentString(`
+    mutation SeriesThumbnailSelectorRegenerate($id: ID!) {
+  regenerateSeriesThumbnail(id: $id) {
+    id
+    thumbnail {
+      url
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<SeriesThumbnailSelectorRegenerateMutation, SeriesThumbnailSelectorRegenerateMutationVariables>;
 export const ApiKeyTableDocument = new TypedDocumentString(`
     query APIKeyTable {
   apiKeys {

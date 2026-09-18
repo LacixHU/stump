@@ -13,7 +13,7 @@ mod filesystem;
 mod job;
 mod library;
 mod log;
-mod media;
+pub(crate) mod media;
 mod media_metadata;
 mod metadata_provider;
 mod notifier;

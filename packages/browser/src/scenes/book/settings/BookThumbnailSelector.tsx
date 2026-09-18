@@ -8,6 +8,7 @@ import {
 import { Button, Dialog, PickSelect } from '@stump/components'
 import {
 	BookThumbnailSelectorUpdateMutation,
+	extractErrorMessage,
 	FragmentType,
 	graphql,
 	useFragment,
@@ -50,6 +51,17 @@ const updateMutation = graphql(`
 const uploadMutation = graphql(`
 	mutation BookThumbnailSelectorUpload($id: ID!, $file: Upload!) {
 		uploadMediaThumbnail(id: $id, file: $file) {
+			id
+			thumbnail {
+				url
+			}
+		}
+	}
+`)
+
+const regenerateMutation = graphql(`
+	mutation BookThumbnailSelectorRegenerate($id: ID!) {
+		regenerateMediaThumbnail(id: $id) {
 			id
 			thumbnail {
 				url
@@ -110,6 +122,13 @@ export default function BookThumbnailSelector({ fragment }: Props) {
 			onSuccess: (data) => onSuccess(data.uploadMediaThumbnail),
 		})
 
+	const { mutateAsync: regenerateThumbnail, isPending: isRegenerating } = useGraphQLMutation(
+		regenerateMutation,
+		{
+			onSuccess: (data) => onSuccess(data.regenerateMediaThumbnail),
+		},
+	)
+
 	const imageUrl = useMemo(() => {
 		const base = page ? sdk.media.bookPageURL(book.id, page) : book.thumbnail.url
 		if (!cacheBust || page) {
@@ -146,6 +165,20 @@ export default function BookThumbnailSelector({ fragment }: Props) {
 		[book.id, uploadThumbnail],
 	)
 
+	const handleRegenerate = useCallback(async () => {
+		try {
+			await regenerateThumbnail({ id: book.id })
+			toast.success(t('thumbnailDropdown.regenerated'))
+		} catch (error) {
+			console.error(error)
+			// The server says *why* -- most often that the game has no sidecar cover and no
+			// Wikipedia match for its system -- and that is the only actionable part.
+			toast.error(t('thumbnailDropdown.regenerateFailed'), {
+				description: extractErrorMessage(error),
+			})
+		}
+	}, [book.id, regenerateThumbnail, t])
+
 	const handleConfirm = useCallback(async () => {
 		if (page == null) return
 
@@ -173,6 +206,8 @@ export default function BookThumbnailSelector({ fragment }: Props) {
 						<EditThumbnailDropdown
 							onChooseSelector={() => setIsOpen(true)}
 							onUploadImage={handleUploadImage}
+							onRegenerate={handleRegenerate}
+							isRegenerating={isRegenerating}
 						/>
 					</span>
 				</Dialog.Trigger>

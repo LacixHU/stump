@@ -8,9 +8,12 @@ use sea_orm::{
 	prelude::*,
 	sea_query::{OnConflict, Query},
 	ActiveValue::Set,
+	QuerySelect,
 };
 use stump_core::filesystem::{
-	image::{generate_book_thumbnail, GenerateThumbnailOptions},
+	image::{
+		generate_book_thumbnail, generate_series_thumbnail, GenerateThumbnailOptions,
+	},
 	media::analysis::{AnalysisJobConfig, MediaAnalysisJobScope},
 };
 use stump_core::job::stump_job::StumpJob;
@@ -19,6 +22,7 @@ use crate::{
 	data::{AuthContext, CoreContext},
 	guard::PermissionGuard,
 	input::thumbnail::UpdateThumbnailInput,
+	mutation::media::thumbnail_options_for,
 	object::series::Series,
 };
 
@@ -212,6 +216,63 @@ impl SeriesMutation {
 			.await?;
 
 		Ok(series.into())
+	}
+
+	/// Rebuild the thumbnail for a series from the contents of its folder, discarding
+	/// whatever is there now. The cover is taken from the first book inside, whose own
+	/// thumbnail is generated first if it does not have one yet.
+	#[graphql(guard = "PermissionGuard::one(UserPermission::EditThumbnails)")]
+	async fn regenerate_series_thumbnail(
+		&self,
+		ctx: &Context<'_>,
+		id: ID,
+	) -> Result<Series> {
+		let core = ctx.data::<CoreContext>()?;
+		let AuthContext { user, .. } = ctx.data::<AuthContext>()?;
+		let conn = core.conn.as_ref();
+
+		let thumb_select = series::Entity::find_for_user(user)
+			.select_only()
+			.columns(series::SeriesThumbSelect::columns())
+			.filter(series::Column::Id.eq(id.to_string()))
+			.into_model::<series::SeriesThumbSelect>()
+			.one(conn)
+			.await?
+			.ok_or("Series not found")?;
+
+		let config = library_config::Entity::find()
+			.filter(
+				library_config::Column::LibraryId
+					.eq(thumb_select.library_id.clone().unwrap_or_default()),
+			)
+			.one(conn)
+			.await?
+			.ok_or("Library config not found")?;
+
+		let (_, path_buf, _) = generate_series_thumbnail(
+			&thumb_select,
+			conn,
+			core.config.as_ref(),
+			GenerateThumbnailOptions {
+				image_options: thumbnail_options_for(&config),
+				core_config: core.config.as_ref().clone(),
+				force_regen: true,
+				filename: None,
+			},
+		)
+		.await?;
+		tracing::debug!(path = ?path_buf, "Regenerated series thumbnail");
+
+		// `generate_series_thumbnail` writes the new path to the row, so re-read it rather
+		// than handing back the path the caller already had.
+		let refreshed = series::ModelWithMetadata::find_for_user(user)
+			.filter(series::Column::Id.eq(id.to_string()))
+			.into_model::<series::ModelWithMetadata>()
+			.one(conn)
+			.await?
+			.ok_or("Series not found")?;
+
+		Ok(refreshed.into())
 	}
 
 	#[graphql(guard = "PermissionGuard::one(UserPermission::ScanLibrary)")]

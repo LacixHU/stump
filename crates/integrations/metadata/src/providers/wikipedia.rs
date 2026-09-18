@@ -36,6 +36,14 @@ impl WikipediaCoverClient {
 
 	/// Find a cover image URL for a game title (filename stem is fine).
 	/// `platform` may be `c64`, `spectrum`, `amiga`, or a Wikipedia category suffix.
+	///
+	/// When the platform is known the search is kept to that system. Wikipedia's
+	/// per-platform cover categories are the only source that promises box art for *this*
+	/// machine, so they are consulted first, and the cross-platform file search that ends
+	/// the unhinted path is skipped entirely -- it is what used to hand a C64 game its
+	/// Spectrum cover. The game's own article is still used as a fallback, since these
+	/// categories are sparse and the article's lead image is normally the original
+	/// release's art.
 	pub async fn lookup_cover_url(
 		&self,
 		title: &str,
@@ -46,11 +54,27 @@ impl WikipediaCoverClient {
 			return Ok(None);
 		}
 
+		let category = cover_category_for_platform(platform);
+		let platform_known = category != GENERIC_COVER_CATEGORY;
+
+		if platform_known {
+			if let Some(file_title) =
+				self.search_cover_file(&cleaned, Some(category)).await?
+			{
+				if let Some(url) = self.fetch_thumb_url(&file_title).await? {
+					return Ok(Some(url));
+				}
+			}
+		}
+
 		if let Some(url) = self.lookup_article_cover(&cleaned).await? {
 			return Ok(Some(url));
 		}
 
-		let category = cover_category_for_platform(platform);
+		if platform_known {
+			return Ok(None);
+		}
+
 		let mut file_title = self.search_cover_file(&cleaned, Some(category)).await?;
 		if file_title.is_none() {
 			file_title = self.search_cover_file(&cleaned, None).await?;
@@ -385,6 +409,11 @@ pub fn sanitize_game_title(raw: &str) -> String {
 	s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// The category to search when the platform is unknown, or is one Wikipedia has no
+/// dedicated cover category for. Returning this is how [`cover_category_for_platform`]
+/// says "no platform", so it is compared by value rather than tracked separately.
+pub const GENERIC_COVER_CATEGORY: &str = "Video game covers";
+
 pub fn cover_category_for_platform(platform: Option<&str>) -> &'static str {
 	match platform.map(|p| p.to_ascii_lowercase()) {
 		Some(p) if p == "c64" || p.contains("commodore") => "Commodore 64 game covers",
@@ -397,7 +426,7 @@ pub fn cover_category_for_platform(platform: Option<&str>) -> &'static str {
 		{
 			"MS-DOS game covers"
 		},
-		_ => "Video game covers",
+		_ => GENERIC_COVER_CATEGORY,
 	}
 }
 
@@ -634,7 +663,28 @@ mod tests {
 			cover_category_for_platform(Some("dos")),
 			"MS-DOS game covers"
 		);
-		assert_eq!(cover_category_for_platform(None), "Video game covers");
+		assert_eq!(cover_category_for_platform(None), GENERIC_COVER_CATEGORY);
+	}
+
+	/// `lookup_cover_url` decides whether to keep the search to one system by comparing the
+	/// resolved category against the generic one, so every platform the emulator supports
+	/// must resolve to something else -- otherwise its search silently widens to every
+	/// system again.
+	#[test]
+	fn every_supported_platform_resolves_to_its_own_category() {
+		for platform in ["c64", "spectrum", "amiga", "dos"] {
+			assert_ne!(
+				cover_category_for_platform(Some(platform)),
+				GENERIC_COVER_CATEGORY,
+				"{platform} would fall back to a cross-platform cover search"
+			);
+		}
+
+		// An unrecognised hint has nothing to narrow by and must not pretend otherwise
+		assert_eq!(
+			cover_category_for_platform(Some("atari-st")),
+			GENERIC_COVER_CATEGORY
+		);
 	}
 
 	#[test]

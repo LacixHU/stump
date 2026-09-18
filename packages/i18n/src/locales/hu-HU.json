@@ -301,7 +301,8 @@
 					"MANHWA": "Manhwa",
 					"WEB_NOVEL": "Webregények",
 					"WEBTOON": "Webtoonok",
-					"MIXED": "Vegyes"
+					"MIXED": "Vegyes",
+					"RETRO": "Retro számítógépek"
 				}
 			},
 			"defaultLibraryView": {
@@ -576,6 +577,46 @@
 		}
 	},
 	"fileExplorer": {
+		"actions": {
+			"createFolder": "Új mappa",
+			"rename": "Átnevezés",
+			"delete": "Törlés"
+		},
+		"createFolder": {
+			"title": "Mappa létrehozása",
+			"description": "A mappa a jelenlegi könyvtárban jön létre",
+			"placeholder": "Mappa neve",
+			"toasts": {
+				"created": "A mappa létrejött"
+			}
+		},
+		"rename": {
+			"title": "Átnevezés",
+			"description": "Adj meg egy új nevet ennek az elemnek",
+			"confirm": "Átnevezés",
+			"toasts": {
+				"renamed": "Sikeres átnevezés"
+			}
+		},
+		"delete": {
+			"title": {
+				"file": "{{name}} törlése",
+				"directory": "{{name}} törlése"
+			},
+			"description": {
+				"file": "Ez véglegesen törli a fájlt a lemezről. A művelet nem vonható vissza.",
+				"directory": "Ez véglegesen törli a mappát és a teljes tartalmát a lemezről. A művelet nem vonható vissza."
+			},
+			"toasts": {
+				"deleted": "Sikeres törlés"
+			}
+		},
+		"dropzone": {
+			"active": "Ejtsd ide a fájlokat, hogy bemásold őket ebbe a mappába",
+			"uploading": "Fájlok másolása ebbe a mappába",
+			"rejected": "Néhány fájlt elutasított a rendszer. Ellenőrizd a fájlméretet",
+			"success": "A fájlok bemásolva ebbe a mappába"
+		},
 		"uploadModal": {
 			"title": {
 				"books": "Könyvek feltöltése",
@@ -601,6 +642,7 @@
 	"libraryHeader": {
 		"tabs": {
 			"books": "Könyvek",
+			"games": "Játékok",
 			"series": "Sorozat",
 			"files": "Fájlok"
 		}
@@ -985,7 +1027,8 @@
 	},
 	"librarySeriesScene": {
 		"searchBooks": {
-			"count": "{{count}} találat"
+			"count": "{{count}} találat",
+			"countGames": "{{count}} találat a játékok között"
 		}
 	},
 	"seriesOverviewScene": {
@@ -998,6 +1041,7 @@
 		"tabs": {
 			"series": "Sorozat",
 			"books": "Könyvek",
+			"games": "Játékok",
 			"files": "Fájlok"
 		},
 		"subSeries": {
@@ -2696,7 +2740,10 @@
 	},
 	"thumbnailDropdown": {
 		"label": "Bélyegkép kiválasztása",
+		"regenerateFailed": "A bélyegkép újragenerálása nem sikerült",
+		"regenerated": "A bélyegkép újragenerálva",
 		"options": {
+			"regenerate": "Újragenerálás",
 			"selectFromBooks": "Kiválasztás a könyvekből",
 			"uploadImage": "Kép feltöltése"
 		},
@@ -2844,6 +2891,54 @@
 		"appearance": "Megjelenés",
 		"enterFullscreen": "Belépés teljes képernyőre",
 		"exitFullscreen": "Kilépés a teljes képernyőről",
+		"retro": {
+			"reset": "Újraindítás",
+			"settings": "Beállítások",
+			"machine": "Géptípus",
+			"inputMode": "Bemeneti mód",
+			"inputModeMixed": "Vegyes",
+			"inputModeKeyboard": "Billentyűzet",
+			"inputModeJoystick": "Botkormány",
+			"joystickPort": "Botkormányport",
+			"port1": "1. port",
+			"port2": "2. port",
+			"joystickKeys": "Botkormány billentyűi",
+			"editOverlay": "Vezérlők szerkesztése",
+			"virtualKeyboard": "Virtuális billentyűzet",
+			"loadSpeed": "Betöltési sebesség",
+			"diskSpeedInstant": "Azonnali",
+			"diskSpeedAuthentic": "Korhű",
+			"mouseSensitivity": "Egérérzékenység",
+			"saveState": "Játékállás mentése",
+			"loadState": "Játékállás betöltése",
+			"fullscreen": "Teljes képernyő",
+			"disks": "Lemezek",
+			"retry": "Újrapróbálás",
+			"loading": "Betöltés…",
+			"overwriteSaveTitle": "Felülírod a mentett játékállást?",
+			"overwriteSaveDescription": "Ehhez a játékhoz már tartozik mentett játékállás. A mentés felül fogja írni.",
+			"overwriteSaveConfirm": "Felülírás",
+			"overlaySaved": "A vezérlők elmentve ehhez a játékhoz",
+			"overlaySaveFailed": "A vezérlők mentése nem sikerült ({{error}})",
+			"saveStateUnavailable": "Ehhez az emulátorhoz még nem érhető el játékállás mentése",
+			"loadStateUnavailable": "Ehhez az emulátorhoz még nem érhető el játékállás betöltése",
+			"saveStateEmpty": "Nem készült mentett játékállás",
+			"saveStateSaved": "A játékállás felkerült a kiszolgálóra",
+			"saveStateLoaded": "A játékállás betöltődött",
+			"saveStateMissing": "Ehhez a játékhoz nincs mentett játékállás",
+			"saveStateFailed": "A játékállás mentése nem sikerült",
+			"loadStateFailed": "A játékállás betöltése nem sikerült",
+			"saveStateTooLarge": "A játékállás túl nagy ehhez a kiszolgálóhoz",
+			"resetUnavailable": "Ehhez az emulátorhoz nem érhető el újraindítás",
+			"machineSwitchFailed": "A géptípus váltása nem sikerült",
+			"diskInsertFailed": "A lemezt nem sikerült behelyezni",
+			"startFailed": "Az emulátor indítása nem sikerült",
+			"notPlayable": "Ez a fájl nem játszható le (nem retro lemezkép)",
+			"playFileFailed": "A játékfájl betöltése nem sikerült ({{status}})",
+			"canvasNotReady": "A rajzfelület még nem áll készen",
+			"missingFirmware": "Hiányzik a firmware: \"{{name}}\". A Kickstart ROM-okat tedd a STUMP_FIRMWARE_DIR könyvtárba (csak saját példányt).",
+			"firmwareHint": "Állítsd be a STUMP_FIRMWARE_DIR könyvtárat, és másold oda a szükséges Kickstart fájlokat. A ROM-ok soha nem részei a telepítőnek."
+		},
 		"addBookmark": "Könyvjelző hozzáadása",
 		"removeBookmark": "Könyvjelző eltávolítása",
 		"readAloud": "Felolvasás",
@@ -2888,6 +2983,7 @@
 		"incognitoMode": "Inkognitó mód",
 		"nativePdfViewer": "Natív PDF-nézegető",
 		"markAsRead": "Megjelölés olvasottként",
+		"markComplete": "Megjelölés befejezettként",
 		"clearProgress": "Előrehaladás törlése",
 		"deleteHistory": "Előzmények törlése",
 		"manage": "Kezelés",
@@ -2895,6 +2991,7 @@
 		"download": "Letöltés",
 		"read": "Olvasás",
 		"readAgain": "Újraolvasás",
+		"play": "Indítás",
 		"toasts": {
 			"failedCompletion": "Nem sikerült frissíteni a könyv befejezési állapotát",
 			"failedDeleteSession": "Nem sikerült törölni a jelenlegi munkamenetet",

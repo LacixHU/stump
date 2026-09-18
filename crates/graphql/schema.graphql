@@ -1907,6 +1907,14 @@ type Mutation {
 	will be generated based on the library's thumbnail configuration.
 	"""
 	updateMediaThumbnail(id: ID!, input: PageBasedThumbnailInput!): Media!
+	"""
+	Rebuild the thumbnail for a book from its source file, discarding whatever is there
+	now. For a game this re-runs cover discovery -- a sidecar image beside the file,
+	then a Wikipedia lookup narrowed to the system the game runs on -- which is how a
+	game scanned before its cover existed finally gets one. For a page-based book it
+	re-extracts the cover page.
+	"""
+	regenerateMediaThumbnail(id: ID!): Media!
 	updateMediaMetadata(id: ID!, input: MediaMetadataInput!): Media!
 	"""
 	Search external metadata providers for a media item and return the resulting fetch
@@ -1965,6 +1973,12 @@ type Mutation {
 	"""
 	updateLibraryThumbnail(id: ID!, input: UpdateThumbnailInput!): Library!
 	"""
+	Rebuild the thumbnail for a library from its contents, discarding whatever is there
+	now. The cover is taken from the first book of its first series, whose own thumbnail
+	is generated first if it does not have one yet.
+	"""
+	regenerateLibraryThumbnail(id: ID!): Library!
+	"""
 	Grant users access to a library. This operates as a full replacement of the included users
 	list, so any users not present in the provided list will lose access if they previously had it.
 	
@@ -2007,6 +2021,12 @@ type Mutation {
 	will be generated based on the library's thumbnail configuration.
 	"""
 	updateSeriesThumbnail(id: ID!, input: UpdateThumbnailInput!): Series!
+	"""
+	Rebuild the thumbnail for a series from the contents of its folder, discarding
+	whatever is there now. The cover is taken from the first book inside, whose own
+	thumbnail is generated first if it does not have one yet.
+	"""
+	regenerateSeriesThumbnail(id: ID!): Series!
 	scanSeries(id: ID!): Boolean!
 	"Create a bookmark for a user"
 	createBookmark(input: BookmarkInput!): Bookmark!

@@ -185,6 +185,7 @@ type Documents = {
     "\n\tfragment BookThumbnailSelector on Media {\n\t\tid\n\t\tthumbnail {\n\t\t\turl\n\t\t}\n\t\tpages\n\t}\n": typeof types.BookThumbnailSelectorFragmentDoc,
     "\n\tmutation BookThumbnailSelectorUpdate($id: ID!, $input: PageBasedThumbnailInput!) {\n\t\tupdateMediaThumbnail(id: $id, input: $input) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n": typeof types.BookThumbnailSelectorUpdateDocument,
     "\n\tmutation BookThumbnailSelectorUpload($id: ID!, $file: Upload!) {\n\t\tuploadMediaThumbnail(id: $id, file: $file) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n": typeof types.BookThumbnailSelectorUploadDocument,
+    "\n\tmutation BookThumbnailSelectorRegenerate($id: ID!) {\n\t\tregenerateMediaThumbnail(id: $id) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n": typeof types.BookThumbnailSelectorRegenerateDocument,
     "\n\tquery BookClubLayout($slug: String!) {\n\t\tbookClubBySlug(slug: $slug) {\n\t\t\tid\n\t\t\tname\n\t\t\tslug\n\t\t\tdescription\n\t\t\tisPrivate\n\t\t\troleSpec\n\t\t\tcreator {\n\t\t\t\tid\n\t\t\t\tdisplayName\n\t\t\t\tavatarUrl\n\t\t\t}\n\t\t\tmembersCount\n\t\t\tmembership {\n\t\t\t\trole\n\t\t\t\tavatarUrl\n\t\t\t\tisCreator\n\t\t\t}\n\t\t\tcurrentBook {\n\t\t\t\tid\n\t\t\t\ttitle\n\t\t\t\tauthor\n\t\t\t\timageUrl\n\t\t\t\tentity {\n\t\t\t\t\tid\n\t\t\t\t\tthumbnail {\n\t\t\t\t\t\turl\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t...BookClubBookItem\n\t\t\t}\n\t\t\tcreatedAt\n\t\t}\n\t}\n": typeof types.BookClubLayoutDocument,
     "\n\tmutation UpdateBookClub($id: ID!, $input: UpdateBookClubInput!) {\n\t\tupdateBookClub(id: $id, input: $input) {\n\t\t\tid\n\t\t\tname\n\t\t\temoji\n\t\t\tisPrivate\n\t\t\troleSpec\n\t\t\tdescription\n\t\t}\n\t}\n": typeof types.UpdateBookClubDocument,
     "\n\tquery UserBookClubsScene {\n\t\tbookClubs(all: false) {\n\t\t\tid\n\t\t\tname\n\t\t\tslug\n\t\t\tdescription\n\t\t\tmembersCount\n\t\t\tcurrentBook {\n\t\t\t\tid\n\t\t\t}\n\t\t}\n\t}\n": typeof types.UserBookClubsSceneDocument,
@@ -227,6 +228,7 @@ type Documents = {
     "\n\tmutation DeleteLibraryThumbnails($id: ID!) {\n\t\tdeleteLibraryThumbnails(id: $id)\n\t}\n": typeof types.DeleteLibraryThumbnailsDocument,
     "\n\tmutation LibraryThumbnailSelectorUpdate($id: ID!, $input: UpdateThumbnailInput!) {\n\t\tupdateLibraryThumbnail(id: $id, input: $input) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n": typeof types.LibraryThumbnailSelectorUpdateDocument,
     "\n\tmutation LibraryThumbnailSelectorUpload($id: ID!, $file: Upload!) {\n\t\tuploadLibraryThumbnail(id: $id, file: $file) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n": typeof types.LibraryThumbnailSelectorUploadDocument,
+    "\n\tmutation LibraryThumbnailSelectorRegenerate($id: ID!) {\n\t\tregenerateLibraryThumbnail(id: $id) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n": typeof types.LibraryThumbnailSelectorRegenerateDocument,
     "\n\tmutation ProcessLibraryThumbnails($id: ID!, $forceRegenerate: Boolean!) {\n\t\tprocessLibraryThumbnails(id: $id, forceRegenerate: $forceRegenerate)\n\t}\n": typeof types.ProcessLibraryThumbnailsDocument,
     "\n\tmutation RegenerateThumbnails($id: ID!, $forceRegenerate: Boolean!) {\n\t\tgenerateLibraryThumbnails(id: $id, forceRegenerate: $forceRegenerate)\n\t}\n": typeof types.RegenerateThumbnailsDocument,
     "\n\tmutation SeriesActionComplete($id: ID!) {\n\t\tfinishSeriesProgress(id: $id)\n\t}\n": typeof types.SeriesActionCompleteDocument,
@@ -242,6 +244,7 @@ type Documents = {
     "\n\tfragment SeriesThumbnailSelector on Series {\n\t\tid\n\t\tthumbnail {\n\t\t\turl\n\t\t}\n\t}\n": typeof types.SeriesThumbnailSelectorFragmentDoc,
     "\n\tmutation SeriesThumbnailSelectorUpdate($id: ID!, $input: UpdateThumbnailInput!) {\n\t\tupdateSeriesThumbnail(id: $id, input: $input) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n": typeof types.SeriesThumbnailSelectorUpdateDocument,
     "\n\tmutation SeriesThumbnailSelectorUpload($id: ID!, $file: Upload!) {\n\t\tuploadSeriesThumbnail(id: $id, file: $file) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n": typeof types.SeriesThumbnailSelectorUploadDocument,
+    "\n\tmutation SeriesThumbnailSelectorRegenerate($id: ID!) {\n\t\tregenerateSeriesThumbnail(id: $id) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n": typeof types.SeriesThumbnailSelectorRegenerateDocument,
     "\n\tquery APIKeyTable {\n\t\tapiKeys {\n\t\t\tid\n\t\t\tname\n\t\t\tpermissions {\n\t\t\t\t__typename\n\t\t\t\t... on UserPermissionStruct {\n\t\t\t\t\tvalue\n\t\t\t\t}\n\t\t\t}\n\t\t\tlastUsedAt\n\t\t\texpiresAt\n\t\t\tcreatedAt\n\t\t}\n\t}\n": typeof types.ApiKeyTableDocument,
     "\n\tmutation CreateAPIKeyModal($input: ApikeyInput!) {\n\t\tcreateApiKey(input: $input) {\n\t\t\tapiKey {\n\t\t\t\tid\n\t\t\t}\n\t\t\tsecret\n\t\t}\n\t}\n": typeof types.CreateApiKeyModalDocument,
     "\n\tmutation DeleteAPIKeyConfirmModal($id: Int!) {\n\t\tdeleteApiKey(id: $id) {\n\t\t\tid\n\t\t}\n\t}\n": typeof types.DeleteApiKeyConfirmModalDocument,
@@ -492,6 +495,7 @@ const documents: Documents = {
     "\n\tfragment BookThumbnailSelector on Media {\n\t\tid\n\t\tthumbnail {\n\t\t\turl\n\t\t}\n\t\tpages\n\t}\n": types.BookThumbnailSelectorFragmentDoc,
     "\n\tmutation BookThumbnailSelectorUpdate($id: ID!, $input: PageBasedThumbnailInput!) {\n\t\tupdateMediaThumbnail(id: $id, input: $input) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n": types.BookThumbnailSelectorUpdateDocument,
     "\n\tmutation BookThumbnailSelectorUpload($id: ID!, $file: Upload!) {\n\t\tuploadMediaThumbnail(id: $id, file: $file) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n": types.BookThumbnailSelectorUploadDocument,
+    "\n\tmutation BookThumbnailSelectorRegenerate($id: ID!) {\n\t\tregenerateMediaThumbnail(id: $id) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n": types.BookThumbnailSelectorRegenerateDocument,
     "\n\tquery BookClubLayout($slug: String!) {\n\t\tbookClubBySlug(slug: $slug) {\n\t\t\tid\n\t\t\tname\n\t\t\tslug\n\t\t\tdescription\n\t\t\tisPrivate\n\t\t\troleSpec\n\t\t\tcreator {\n\t\t\t\tid\n\t\t\t\tdisplayName\n\t\t\t\tavatarUrl\n\t\t\t}\n\t\t\tmembersCount\n\t\t\tmembership {\n\t\t\t\trole\n\t\t\t\tavatarUrl\n\t\t\t\tisCreator\n\t\t\t}\n\t\t\tcurrentBook {\n\t\t\t\tid\n\t\t\t\ttitle\n\t\t\t\tauthor\n\t\t\t\timageUrl\n\t\t\t\tentity {\n\t\t\t\t\tid\n\t\t\t\t\tthumbnail {\n\t\t\t\t\t\turl\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t...BookClubBookItem\n\t\t\t}\n\t\t\tcreatedAt\n\t\t}\n\t}\n": types.BookClubLayoutDocument,
     "\n\tmutation UpdateBookClub($id: ID!, $input: UpdateBookClubInput!) {\n\t\tupdateBookClub(id: $id, input: $input) {\n\t\t\tid\n\t\t\tname\n\t\t\temoji\n\t\t\tisPrivate\n\t\t\troleSpec\n\t\t\tdescription\n\t\t}\n\t}\n": types.UpdateBookClubDocument,
     "\n\tquery UserBookClubsScene {\n\t\tbookClubs(all: false) {\n\t\t\tid\n\t\t\tname\n\t\t\tslug\n\t\t\tdescription\n\t\t\tmembersCount\n\t\t\tcurrentBook {\n\t\t\t\tid\n\t\t\t}\n\t\t}\n\t}\n": types.UserBookClubsSceneDocument,
@@ -534,6 +538,7 @@ const documents: Documents = {
     "\n\tmutation DeleteLibraryThumbnails($id: ID!) {\n\t\tdeleteLibraryThumbnails(id: $id)\n\t}\n": types.DeleteLibraryThumbnailsDocument,
     "\n\tmutation LibraryThumbnailSelectorUpdate($id: ID!, $input: UpdateThumbnailInput!) {\n\t\tupdateLibraryThumbnail(id: $id, input: $input) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n": types.LibraryThumbnailSelectorUpdateDocument,
     "\n\tmutation LibraryThumbnailSelectorUpload($id: ID!, $file: Upload!) {\n\t\tuploadLibraryThumbnail(id: $id, file: $file) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n": types.LibraryThumbnailSelectorUploadDocument,
+    "\n\tmutation LibraryThumbnailSelectorRegenerate($id: ID!) {\n\t\tregenerateLibraryThumbnail(id: $id) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n": types.LibraryThumbnailSelectorRegenerateDocument,
     "\n\tmutation ProcessLibraryThumbnails($id: ID!, $forceRegenerate: Boolean!) {\n\t\tprocessLibraryThumbnails(id: $id, forceRegenerate: $forceRegenerate)\n\t}\n": types.ProcessLibraryThumbnailsDocument,
     "\n\tmutation RegenerateThumbnails($id: ID!, $forceRegenerate: Boolean!) {\n\t\tgenerateLibraryThumbnails(id: $id, forceRegenerate: $forceRegenerate)\n\t}\n": types.RegenerateThumbnailsDocument,
     "\n\tmutation SeriesActionComplete($id: ID!) {\n\t\tfinishSeriesProgress(id: $id)\n\t}\n": types.SeriesActionCompleteDocument,
@@ -549,6 +554,7 @@ const documents: Documents = {
     "\n\tfragment SeriesThumbnailSelector on Series {\n\t\tid\n\t\tthumbnail {\n\t\t\turl\n\t\t}\n\t}\n": types.SeriesThumbnailSelectorFragmentDoc,
     "\n\tmutation SeriesThumbnailSelectorUpdate($id: ID!, $input: UpdateThumbnailInput!) {\n\t\tupdateSeriesThumbnail(id: $id, input: $input) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n": types.SeriesThumbnailSelectorUpdateDocument,
     "\n\tmutation SeriesThumbnailSelectorUpload($id: ID!, $file: Upload!) {\n\t\tuploadSeriesThumbnail(id: $id, file: $file) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n": types.SeriesThumbnailSelectorUploadDocument,
+    "\n\tmutation SeriesThumbnailSelectorRegenerate($id: ID!) {\n\t\tregenerateSeriesThumbnail(id: $id) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n": types.SeriesThumbnailSelectorRegenerateDocument,
     "\n\tquery APIKeyTable {\n\t\tapiKeys {\n\t\t\tid\n\t\t\tname\n\t\t\tpermissions {\n\t\t\t\t__typename\n\t\t\t\t... on UserPermissionStruct {\n\t\t\t\t\tvalue\n\t\t\t\t}\n\t\t\t}\n\t\t\tlastUsedAt\n\t\t\texpiresAt\n\t\t\tcreatedAt\n\t\t}\n\t}\n": types.ApiKeyTableDocument,
     "\n\tmutation CreateAPIKeyModal($input: ApikeyInput!) {\n\t\tcreateApiKey(input: $input) {\n\t\t\tapiKey {\n\t\t\t\tid\n\t\t\t}\n\t\t\tsecret\n\t\t}\n\t}\n": types.CreateApiKeyModalDocument,
     "\n\tmutation DeleteAPIKeyConfirmModal($id: Int!) {\n\t\tdeleteApiKey(id: $id) {\n\t\t\tid\n\t\t}\n\t}\n": types.DeleteApiKeyConfirmModalDocument,
@@ -1312,6 +1318,10 @@ export function graphql(source: "\n\tmutation BookThumbnailSelectorUpload($id: I
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "\n\tmutation BookThumbnailSelectorRegenerate($id: ID!) {\n\t\tregenerateMediaThumbnail(id: $id) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n"): typeof import('./graphql').BookThumbnailSelectorRegenerateDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "\n\tquery BookClubLayout($slug: String!) {\n\t\tbookClubBySlug(slug: $slug) {\n\t\t\tid\n\t\t\tname\n\t\t\tslug\n\t\t\tdescription\n\t\t\tisPrivate\n\t\t\troleSpec\n\t\t\tcreator {\n\t\t\t\tid\n\t\t\t\tdisplayName\n\t\t\t\tavatarUrl\n\t\t\t}\n\t\t\tmembersCount\n\t\t\tmembership {\n\t\t\t\trole\n\t\t\t\tavatarUrl\n\t\t\t\tisCreator\n\t\t\t}\n\t\t\tcurrentBook {\n\t\t\t\tid\n\t\t\t\ttitle\n\t\t\t\tauthor\n\t\t\t\timageUrl\n\t\t\t\tentity {\n\t\t\t\t\tid\n\t\t\t\t\tthumbnail {\n\t\t\t\t\t\turl\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t...BookClubBookItem\n\t\t\t}\n\t\t\tcreatedAt\n\t\t}\n\t}\n"): typeof import('./graphql').BookClubLayoutDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -1480,6 +1490,10 @@ export function graphql(source: "\n\tmutation LibraryThumbnailSelectorUpload($id
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "\n\tmutation LibraryThumbnailSelectorRegenerate($id: ID!) {\n\t\tregenerateLibraryThumbnail(id: $id) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n"): typeof import('./graphql').LibraryThumbnailSelectorRegenerateDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "\n\tmutation ProcessLibraryThumbnails($id: ID!, $forceRegenerate: Boolean!) {\n\t\tprocessLibraryThumbnails(id: $id, forceRegenerate: $forceRegenerate)\n\t}\n"): typeof import('./graphql').ProcessLibraryThumbnailsDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -1537,6 +1551,10 @@ export function graphql(source: "\n\tmutation SeriesThumbnailSelectorUpdate($id:
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n\tmutation SeriesThumbnailSelectorUpload($id: ID!, $file: Upload!) {\n\t\tuploadSeriesThumbnail(id: $id, file: $file) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n"): typeof import('./graphql').SeriesThumbnailSelectorUploadDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n\tmutation SeriesThumbnailSelectorRegenerate($id: ID!) {\n\t\tregenerateSeriesThumbnail(id: $id) {\n\t\t\tid\n\t\t\tthumbnail {\n\t\t\t\turl\n\t\t\t}\n\t\t}\n\t}\n"): typeof import('./graphql').SeriesThumbnailSelectorRegenerateDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

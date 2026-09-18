@@ -18,9 +18,10 @@ use sea_orm::{
 };
 use stump_core::filesystem::{
 	image::{
-		generate_book_thumbnail, remove_thumbnails, GenerateThumbnailOptions,
-		ImageProcessorOptionsExt, PlaceholderGenerationJobConfig,
-		PlaceholderGenerationJobScope, ThumbnailGenerationJobParams,
+		generate_book_thumbnail, generate_library_thumbnail, remove_thumbnails,
+		GenerateThumbnailOptions, ImageProcessorOptionsExt,
+		PlaceholderGenerationJobConfig, PlaceholderGenerationJobScope,
+		ThumbnailGenerationJobParams,
 	},
 	media::{
 		analysis::{AnalysisJobConfig, MediaAnalysisJobScope},
@@ -37,6 +38,7 @@ use crate::{
 	error_message,
 	guard::PermissionGuard,
 	input::{library::CreateOrUpdateLibraryInput, thumbnail::UpdateThumbnailInput},
+	mutation::media::thumbnail_options_for,
 	object::library::Library,
 	utils::db_statement,
 };
@@ -633,6 +635,63 @@ impl LibraryMutation {
 			.await?;
 
 		Ok(library.into())
+	}
+
+	/// Rebuild the thumbnail for a library from its contents, discarding whatever is there
+	/// now. The cover is taken from the first book of its first series, whose own thumbnail
+	/// is generated first if it does not have one yet.
+	#[graphql(
+		guard = "PermissionGuard::new(&[UserPermission::EditLibrary, UserPermission::EditThumbnails])"
+	)]
+	async fn regenerate_library_thumbnail(
+		&self,
+		ctx: &Context<'_>,
+		id: ID,
+	) -> Result<Library> {
+		let core = ctx.data::<CoreContext>()?;
+		let AuthContext { user, .. } = ctx.data::<AuthContext>()?;
+		let conn = core.conn.as_ref();
+
+		let (_, config) = library::Entity::find_for_user(user)
+			.filter(library::Column::Id.eq(id.to_string()))
+			.find_also_related(library_config::Entity)
+			.one(conn)
+			.await?
+			.ok_or("Library not found")?;
+		let config = config.ok_or("Library config not found")?;
+
+		let thumb_select = library::Entity::find_for_user(user)
+			.select_only()
+			.columns(library::LibraryThumbSelect::columns())
+			.filter(library::Column::Id.eq(id.to_string()))
+			.into_model::<library::LibraryThumbSelect>()
+			.one(conn)
+			.await?
+			.ok_or("Library not found")?;
+
+		let (_, path_buf, _) = generate_library_thumbnail(
+			&thumb_select,
+			conn,
+			core.config.as_ref(),
+			GenerateThumbnailOptions {
+				image_options: thumbnail_options_for(&config),
+				core_config: core.config.as_ref().clone(),
+				force_regen: true,
+				filename: None,
+			},
+		)
+		.await?;
+		tracing::debug!(path = ?path_buf, "Regenerated library thumbnail");
+
+		// `generate_library_thumbnail` writes the new path to the row, so re-read it rather
+		// than handing back the path the caller already had.
+		let refreshed = library::Entity::find_for_user(user)
+			.filter(library::Column::Id.eq(id.to_string()))
+			.one(conn)
+			.await?
+			.ok_or("Library not found")?;
+
+		Ok(refreshed.into())
 	}
 
 	/// Grant users access to a library. This operates as a full replacement of the included users

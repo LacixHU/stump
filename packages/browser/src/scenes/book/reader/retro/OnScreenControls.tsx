@@ -17,6 +17,11 @@ import {
 /** How a control reaches the machine; see `RetroEmulatorHandle.sendKey`. */
 type SendKey = NonNullable<RetroEmulatorHandle['sendKey']>
 
+type Translate = (key: string, options?: Record<string, unknown>) => string
+
+/** Used when the overlay is rendered outside a locale provider, as the tests do. */
+const fallbackTranslate: Translate = (key, options) => String(options?.defaultValue ?? key)
+
 export type OverlayKeyPlacement = {
 	id: OverlayControlId
 	x: number
@@ -632,6 +637,11 @@ type OnScreenControlsProps = {
 	 * pass `RetroEmulatorHandle.sendKey` instead.
 	 */
 	sendKey?: SendKey
+	/**
+	 * The translator, passed down rather than read from context so the overlay stays a
+	 * plain presentational component -- the same arrangement `RetroPlayerSettings` uses.
+	 */
+	t?: Translate
 }
 
 export function OnScreenControls({
@@ -643,6 +653,7 @@ export function OnScreenControls({
 	onReleased,
 	platform = 'c64',
 	sendKey = dispatchKey,
+	t = fallbackTranslate,
 }: OnScreenControlsProps) {
 	const containerRef = useRef<HTMLDivElement>(null)
 	const editorRows = EDITOR_ROWS[platform] ?? C64_EDITOR_ROWS
@@ -697,10 +708,10 @@ export function OnScreenControls({
 							className="border-white/30 text-white hover:bg-white/15 hover:text-white border"
 							onClick={onCancel}
 						>
-							Cancel
+							{t('common.cancel', { defaultValue: 'Cancel' })}
 						</Button>
 						<Button size="sm" onClick={onSave}>
-							Save
+							{t('common.save', { defaultValue: 'Save' })}
 						</Button>
 					</div>
 				</div>

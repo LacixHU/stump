@@ -6,7 +6,10 @@ use models::{
 	entity::{library, media, series},
 	shared::{
 		image::ImageMetadata,
-		image_processor_options::{ImageProcessorOptions, SupportedImageFormat},
+		image_processor_options::{
+			FitWithinResize, ImageProcessorOptions, ImageResizeMethod,
+			SupportedImageFormat,
+		},
 	},
 };
 use sea_orm::{
@@ -100,6 +103,20 @@ fn generate_thumbnail_from_bytes(
 	}?;
 
 	Ok((thumbnail_buffer, thumbnail_path, true))
+}
+
+/// The thumbnail options to use for retro media when the library has no explicit
+/// thumbnail config. A game's cover comes from a sidecar image or a Wikipedia lookup,
+/// both of which are already cover-sized, so this only caps the occasional oversized
+/// original.
+pub fn retro_cover_image_options() -> ImageProcessorOptions {
+	ImageProcessorOptions {
+		resize_method: Some(ImageResizeMethod::FitWithin(FitWithinResize {
+			width: 512,
+			height: 512,
+		})),
+		..Default::default()
+	}
 }
 
 fn is_generic_cover_folder(name: &str) -> bool {
@@ -402,11 +419,12 @@ pub async fn generate_book_thumbnail(
 /// The happy path is assumed to be that the book already has a thumbnail generated, which should
 /// be the case from the ordering of operations in the thumbnail generation job, however if not it
 /// will attempt to generate the thumbnail from the book as a fallback.
-#[tracing::instrument(skip(ctx, update_fn, first_book))]
+#[tracing::instrument(skip(conn, config, update_fn, first_book))]
 async fn copy_thumbnail_to_entity<E>(
 	entity_id: &str,
 	first_book: media::MediaThumbSelect,
-	ctx: &JobContext,
+	conn: &DatabaseConnection,
+	config: &StumpConfig,
 	options: GenerateThumbnailOptions,
 	update_fn: impl FnOnce(String, Option<ImageMetadata>) -> sea_orm::UpdateMany<E>,
 ) -> Result<GenerateOutput, ThumbnailGenerateError>
@@ -420,7 +438,7 @@ where
 		None => {
 			// Note that this shouldn't really happen but figured better to handle instead
 			let (data, path, _) =
-				generate_book_thumbnail(&first_book, ctx.conn(), options.clone()).await?;
+				generate_book_thumbnail(&first_book, conn, options.clone()).await?;
 			did_regenerate = true;
 			(path.to_string_lossy().to_string(), data)
 		},
@@ -445,8 +463,7 @@ where
 		.and_then(|e| e.to_str())
 		.ok_or(ThumbnailGenerateError::SourceMissingExtension)?;
 
-	let dest_path = ctx
-		.config()
+	let dest_path = config
 		.get_thumbnails_dir()
 		.join(format!("{}.{}", entity_id, ext));
 
@@ -473,16 +490,20 @@ where
 	};
 
 	update_fn(dest_path.to_string_lossy().to_string(), thumbnail_metadata)
-		.exec(ctx.conn())
+		.exec(conn)
 		.await?;
 
 	Ok((thumbnail_data, dest_path, true))
 }
 
+/// Build a series thumbnail from the first book inside it, copying that book's thumbnail
+/// onto the series. With `force_regen` set this is the "regenerate from contents" path:
+/// the book's own thumbnail is rebuilt first when it has none.
 #[tracing::instrument(skip_all)]
-async fn generate_series_thumbnail(
+pub async fn generate_series_thumbnail(
 	series: &series::SeriesThumbSelect,
-	ctx: &JobContext,
+	conn: &DatabaseConnection,
+	config: &StumpConfig,
 	options: GenerateThumbnailOptions,
 ) -> Result<GenerateOutput, ThumbnailGenerateError> {
 	if let (false, Some(thumbnail_path)) = (options.force_regen, &series.thumbnail_path) {
@@ -514,7 +535,7 @@ async fn generate_series_thumbnail(
 		.order_by_asc(media::Column::Pages)
 		.order_by_asc(media::Column::Name)
 		.into_model::<media::MediaThumbSelect>()
-		.one(ctx.conn())
+		.one(conn)
 		.await?;
 
 	let Some(first_book) = first_book else {
@@ -526,7 +547,8 @@ async fn generate_series_thumbnail(
 	let result = copy_thumbnail_to_entity(
 		&series.id,
 		first_book,
-		ctx,
+		conn,
+		config,
 		options.clone(),
 		|thumbnail_path, thumbnail_metadata| {
 			series::Entity::update_many()
@@ -553,17 +575,20 @@ async fn generate_series_thumbnail(
 			.col_expr(series::Column::ThumbnailPath, Expr::cust("NULL"))
 			.col_expr(series::Column::ThumbnailMeta, Expr::cust("NULL"))
 			.col_expr(series::Column::UpdatedAt, Expr::value(Utc::now()))
-			.exec(ctx.conn())
+			.exec(conn)
 			.await?;
 	}
 
 	result
 }
 
+/// Build a library thumbnail from the first book in its first series, the library-level
+/// counterpart to [`generate_series_thumbnail`].
 #[tracing::instrument(skip_all)]
-async fn generate_library_thumbnail(
+pub async fn generate_library_thumbnail(
 	library: &library::LibraryThumbSelect,
-	ctx: &JobContext,
+	conn: &DatabaseConnection,
+	config: &StumpConfig,
 	options: GenerateThumbnailOptions,
 ) -> Result<GenerateOutput, ThumbnailGenerateError> {
 	if let (false, Some(thumbnail_path)) = (options.force_regen, &library.thumbnail_path)
@@ -598,7 +623,7 @@ async fn generate_library_thumbnail(
 		.order_by_asc(media::Column::Pages)
 		.order_by_asc(media::Column::Name)
 		.into_model::<media::MediaThumbSelect>()
-		.one(ctx.conn())
+		.one(conn)
 		.await?;
 
 	let Some(first_book) = first_book else {
@@ -609,7 +634,8 @@ async fn generate_library_thumbnail(
 	copy_thumbnail_to_entity(
 		&library.id,
 		first_book,
-		ctx,
+		conn,
+		config,
 		options,
 		|thumbnail_path, thumbnail_metadata| {
 			library::Entity::update_many()
@@ -680,10 +706,22 @@ pub async fn safely_generate_batch(
 						generate_book_thumbnail(book, ctx.conn(), options).await
 					},
 					GenerateImageSource::Series(series) => {
-						generate_series_thumbnail(series, ctx, options).await
+						generate_series_thumbnail(
+							series,
+							ctx.conn(),
+							ctx.config(),
+							options,
+						)
+						.await
 					},
 					GenerateImageSource::Library(library) => {
-						generate_library_thumbnail(library, ctx, options).await
+						generate_library_thumbnail(
+							library,
+							ctx.conn(),
+							ctx.config(),
+							options,
+						)
+						.await
 					},
 				}
 				.map(|(_, path, did_generate)| (path, did_generate));

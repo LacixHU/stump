@@ -15,7 +15,13 @@ use sea_orm::{
 };
 
 use super::{apply, ProviderClientCache};
-use crate::CoreError;
+use crate::{
+	filesystem::{
+		media::{platform_from_path_hints, resolve_retro_platform, RetroPlatform},
+		ContentType,
+	},
+	CoreError,
+};
 
 async fn library_type_for_series(
 	conn: &DatabaseConnection,
@@ -58,16 +64,67 @@ async fn library_type_for_media(
 	library_type_for_series(conn, &series.id).await
 }
 
+/// The retro system a media item runs on, or `None` when it is not a disk/tape image.
+///
+/// The platform is not stored on the row, so it is resolved from the path the same way the
+/// thumbnail job resolves it. The extension is checked first because
+/// [`resolve_retro_platform`] falls back to C64 for anything it does not recognise, which
+/// would otherwise label every comic and EPUB a Commodore 64 game.
+async fn retro_platform_for_media(
+	conn: &DatabaseConnection,
+	media_id: &str,
+) -> Option<RetroPlatform> {
+	let (path, extension) = media::Entity::find_by_id(media_id)
+		.select_only()
+		.column(media::Column::Path)
+		.column(media::Column::Extension)
+		.into_tuple::<(String, String)>()
+		.one(conn)
+		.await
+		.ok()
+		.flatten()?;
+
+	ContentType::is_retro_extension(&extension)
+		.then(|| resolve_retro_platform(&path, &extension))
+}
+
+/// The retro system a series holds, inferred from its path (e.g. `.../Retro/C64/...`).
+///
+/// A series has no extension to go on, so an unhinted path yields `None` and the search is
+/// left unfiltered rather than guessed at.
+async fn retro_platform_for_series(
+	conn: &DatabaseConnection,
+	series_id: &str,
+) -> Option<RetroPlatform> {
+	let path = series::Entity::find_by_id(series_id)
+		.select_only()
+		.column(series::Column::Path)
+		.into_tuple::<String>()
+		.one(conn)
+		.await
+		.ok()
+		.flatten()?;
+
+	platform_from_path_hints(&path)
+}
+
 /// Filters provider configs down to those that support the given library type, and,
-/// if `provider_filter` is given, further down to just that one provider.
+/// if `provider_filter` is given, further down to just that one provider. When the entity
+/// is a retro game, providers that do not cover its system are dropped as well -- a C64
+/// title has no business being looked up in the Spectrum or Amiga databases.
 fn filter_providers(
 	provider_configs: Vec<metadata_provider_config::Model>,
 	library_type: &LibraryType,
 	provider_filter: Option<MetadataProvider>,
+	retro_platform: Option<RetroPlatform>,
 ) -> Vec<metadata_provider_config::Model> {
 	provider_configs
 		.into_iter()
 		.filter(|c| library_type.has_provider_overlap(&c.provider_type))
+		.filter(|c| match retro_platform {
+			Some(platform) => platform.is_covered_by(c.provider_type),
+			None => true,
+		})
 		.filter(|c| match provider_filter {
 			Some(provider) => c.provider_type == provider,
 			None => true,
@@ -120,13 +177,15 @@ pub async fn fetch_series_metadata(
 		.unwrap_or_else(|| models.series.name.clone());
 
 	let comicid = models.metadata.as_ref().and_then(|m| m.comicid);
+	let retro_platform = retro_platform_for_series(conn, &models.series.id).await;
 
 	let provider_configs = metadata_provider_config::Entity::find()
 		.filter(metadata_provider_config::Column::Enabled.eq(true))
 		.all(conn)
 		.await?;
 
-	let provider_configs = filter_providers(provider_configs, &library_type, None);
+	let provider_configs =
+		filter_providers(provider_configs, &library_type, None, retro_platform);
 
 	if provider_configs.is_empty() {
 		return Err(no_provider_configs_error(&library_type, None));
@@ -143,6 +202,10 @@ pub async fn fetch_series_metadata(
 				if let Some(id) = comicid {
 					provider_hints
 						.insert("comic_vine_volume_id".to_string(), id.to_string());
+				}
+				if let Some(platform) = retro_platform {
+					provider_hints
+						.insert("platform".to_string(), platform.as_str().to_string());
 				}
 				let query = SearchQuery {
 					title: search_name.to_string(),
@@ -280,13 +343,26 @@ pub async fn fetch_media_metadata(
 			.insert("comic_vine_volume_id".to_string(), id.to_string());
 	}
 
+	// Providers that look up covers by system (Wikipedia's per-platform cover categories)
+	// need to be told which one, or they search every platform at once.
+	let retro_platform = retro_platform_for_media(conn, media_id).await;
+	if let Some(platform) = retro_platform {
+		search
+			.provider_hints
+			.insert("platform".to_string(), platform.as_str().to_string());
+	}
+
 	let provider_configs = metadata_provider_config::Entity::find()
 		.filter(metadata_provider_config::Column::Enabled.eq(true))
 		.all(conn)
 		.await?;
 
-	let provider_configs =
-		filter_providers(provider_configs, &library_type, provider_filter);
+	let provider_configs = filter_providers(
+		provider_configs,
+		&library_type,
+		provider_filter,
+		retro_platform,
+	);
 
 	if provider_configs.is_empty() {
 		return Err(no_provider_configs_error(&library_type, provider_filter));

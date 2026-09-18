@@ -4,6 +4,7 @@ use std::{
 };
 
 use data_encoding::HEXLOWER;
+use models::shared::enums::MetadataProvider;
 use ring::digest::{Context, SHA256};
 
 use crate::{
@@ -28,6 +29,25 @@ pub enum RetroPlatform {
 }
 
 impl RetroPlatform {
+	/// Whether an external metadata provider has any coverage for this platform.
+	///
+	/// The platform-specific databases must never be searched for a game from another
+	/// system: a C64 title would otherwise come back holding Spectrum and Amiga box art.
+	/// Wikipedia is the one provider that spans every platform, and it narrows its own
+	/// search with the `platform` search hint instead.
+	pub fn is_covered_by(self, provider: MetadataProvider) -> bool {
+		match provider {
+			MetadataProvider::Lemon64 => self == Self::C64,
+			MetadataProvider::WorldOfSpectrum => self == Self::Spectrum,
+			MetadataProvider::LemonAmiga => self == Self::Amiga,
+			MetadataProvider::Wikipedia => true,
+			// Book/comic providers have nothing to say about a disk or tape image. They are
+			// already excluded by library type unless the library is Mixed, in which case
+			// this is what keeps them out.
+			MetadataProvider::Hardcover | MetadataProvider::ComicVine => false,
+		}
+	}
+
 	pub fn as_str(self) -> &'static str {
 		match self {
 			Self::C64 => "c64",
@@ -584,6 +604,38 @@ mod tests {
 	use super::*;
 	use std::io::Write;
 	use tempfile::NamedTempFile;
+
+	#[test]
+	fn platform_specific_databases_only_cover_their_own_system() {
+		assert!(RetroPlatform::C64.is_covered_by(MetadataProvider::Lemon64));
+		assert!(!RetroPlatform::C64.is_covered_by(MetadataProvider::WorldOfSpectrum));
+		assert!(!RetroPlatform::C64.is_covered_by(MetadataProvider::LemonAmiga));
+
+		assert!(RetroPlatform::Spectrum.is_covered_by(MetadataProvider::WorldOfSpectrum));
+		assert!(!RetroPlatform::Spectrum.is_covered_by(MetadataProvider::Lemon64));
+
+		assert!(RetroPlatform::Amiga.is_covered_by(MetadataProvider::LemonAmiga));
+		assert!(!RetroPlatform::Amiga.is_covered_by(MetadataProvider::Lemon64));
+
+		// DOS has no dedicated database, so only the cross-platform source is left
+		assert!(!RetroPlatform::Dos.is_covered_by(MetadataProvider::Lemon64));
+		assert!(!RetroPlatform::Dos.is_covered_by(MetadataProvider::WorldOfSpectrum));
+		assert!(!RetroPlatform::Dos.is_covered_by(MetadataProvider::LemonAmiga));
+	}
+
+	#[test]
+	fn wikipedia_covers_every_platform_and_book_providers_cover_none() {
+		for platform in [
+			RetroPlatform::C64,
+			RetroPlatform::Spectrum,
+			RetroPlatform::Amiga,
+			RetroPlatform::Dos,
+		] {
+			assert!(platform.is_covered_by(MetadataProvider::Wikipedia));
+			assert!(!platform.is_covered_by(MetadataProvider::Hardcover));
+			assert!(!platform.is_covered_by(MetadataProvider::ComicVine));
+		}
+	}
 
 	#[test]
 	fn test_resolve_unique_extensions() {

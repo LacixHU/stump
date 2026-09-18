@@ -29,18 +29,19 @@ Stump is a free and open source comics, manga, and digital book server with OPDS
 
 This is a fork of [stumpapp/stump](https://github.com/stumpapp/stump). Extra features beyond `upstream/nightly`:
 
-- **Text-to-speech** — server-side Piper TTS, rate/pitch, sentence prefetch/gaps, Hungarian pronunciation aid
+- **Text-to-speech** — server-side Piper TTS (permission-gated), rate/pitch, sentence prefetch/gaps, Hungarian pronunciation aid
 - **Opt-in library access** — users only see libraries they have been granted; library settings gated by Manage library
-- **Nested libraries / series tabs** — hierarchical series; parent Series tab shows sub-series + direct books; Books tab is books-only
+- **Nested libraries / series tabs** — hierarchical series; parent Series tab shows sub-series + direct books; Books tab is books-only; in-series book search
 - **Hierarchy navigation** — go-up controls from book and nested series views
-- **Retro computer libraries** — catalog and play C64, ZX Spectrum, Amiga, and DOS disk/tape/program images in the browser (WASM); server-side save states; virtual keyboard and on-screen controls; sidecar/Wikipedia covers
+- **File explorer** — create folders, rename/delete, drag-and-drop upload (Manage library + Upload)
+- **Retro computer libraries** — catalog and play C64, ZX Spectrum, Amiga (A500/A1200), and DOS in the browser (WASM); Instant/Authentic loading; server-side save states (C64/Amiga/DOS); virtual keyboard, on-screen stick, gamepad; touch trackpad mouse (Amiga/DOS); sidecar/Wikipedia covers; Lemon64 / World of Spectrum / Lemon Amiga metadata
 - **Versioned thumbnails** — cache-safe URLs, more reliable upload/loading, nested series 3-cover stacks
 - **Localization** — broad EN/HU browser UI i18n, including reader controls and filters
 - **Filtering** — richer media/series filters and metadata-aware title sort
 - **EPUB reader** — better TOC/chapters, desktop fullscreen, download spinner, translated control tooltips
 - **PDF reader** — centered loading spinner while the file downloads
 - **Image reader** — pinch/pan zoom, 2× max zoom, slip-tolerant tap advance, swipe page turns, 20% side tap zones, Android centering, Auto scale default
-- **Server** — TLS, Apalis job worker with graceful shutdown, safer PDF routing
+- **Server** — TLS, firmware serving, Apalis job worker with graceful shutdown, safer PDF routing
 - **UI polish** — settings cleanup, Go Home error-boundary fix, image error fallback, dialog close buttons
 
 See [Fork features.md](./Fork%20features.md) for the full list.

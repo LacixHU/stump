@@ -10,12 +10,7 @@ use models::{
 		library, library_config, library_scan_record, media, metadata_provider_config,
 		scanned_directory, series,
 	},
-	shared::{
-		enums::{FileStatus, LibraryType},
-		image_processor_options::{
-			FitWithinResize, ImageProcessorOptions, ImageResizeMethod,
-		},
-	},
+	shared::enums::{FileStatus, LibraryType},
 };
 use sea_orm::{
 	prelude::*,
@@ -29,8 +24,8 @@ use crate::{
 	event::{self, CreatedOrUpdatedManyMedia},
 	filesystem::{
 		image::{
-			PlaceholderGenerationJobConfig, PlaceholderGenerationJobScope,
-			ThumbnailGenerationJobParams,
+			retro_cover_image_options, PlaceholderGenerationJobConfig,
+			PlaceholderGenerationJobScope, ThumbnailGenerationJobParams,
 		},
 		metadata::MetadataFetchJobParams,
 	},
@@ -52,19 +47,6 @@ use super::{
 	},
 	walk_library, walk_series, ScanOptions, WalkedLibrary, WalkedSeries, WalkerCtx,
 };
-
-/// The thumbnail options used for retro libraries that have no explicit thumbnail
-/// config. Covers come from a sidecar image or Wikipedia, both already cover-sized,
-/// so this only caps the occasional oversized original.
-fn retro_cover_image_options() -> ImageProcessorOptions {
-	ImageProcessorOptions {
-		resize_method: Some(ImageResizeMethod::FitWithin(FitWithinResize {
-			width: 512,
-			height: 512,
-		})),
-		..Default::default()
-	}
-}
 
 /// The task variants that are used to scan a library
 #[derive(Serialize, Deserialize)]

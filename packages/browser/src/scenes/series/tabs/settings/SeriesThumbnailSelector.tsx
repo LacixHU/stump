@@ -7,11 +7,13 @@ import {
 } from '@stump/client'
 import { Button, Dialog, PickSelect } from '@stump/components'
 import {
+	extractErrorMessage,
 	FragmentType,
 	graphql,
 	SeriesThumbnailSelectorUpdateMutation,
 	useFragment,
 } from '@stump/graphql'
+import { useLocaleContext } from '@stump/i18n'
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -52,6 +54,17 @@ const uploadMutation = graphql(`
 	}
 `)
 
+const regenerateMutation = graphql(`
+	mutation SeriesThumbnailSelectorRegenerate($id: ID!) {
+		regenerateSeriesThumbnail(id: $id) {
+			id
+			thumbnail {
+				url
+			}
+		}
+	}
+`)
+
 type OnSuccessData = PickSelect<SeriesThumbnailSelectorUpdateMutation, 'updateSeriesThumbnail'>
 
 type Props = {
@@ -67,6 +80,7 @@ type Props = {
 // in the header thumb on hover that lets you change if you have permissions
 
 export default function SeriesThumbnailSelector({ fragment }: Props) {
+	const { t } = useLocaleContext()
 	const series = useFragment(SeriesThumbnailSelectorFragment, fragment)
 
 	const { sdk } = useSDK()
@@ -108,6 +122,13 @@ export default function SeriesThumbnailSelector({ fragment }: Props) {
 			onSuccess: (data) => onSuccess(data.uploadSeriesThumbnail),
 		})
 
+	const { mutateAsync: regenerateThumbnail, isPending: isRegenerating } = useGraphQLMutation(
+		regenerateMutation,
+		{
+			onSuccess: (data) => onSuccess(data.regenerateSeriesThumbnail),
+		},
+	)
+
 	const imageUrl = useMemo(() => {
 		const base =
 			selectedBook && page ? sdk.media.bookPageURL(selectedBook.id, page) : series.thumbnail.url
@@ -144,6 +165,20 @@ export default function SeriesThumbnailSelector({ fragment }: Props) {
 		},
 		[series.id, uploadThumbnail],
 	)
+
+	const handleRegenerate = useCallback(async () => {
+		try {
+			await regenerateThumbnail({ id: series.id })
+			toast.success(t('thumbnailDropdown.regenerated'))
+		} catch (error) {
+			console.error(error)
+			// The server says *why* -- most often that the game has no sidecar cover and no
+			// Wikipedia match for its system -- and that is the only actionable part.
+			toast.error(t('thumbnailDropdown.regenerateFailed'), {
+				description: extractErrorMessage(error),
+			})
+		}
+	}, [regenerateThumbnail, series.id, t])
 
 	const handleConfirm = useCallback(async () => {
 		if (!selectedBook || page == null) return
@@ -194,6 +229,8 @@ export default function SeriesThumbnailSelector({ fragment }: Props) {
 						<EditThumbnailDropdown
 							onChooseSelector={() => setIsOpen(true)}
 							onUploadImage={handleUploadImage}
+							onRegenerate={handleRegenerate}
+							isRegenerating={isRegenerating}
 						/>
 					</span>
 				</Dialog.Trigger>

@@ -72,6 +72,13 @@ type RetroPlayerSceneQuery = {
 
 type RetroPlayerSceneQueryVariables = { id: string }
 
+/**
+ * Raised when a Kickstart image the emulator needs is missing from the server. The error
+ * panel offers an extra hint in that case, and the message it carries is translated, so
+ * the case is recognised by the error's type rather than by words in its text.
+ */
+class MissingFirmwareError extends Error {}
+
 /** Skip the emulated 1541 and inject the program straight into RAM. */
 const DEFAULT_DISK_SPEED: RetroDiskSpeed = 'instant'
 
@@ -101,12 +108,19 @@ export const RETRO_PLAYER_SCENE_QUERY = new TypedDocumentString(`
 
 export default function RetroPlayerSceneContainer() {
 	const { id } = useParams()
+	const { t } = useLocaleContext()
 	if (!id) {
 		throw new Error('Media ID is required')
 	}
 
 	return (
-		<Suspense fallback={<div className="flex h-full items-center justify-center">Loading…</div>}>
+		<Suspense
+			fallback={
+				<div className="flex h-full items-center justify-center">
+					{t('reader.retro.loading', { defaultValue: 'Loading…' })}
+				</div>
+			}
+		>
 			<RetroPlayerScene id={id} />
 		</Suspense>
 	)
@@ -133,6 +147,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 
 	const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle')
 	const [errorMessage, setErrorMessage] = useState<string | null>(null)
+	const [missingFirmware, setMissingFirmware] = useState(false)
 	const [activeMediaId, setActiveMediaId] = useState(id)
 	const [platform, setPlatform] = useState<RetroPlatform>('c64')
 	const [inputMode, setInputMode] = useState<RetroInputMode>('mixed')
@@ -153,6 +168,14 @@ function RetroPlayerScene({ id }: { id: string }) {
 	const [showKeyboard, setShowKeyboard] = useState(false)
 	const [overwriteSaveOpen, setOverwriteSaveOpen] = useState(false)
 	const isMobile = useMediaMatch('(max-width: 768px)')
+
+	// Both save paths refuse the same way, and both failure paths blame the same thing.
+	const saveStateUnavailableMessage = t('reader.retro.saveStateUnavailable', {
+		defaultValue: 'Save states are not available for this emulator yet',
+	})
+	const saveStateFailedMessage = t('reader.retro.saveStateFailed', {
+		defaultValue: 'Failed to save state',
+	})
 
 	const disks = useMemo(() => {
 		const list = media?.series?.media ?? []
@@ -209,13 +232,18 @@ function RetroPlayerScene({ id }: { id: string }) {
 			if (!res.ok) {
 				throw new Error(
 					res.status === 400
-						? 'This file cannot be played (not a retro image)'
-						: `Failed to load play file (${res.status})`,
+						? t('reader.retro.notPlayable', {
+								defaultValue: 'This file cannot be played (not a retro image)',
+							})
+						: t('reader.retro.playFileFailed', {
+								defaultValue: 'Failed to load play file ({{status}})',
+								status: res.status,
+							}),
 				)
 			}
 			return res.arrayBuffer()
 		},
-		[sdk],
+		[sdk, t],
 	)
 
 	const fetchControls = useCallback(
@@ -243,15 +271,19 @@ function RetroPlayerScene({ id }: { id: string }) {
 				const res = await fetch(url, { credentials: 'include' })
 				if (!res.ok) {
 					if (optional) continue
-					throw new Error(
-						`Missing firmware "${name}". Place Kickstart ROMs in STUMP_FIRMWARE_DIR (user-supplied only).`,
+					throw new MissingFirmwareError(
+						t('reader.retro.missingFirmware', {
+							defaultValue:
+								'Missing firmware "{{name}}". Place Kickstart ROMs in STUMP_FIRMWARE_DIR (user-supplied only).',
+							name,
+						}),
 					)
 				}
 				out[name] = await res.arrayBuffer()
 			}
 			return out
 		},
-		[sdk],
+		[sdk, t],
 	)
 
 	const startPlay = useCallback(
@@ -259,6 +291,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 			stopEmulator()
 			setStatus('loading')
 			setErrorMessage(null)
+			setMissingFirmware(false)
 
 			try {
 				const ext = extension || activeDisk?.extension || 'd64'
@@ -282,7 +315,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 
 				const canvas = canvasRef.current
 				if (!canvas) {
-					throw new Error('Canvas not ready')
+					throw new Error(t('reader.retro.canvasNotReady', { defaultValue: 'Canvas not ready' }))
 				}
 
 				const fileName =
@@ -324,13 +357,17 @@ function RetroPlayerScene({ id }: { id: string }) {
 					setOverlayKeys([])
 				}
 			} catch (e) {
-				const message = e instanceof Error ? e.message : 'Failed to start emulator'
+				const message =
+					e instanceof Error
+						? e.message
+						: t('reader.retro.startFailed', { defaultValue: 'Failed to start emulator' })
+				setMissingFirmware(e instanceof MissingFirmwareError)
 				setErrorMessage(message)
 				setStatus('error')
 				toast.error(message)
 			}
 		},
-		[activeDisk, fetchControls, fetchFirmware, fetchImage, id, sdk, stopEmulator, userId],
+		[activeDisk, fetchControls, fetchFirmware, fetchImage, id, sdk, stopEmulator, t, userId],
 	)
 
 	useEffect(() => {
@@ -352,7 +389,10 @@ function RetroPlayerScene({ id }: { id: string }) {
 				await handle.mountImage(image, fileName)
 				setActiveMediaId(diskId)
 			} catch (e) {
-				const message = e instanceof Error ? e.message : 'Could not insert disk'
+				const message =
+					e instanceof Error
+						? e.message
+						: t('reader.retro.diskInsertFailed', { defaultValue: 'Could not insert disk' })
 				toast.error(message)
 			}
 			return
@@ -366,7 +406,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 
 	const performSave = async () => {
 		if (!handleRef.current?.saveState) {
-			toast.message('Save states not available for this emulator yet')
+			toast.message(saveStateUnavailableMessage)
 			return
 		}
 		if (saveStateBusyRef.current) return
@@ -375,7 +415,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 		try {
 			const data = await handleRef.current.saveState()
 			if (!data) {
-				toast.message('No save state produced')
+				toast.message(t('reader.retro.saveStateEmpty', { defaultValue: 'No save state produced' }))
 				return
 			}
 			// Note: keyed to the book that was opened, not `activeMediaId`. A multi-disk
@@ -383,9 +423,11 @@ function RetroPlayerScene({ id }: { id: string }) {
 			// different media id.
 			await sdk.media.putSaveState(id, data)
 			hasSaveStateRef.current = true
-			toast.success('Save state saved to the server')
+			toast.success(
+				t('reader.retro.saveStateSaved', { defaultValue: 'Save state saved to the server' }),
+			)
 		} catch (e) {
-			toast.error(saveStateErrorMessage(e, 'Failed to save state'))
+			toast.error(saveStateErrorMessage(e, saveStateFailedMessage, t))
 		} finally {
 			saveStateBusyRef.current = false
 		}
@@ -393,7 +435,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 
 	const onSave = async () => {
 		if (!handleRef.current?.saveState) {
-			toast.message('Save states not available for this emulator yet')
+			toast.message(saveStateUnavailableMessage)
 			return
 		}
 		if (saveStateBusyRef.current || overwriteSaveOpen) return
@@ -406,7 +448,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 				return
 			}
 		} catch (e) {
-			toast.error(saveStateErrorMessage(e, 'Failed to save state'))
+			toast.error(saveStateErrorMessage(e, saveStateFailedMessage, t))
 			return
 		}
 
@@ -415,7 +457,11 @@ function RetroPlayerScene({ id }: { id: string }) {
 
 	const onLoad = async () => {
 		if (!handleRef.current?.loadState) {
-			toast.message('Load state not available for this emulator yet')
+			toast.message(
+				t('reader.retro.loadStateUnavailable', {
+					defaultValue: 'Loading a save state is not available for this emulator yet',
+				}),
+			)
 			return
 		}
 		if (saveStateBusyRef.current) return
@@ -424,14 +470,24 @@ function RetroPlayerScene({ id }: { id: string }) {
 		try {
 			const data = await sdk.media.getSaveState(id)
 			if (!data) {
-				toast.message('No save state stored for this game')
+				toast.message(
+					t('reader.retro.saveStateMissing', {
+						defaultValue: 'No save state stored for this game',
+					}),
+				)
 				return
 			}
 			await handleRef.current.loadState(data)
 			hasSaveStateRef.current = true
-			toast.success('Save state loaded')
+			toast.success(t('reader.retro.saveStateLoaded', { defaultValue: 'Save state loaded' }))
 		} catch (e) {
-			toast.error(saveStateErrorMessage(e, 'Failed to load state'))
+			toast.error(
+				saveStateErrorMessage(
+					e,
+					t('reader.retro.loadStateFailed', { defaultValue: 'Failed to load state' }),
+					t,
+				),
+			)
 		} finally {
 			saveStateBusyRef.current = false
 		}
@@ -457,7 +513,11 @@ function RetroPlayerScene({ id }: { id: string }) {
 
 	const onReset = () => {
 		if (!handleRef.current?.reset) {
-			toast.message('Reset is not available for this emulator')
+			toast.message(
+				t('reader.retro.resetUnavailable', {
+					defaultValue: 'Reset is not available for this emulator',
+				}),
+			)
 			return
 		}
 		handleRef.current.reset()
@@ -486,7 +546,11 @@ function RetroPlayerScene({ id }: { id: string }) {
 			// The machine restarts around the game, so this reloads the image with it.
 			await handle.setMachine(id)
 		} catch (e) {
-			toast.error(e instanceof Error ? e.message : 'Could not switch machine')
+			toast.error(
+				e instanceof Error
+					? e.message
+					: t('reader.retro.machineSwitchFailed', { defaultValue: 'Could not switch machine' }),
+			)
 		}
 	}
 
@@ -531,7 +595,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 			setOverlayKeys(next)
 			setDraftOverlayKeys(next)
 			setEditingOverlay(false)
-			toast.success('Overlay saved for this game')
+			toast.success(t('reader.retro.overlaySaved', { defaultValue: 'Overlay saved for this game' }))
 		} catch (e) {
 			const axiosData =
 				e && typeof e === 'object' && 'response' in e
@@ -541,7 +605,10 @@ function RetroPlayerScene({ id }: { id: string }) {
 				axiosData?.data?.message ||
 				(e instanceof Error
 					? e.message
-					: `Failed to save overlay (${axiosData?.status ?? 'error'})`)
+					: t('reader.retro.overlaySaveFailed', {
+							defaultValue: 'Failed to save overlay ({{error}})',
+							error: axiosData?.status ?? 'error',
+						}))
 			toast.error(message)
 		}
 	}
@@ -577,15 +644,30 @@ function RetroPlayerScene({ id }: { id: string }) {
 				<div className="gap-1 ml-auto flex items-center">
 					{capabilities.saveState ? (
 						<>
-							<Button size="sm" variant="ghost" onClick={onSave} title="Save state">
+							<Button
+								size="sm"
+								variant="ghost"
+								onClick={onSave}
+								title={t('reader.retro.saveState', { defaultValue: 'Save state' })}
+							>
 								<Save className="h-4 w-4" />
 							</Button>
-							<Button size="sm" variant="ghost" onClick={onLoad} title="Load state">
+							<Button
+								size="sm"
+								variant="ghost"
+								onClick={onLoad}
+								title={t('reader.retro.loadState', { defaultValue: 'Load state' })}
+							>
 								<HardDrive className="h-4 w-4" />
 							</Button>
 						</>
 					) : null}
-					<Button size="sm" variant="ghost" onClick={onFullscreen} title="Fullscreen">
+					<Button
+						size="sm"
+						variant="ghost"
+						onClick={onFullscreen}
+						title={t('reader.retro.fullscreen', { defaultValue: 'Fullscreen' })}
+					>
 						<Fullscreen className="h-4 w-4" />
 					</Button>
 					{canUseKeyboard ? (
@@ -653,6 +735,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 									onReleased={focusCanvas}
 									platform={platform}
 									sendKey={sendKey}
+									t={t}
 								/>
 							) : null}
 						</div>
@@ -664,10 +747,12 @@ function RetroPlayerScene({ id }: { id: string }) {
 						<div className="inset-0 p-4 absolute z-10 flex items-center justify-center">
 							<div className="max-w-md text-sm text-center text-destructive">
 								<p>{errorMessage}</p>
-								{errorMessage.includes('Kickstart') && (
+								{missingFirmware && (
 									<p className="mt-2 text-muted-foreground">
-										Set STUMP_FIRMWARE_DIR and place required Kickstart files there. ROMs are never
-										bundled.
+										{t('reader.retro.firmwareHint', {
+											defaultValue:
+												'Set STUMP_FIRMWARE_DIR and place required Kickstart files there. ROMs are never bundled.',
+										})}
 									</p>
 								)}
 								<Button
@@ -681,7 +766,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 										)
 									}
 								>
-									Retry
+									{t('reader.retro.retry', { defaultValue: 'Retry' })}
 								</Button>
 							</div>
 						</div>
@@ -690,7 +775,9 @@ function RetroPlayerScene({ id }: { id: string }) {
 
 				{disks.length > 1 && (
 					<aside className="border-edge p-3 md:w-56 md:border-l md:border-t-0 md:max-h-none max-h-40 w-full shrink-0 overflow-y-auto border-t bg-background">
-						<p className="mb-2 text-xs font-medium text-muted-foreground uppercase">Disks</p>
+						<p className="mb-2 text-xs font-medium text-muted-foreground uppercase">
+							{t('reader.retro.disks', { defaultValue: 'Disks' })}
+						</p>
 						<ul className="space-y-1">
 							{disks.map((disk) => (
 								<li key={disk.id}>
@@ -721,14 +808,20 @@ function RetroPlayerScene({ id }: { id: string }) {
  * bytes rather than parsed JSON and `response.data.message` is not available -- fall back
  * to the status code in that case.
  */
-function saveStateErrorMessage(error: unknown, fallback: string): string {
+function saveStateErrorMessage(
+	error: unknown,
+	fallback: string,
+	t: (key: string, options?: Record<string, unknown>) => string,
+): string {
 	const response =
 		error && typeof error === 'object' && 'response' in error
 			? (error as { response?: { data?: { message?: string }; status?: number } }).response
 			: undefined
 
 	if (response?.status === 413) {
-		return 'Save state is too large for this server'
+		return t('reader.retro.saveStateTooLarge', {
+			defaultValue: 'Save state is too large for this server',
+		})
 	}
 
 	if (typeof response?.data?.message === 'string') {

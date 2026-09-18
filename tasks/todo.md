@@ -917,3 +917,148 @@ Measured in headless Chrome against the real module:
   buffer hand-back, and the emulated CPU's reaction. `jest` + jsdom has none of that. It is
   covered instead by the headless harness described in the session memory, which runs the
   real module against the real tapes.
+
+# Platform-filtered game cover search + thumbnail regeneration
+
+## Problem
+
+Two separate gaps, both on the retro/game side of the library.
+
+**1. Cover search is not filtered by the game's system.** `WikipediaCoverClient` already
+accepts a platform and maps it to a Wikipedia subcategory
+(`cover_category_for_platform`: `Commodore 64 game covers`, `ZX Spectrum game covers`,
+`Amiga game covers`, `MS-DOS game covers`). But:
+
+- The hint is read from `query.provider_hints["platform"]`
+  (`crates/integrations/metadata/src/providers/wikipedia.rs`), and nothing on the
+  `fetchMediaMetadata` path ever sets it. `core/src/filesystem/metadata/fetch.rs` only ever
+  inserts `comic_vine_volume_id`. So every UI-driven cover search falls through to the
+  cross-platform `Video game covers` category.
+- Even with a category set, `lookup_cover_url` finishes with an untargeted
+  `"{title} cover video game"` file search, which happily returns a Spectrum cover for a
+  C64 game.
+- `filter_providers` narrows providers by `LibraryType` only. Every retro provider
+  (Lemon64, World of Spectrum, Lemon Amiga, Wikipedia) claims `LibraryType::Retro`, so a
+  C64 game is searched against the Spectrum and Amiga databases too.
+
+**2. There is no way to regenerate a thumbnail.** `EditThumbnailDropdown` offers exactly
+two options, "Select from books" and "Upload image". The pipeline that finds a cover
+(sidecar image -> Wikipedia lookup -> page extraction) only runs at scan time or from the
+library-wide thumbnail job, so a game whose cover was missing when it was scanned stays
+blank forever unless the whole library is reprocessed.
+
+## Decisions
+
+| Question                                | Decision                                                                                       |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Where the platform comes from           | Resolved from the file path + extension at search time, same as the thumbnail job already does |
+| Platform-specific DBs for other systems | Excluded entirely (a C64 game never queries World of Spectrum / Lemon Amiga)                   |
+| Wikipedia with a known platform         | Platform category first, then the article lead image; the cross-platform fallback is dropped   |
+| Wikipedia with no platform              | Unchanged                                                                                      |
+| "Regenerate" for a game                 | Re-runs cover discovery: sidecar -> platform-filtered Wikipedia lookup                         |
+| "Regenerate" for a page-based book      | Re-extracts the cover page (no provider search - that is what "Search metadata" is for)        |
+| "Regenerate" for a series / library     | Re-derives from the first book inside it, exactly like the thumbnail job                       |
+| Where the action lives                  | A third entry in `EditThumbnailDropdown`, so it appears on book, series and library settings   |
+
+## Plan
+
+### Backend - platform-filtered cover search
+
+- [x] `core/src/filesystem/media/format/retro.rs`: add `RetroPlatform::is_covered_by(MetadataProvider)` - Lemon64 -> C64, WorldOfSpectrum -> Spectrum, LemonAmiga -> Amiga, Wikipedia -> any
+- [x] `core/src/filesystem/metadata/fetch.rs`: - resolve the media's `RetroPlatform` from its path, but only when the extension is a
+      retro extension (`ContentType::is_retro_extension`) so nothing else is touched - insert it into `SearchQuery.provider_hints["platform"]` - pass it to `filter_providers`, which gains a `retro_platform: Option<RetroPlatform>` arm - same for `fetch_series_metadata`, resolved from the series path
+- [x] `crates/integrations/metadata/src/providers/wikipedia.rs`: reorder `lookup_cover_url`
+      so a known platform searches its own category first and never falls back to a
+      cross-platform search; extract `GENERIC_COVER_CATEGORY` so "did we get a real
+      platform" is a single check
+- [x] Unit tests for `is_covered_by` and for the new `lookup_cover_url` ordering
+
+### Backend - regenerate
+
+- [x] `core/src/filesystem/image/thumbnail/generate.rs`: `copy_thumbnail_to_entity`,
+      `generate_series_thumbnail` and `generate_library_thumbnail` take
+      `(&DatabaseConnection, &StumpConfig)` instead of `&JobContext` (they only ever used
+      `ctx.conn()` / `ctx.config()`), and the latter two become `pub` so a mutation can call
+      them. Job call sites pass `ctx.conn(), ctx.config()`.
+- [x] `regenerateMediaThumbnail(id: ID!): Media!` - `EditThumbnails` guard, `force_regen: true`
+- [x] `regenerateSeriesThumbnail(id: ID!): Series!`
+- [x] `regenerateLibraryThumbnail(id: ID!): Library!`
+- [x] Refresh `crates/graphql/schema.graphql`
+
+### Frontend
+
+- [x] `EditThumbnailDropdown`: optional `onRegenerate` + `isRegenerating`, rendered as a
+      third menu item only when the caller supplies a handler
+- [x] Wire the three mutations into `BookThumbnailSelector`, `SeriesThumbnailSelector` and
+      `LibraryThumbnailSelector`, reusing each one's existing cache-bust + invalidation
+- [x] `thumbnailDropdown.options.regenerate` in `en-US.json` (this fork adds new keys to
+      en-US only - see `fileExplorer.actions`)
+- [x] `yarn workspace @stump/graphql codegen`
+
+### Verification
+
+- [x] `cargo test -p stump_core -p metadata-integrations` (new + existing)
+- [x] `cargo clippy` on the touched crates
+- [x] `tsc` type-check via the scratch tsconfig
+- [x] prettier + `cargo fmt` on every touched file
+
+## Review
+
+### Cover search is now kept to the game's own system
+
+`fetch_media_metadata` resolves the game's `RetroPlatform` from its path (only when the
+extension really is a retro one, since `resolve_retro_platform` defaults to C64 for
+anything it does not know) and does two things with it: puts it in
+`provider_hints["platform"]`, and hands it to `filter_providers`. `fetch_series_metadata`
+does the same from the series path, where an unhinted path yields `None` and nothing is
+filtered rather than guessed.
+
+`RetroPlatform::is_covered_by` is the single place that says which provider covers which
+system. Lemon64, World of Spectrum and Lemon Amiga each answer for one machine; Wikipedia
+answers for all of them and narrows itself with the hint instead.
+
+Inside `lookup_cover_url` the order changed. With a platform in hand it now searches that
+platform's Wikipedia cover category _first_, falls back to the game's article image, and
+never reaches the untargeted `"{title} cover video game"` search -- which is exactly the
+query that used to hand a C64 game its Spectrum box art. With no platform the old order is
+untouched.
+
+The three platform-specific providers are stubs that return no candidates today, so the
+visible effect right now comes entirely from the Wikipedia change. The provider filter is
+what keeps that true once the scrapers are written.
+
+### Regenerating a thumbnail
+
+`copy_thumbnail_to_entity`, `generate_series_thumbnail` and `generate_library_thumbnail`
+took a `&JobContext` but only ever used `conn()` and `config()`, so they now take those two
+directly and the latter two are public. That is the whole reason a mutation can reuse the
+job's logic rather than restate it.
+
+| Mutation                     | What it rebuilds from                                            |
+| ---------------------------- | ---------------------------------------------------------------- |
+| `regenerateMediaThumbnail`   | The file: sidecar cover -> platform-filtered Wikipedia -> page 1 |
+| `regenerateSeriesThumbnail`  | The first book in the series                                     |
+| `regenerateLibraryThumbnail` | The first book of the first series                               |
+
+`thumbnail_options_for` gives a retro library with no explicit thumbnail config the same
+options the scanner uses, so a regenerated game cover is sized like a scanned one. It lives
+next to the media mutation and is shared by all three.
+
+All three re-read their row after generating, because the generator writes the new
+thumbnail path itself and returning the pre-generation model would hand the client a path
+it already had.
+
+### Notes
+
+- **Force-regen drops a thumbnail it cannot replace.** For a game with no sidecar and no
+  Wikipedia match, `generate_book_thumbnail` deletes the existing file and errors. That is
+  the contract `generateLibraryThumbnails(forceRegenerate: true)` has always had, so
+  "Regenerate" behaves the same per-item as it does library-wide -- but it does mean
+  clicking it on a game whose cover was uploaded by hand can clear it. The toast now shows
+  the server's reason rather than a bare failure.
+- **No test for the new `lookup_cover_url` ordering.** It is three HTTP round trips deep
+  and the repo has no HTTP mocking. What is tested instead is the predicate the ordering
+  turns on: every platform the emulator supports must resolve to a category other than
+  `GENERIC_COVER_CATEGORY`, or the search silently widens to every system again.
+- **The explorer work was committed mid-task** (`f7d3988c`) by another session sharing this
+  checkout. Nothing here touches those files.

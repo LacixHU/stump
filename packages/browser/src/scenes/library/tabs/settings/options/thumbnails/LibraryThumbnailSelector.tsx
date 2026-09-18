@@ -5,7 +5,12 @@ import {
 	useGraphQLUploadMutation,
 } from '@stump/client'
 import { Button, Dialog, Label, PickSelect, Text } from '@stump/components'
-import { graphql, LibraryThumbnailSelectorUpdateMutation } from '@stump/graphql'
+import {
+	extractErrorMessage,
+	graphql,
+	LibraryThumbnailSelectorUpdateMutation,
+} from '@stump/graphql'
+import { useLocaleContext } from '@stump/i18n'
 import { Suspense, useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -40,9 +45,22 @@ const uploadMutation = graphql(`
 	}
 `)
 
+const regenerateMutation = graphql(`
+	mutation LibraryThumbnailSelectorRegenerate($id: ID!) {
+		regenerateLibraryThumbnail(id: $id) {
+			id
+			thumbnail {
+				url
+			}
+		}
+	}
+`)
+
 type OnSuccessData = PickSelect<LibraryThumbnailSelectorUpdateMutation, 'updateLibraryThumbnail'>
 
 export default function LibraryThumbnailSelector() {
+	const { t } = useLocaleContext()
+
 	const [selectedSeries, setSelectedSeries] = useState<SelectedSeries>()
 	const [selectedBook, setSelectedBook] = useState<SelectedBook>()
 	const [page, setPage] = useState<number>()
@@ -76,6 +94,13 @@ export default function LibraryThumbnailSelector() {
 			onSuccess: (data) => onSuccess(data.uploadLibraryThumbnail),
 		})
 
+	const { mutateAsync: regenerateThumbnail, isPending: isRegenerating } = useGraphQLMutation(
+		regenerateMutation,
+		{
+			onSuccess: (data) => onSuccess(data.regenerateLibraryThumbnail),
+		},
+	)
+
 	const handleOpenChange = (nowOpen: boolean) => {
 		if (!nowOpen) {
 			setIsOpen(false)
@@ -102,6 +127,20 @@ export default function LibraryThumbnailSelector() {
 		},
 		[library.id, uploadThumbnail],
 	)
+
+	const handleRegenerate = useCallback(async () => {
+		try {
+			await regenerateThumbnail({ id: library.id })
+			toast.success(t('thumbnailDropdown.regenerated'))
+		} catch (error) {
+			console.error(error)
+			// The server says *why* -- most often that the game has no sidecar cover and no
+			// Wikipedia match for its system -- and that is the only actionable part.
+			toast.error(t('thumbnailDropdown.regenerateFailed'), {
+				description: extractErrorMessage(error),
+			})
+		}
+	}, [library.id, regenerateThumbnail, t])
 
 	const handleConfirm = useCallback(async () => {
 		if (!selectedBook || !page) return
@@ -183,6 +222,8 @@ export default function LibraryThumbnailSelector() {
 				<EditThumbnailDropdown
 					onChooseSelector={() => setIsOpen(true)}
 					onUploadImage={handleUploadImage}
+					onRegenerate={handleRegenerate}
+					isRegenerating={isRegenerating}
 				/>
 			</div>
 
