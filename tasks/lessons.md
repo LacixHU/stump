@@ -64,3 +64,32 @@ be exercised end to end. Unit tests over pure helpers prove the helpers, not the
 
 Check a batch, not one title, and always include a known true negative (Zamzara has no
 Wikipedia cover) so a "fix" that starts inventing matches is caught.
+
+## `relative="path"` in react-router does not resolve against the URL
+
+**What went wrong:** a pathless guard route under a `:id/*` layout redirected with
+`<Navigate to=".." />` and landed on the collection root (`/series`) instead of the entity.
+I "fixed" it with `relative="path"`, reasoning that path-relative `..` would pop one URL
+segment off `/series/:id/settings` and give `/series/:id`. It gives `/series` too. I only
+caught it because I ran the resolver instead of trusting the reasoning.
+
+`resolveTo` in `@remix-run/router` only falls back to `locationPathname` when `to` has **no
+pathname at all** (a search- or hash-only `to`). Whenever `to` has a pathname, `from` is the
+last path-contributing match's `pathnameBase` — for both `relative="route"` and
+`relative="path"`. All the flag changes is whether leading `..` segments pop _routes_ before
+that. And `getPathContributingMatches` filters pathless routes out, so a guard rendered in
+one resolves as if it were its parent layout.
+
+**The rule:** for a redirect out of a pathless guard, `to="."` is the parent layout's path
+(`/series/:id`) and `to=".."` is one above it (`/series`) — never reach for `relative="path"`
+to mean "one URL segment up". When a relative destination matters, check it before building:
+
+```js
+const R = require('./node_modules/@remix-run/router/dist/router.cjs.js')
+const m = R.matchRoutes(routes, '/series/abc/settings', '/series')
+// feed the path-contributing pathnameBases into R.resolveTo and read the answer
+```
+
+This is also why guards that sit on `/:id/settings` need an explicit destination rather than
+a relative one: `LibraryAdminLayout` renders under nested settings paths, so any relative
+form either loops or overshoots.

@@ -1,11 +1,12 @@
 import { UserPermission } from '@stump/graphql'
 import { cx } from 'class-variance-authority'
 import { Suspense, useEffect, useMemo } from 'react'
-import { Outlet, useNavigate } from 'react-router'
+import { Outlet, useNavigate, useParams } from 'react-router'
 
 import { SceneContainer } from '@/components/container'
 import { useAppContext } from '@/context'
 import { usePreferences } from '@/hooks'
+import paths from '@/paths'
 
 type Props = {
 	applySceneDefaults?: boolean
@@ -21,12 +22,16 @@ export default function LibraryAdminLayout({ applySceneDefaults = true }: Props)
 	} = usePreferences()
 
 	const navigate = useNavigate()
+	const { id } = useParams()
 	const canManage = useMemo(() => checkPermission(UserPermission.ManageLibrary), [checkPermission])
 	useEffect(() => {
 		if (!canManage) {
-			navigate('..')
+			// Note: a route-relative '..' resolves to /libraries here, since this is a pathless
+			// route under the library's splat layout. That is an unimplemented stub page, so send
+			// them back to the library itself instead.
+			navigate(id ? paths.librarySeries(id) : paths.home())
 		}
-	}, [canManage, navigate])
+	}, [canManage, navigate, id])
 
 	if (!canManage) {
 		return null

@@ -27,7 +27,7 @@ const completeSeriesMutation = graphql(`
 `)
 
 export default function SeriesHeader() {
-	const { checkPermission } = useAppContext()
+	const { checkPermission, isServerOwner } = useAppContext()
 	const {
 		series: {
 			id,
@@ -185,7 +185,7 @@ export default function SeriesHeader() {
 				tabs={tabs}
 				actions={actions}
 				stats={resolvedStats}
-				settingsLink="settings"
+				settingsLink={isServerOwner ? 'settings' : undefined}
 				onInfoClick={() => setIsOverviewSheetOpen(true)}
 			/>
 

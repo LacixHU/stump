@@ -1163,3 +1163,83 @@ in the session scratchpad). 18 `dos-*` tests pass; `tsc` clean for both touched 
 - **The extractor's failure mode is silent.** `extract-zip: No error` is libzip reporting no
   zip-level error because the failure was the MEMFS write. Worth remembering if another
   bundle stalls at mount: check the emscripten FS, not the archive.
+
+## Series settings lands on the "under construction" page
+
+Reported as: clicking Series settings shows "This is awkward / You've stumbled upon a page
+that's still being developed." The address bar reads `/series`, with no series id.
+
+### What the page is
+
+`/series` is `SeriesSearchScene`, which is just `<UnderConstruction />`. Only three routes
+render it: `/series`, `/libraries`, and unknown `/clubs/*` paths.
+
+### How you get there
+
+Nothing in the app links to `/series` — not in the source, not in the shipped bundle (the
+only `/series` string literal there is an API URL). The single reachable path is
+`ServerOwnerRouteWrapper`'s `<Navigate to=".." replace />` firing on
+`/series/:id/settings`.
+
+The guard is a **pathless** route nested under the `:id/*` layout. `getPathContributingMatches`
+drops pathless matches, so route-relative `..` pops the `:id` segment along with the guard and
+resolves to `/series`. Confirmed against the installed `@remix-run/router` with the real route
+tree:
+
+```
+to=".." relative=route -> /series
+to=".." relative=path  -> /series     <- relative="path" does NOT help, see lessons.md
+to="."                 -> /series/abc
+```
+
+`LibraryAdminLayout`'s `navigate('..')` has the same shape and lands on `/libraries`, also an
+unimplemented stub.
+
+### Fix
+
+| File                      | Change                                                                   |
+| ------------------------- | ------------------------------------------------------------------------ |
+| `ServerOwnerRouteWrapper` | Redirect to `.` (the entity) instead of `..`; optional `redirectTo` prop |
+| `SeriesHeader`            | Gate the settings gear on `isServerOwner`, as `LibraryHeader` does       |
+| `LibraryAdminLayout`      | Redirect to the library instead of `..`                                  |
+
+The gear was the only entry point in the app to an owner-only route that wasn't gated on the
+same condition the route checks — `LibraryHeader` has always used
+`settingsLink={canManageLibrary ? 'settings' : undefined}`.
+
+### Verification
+
+Real release binary against a scratch copy of `~/.stump` (users cleared, fresh owner claimed
+via `/api/v2/auth/register`), serving the real `apps/web/dist`, driven with headless Chrome.
+`isServerOwner: false` was simulated by intercepting `/api/v2/auth/viewer` so the server still
+authorises every GraphQL query — otherwise a non-owner can't see the series at all and only
+ever gets `/404`.
+
+| Case                              | Gear   | `/series/:id/settings` resolves to |
+| --------------------------------- | ------ | ---------------------------------- |
+| Server owner                      | shown  | the settings scene                 |
+| Client sees `isServerOwner:false` | hidden | `/series/:id/books`                |
+| `ManageLibrary` present           | n/a    | `/libraries/:id/settings/basics`   |
+| `ManageLibrary` absent            | n/a    | `/libraries/:id/series`            |
+
+Owner-path regression checks before the change, all reaching the settings scene: fresh load,
+pure client-side nav (library -> series -> gear), retro platform series with children, and a
+child series (Amiga 500 -> Aladdin).
+
+### Open question
+
+**The reporter is the server owner, so the guard should never have fired for them.**
+`users.is_server_owner` is 1, every session row is theirs, the server serves
+`isServerOwner: true`, and the client wires it straight through. The `Files` tab was visible
+on the page, which needs `checkPermission(FileExplorer)` — and since their `permissions`
+column is `NULL`, that check reduces to exactly `isServerOwner`. So the flag read true and
+false in the same render tree, which nothing in the code explains.
+
+The code they were running is identical on this path (`git diff 0a18566b HEAD` over the series
+scenes, `EntityHeader`, `ServerOwnerRouteWrapper`, `AppLayout`, `AppRouter` and the user store
+touches only `SeriesExplorerScene` and `SeriesThumbnailSelector`) — but `apps/web/dist` is
+built by hand, and their server last ran 2026-09-18 17:41 while the dist predating this task
+was built 2026-09-19 01:10. So the bundle in that tab was an older build than any I could
+inspect. The fix removes the dead end either way; if it recurs on a current build, the thing
+to capture is `(await (await fetch('/api/v2/auth/viewer', { credentials: 'include' })).json()).isServerOwner`
+at the moment of the click.
