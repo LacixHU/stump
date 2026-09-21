@@ -19,10 +19,11 @@ import {
 	zipEntryNames,
 } from './dos-images'
 import { dispatchableKeyCode, swallowDosKeyRepeat } from './dos-keys'
+import { createDosMouseEvent, isCompatTouchMouse, isTouchPointer } from './dos-mouse'
 import {
 	type DosFsStamp,
 	type DosSaveFile,
-	packDosSaveV2,
+	packDosSaveV3,
 	selectChangedPaths,
 	shouldSkipDosPath,
 	unpackDosSave,
@@ -58,6 +59,7 @@ type DosSdlAudio = {
 	nextPlayTime?: number
 	numAudioTimersPending?: number
 	paused?: boolean
+	queueNewAudioData?: () => void
 	timer?: number
 }
 
@@ -65,9 +67,11 @@ type DosEmscriptenModule = {
 	Asyncify?: { currData: unknown; state: number }
 	FS?: EmscriptenFS
 	HEAPU8?: Uint8Array
+	preMainLoop?: () => boolean | void
 	SDL?: {
 		audio?: DosSdlAudio
 		audioContext?: AudioContext
+		startTime?: number | null
 	}
 	wasmMemory?: WebAssembly.Memory
 }
@@ -123,16 +127,6 @@ function loadDos(): Promise<DosFactory> {
 		document.head.appendChild(element)
 	})
 	return scriptPromise
-}
-
-function isCompatTouchMouse(event: MouseEvent): boolean {
-	const caps = (event as MouseEvent & { sourceCapabilities?: { firesTouchEvents?: boolean } })
-		.sourceCapabilities
-	return !!caps?.firesTouchEvents
-}
-
-function isTouchPointer(event: PointerEvent): boolean {
-	return event.pointerType === 'touch' || event.pointerType === 'pen'
 }
 
 /**
@@ -299,32 +293,53 @@ function liveHeap(em: DosEmscriptenModule | undefined): Uint8Array | null {
 	return new Uint8Array(buffer)
 }
 
-function freezeDosRuntime(em: DosEmscriptenModule) {
-	const audio = em.SDL?.audio
-	if (audio) {
-		audio.paused = true
-		if (audio.timer != null) {
-			window.clearTimeout(audio.timer)
-			audio.timer = undefined
-			audio.numAudioTimersPending = 0
+const DOS_RUNTIME_IDLE_MS = 250
+
+function atMainLoopBoundary<T>(em: DosEmscriptenModule, fn: () => T): Promise<T> {
+	return new Promise((resolve, reject) => {
+		const previous = em.preMainLoop
+		let settled = false
+		const finish = () => {
+			if (settled) return
+			settled = true
+			window.clearTimeout(timeout)
+			em.preMainLoop = previous
+			try {
+				resolve(fn())
+			} catch (error) {
+				reject(error)
+			}
 		}
-		audio.nextPlayTime = 0
-	}
-	void em.SDL?.audioContext?.suspend?.()
+		const timeout = window.setTimeout(finish, DOS_RUNTIME_IDLE_MS)
+		em.preMainLoop = () => {
+			if (settled) return previous?.()
+			finish()
+			return false
+		}
+	})
 }
 
-function thawDosRuntime(em: DosEmscriptenModule, reset = false) {
-	if (reset && em.Asyncify) {
-		em.Asyncify.currData = null
-		em.Asyncify.state = 0
+function freezeDosAudio(em: DosEmscriptenModule): (() => void) | undefined {
+	const audio = em.SDL?.audio
+	if (!audio) return undefined
+	const queue = audio.queueNewAudioData
+	audio.paused = true
+	audio.queueNewAudioData = () => undefined
+	if (audio.timer != null) {
+		window.clearTimeout(audio.timer)
+		audio.timer = undefined
+		audio.numAudioTimersPending = 0
 	}
-	const sdl = em.SDL
-	if (reset && sdl?.audioContext) {
-		void sdl.audioContext.close()
-		sdl.audioContext = new AudioContext()
-	}
-	const audio = sdl?.audio
+	audio.nextPlayTime = 0
+	void em.SDL?.audioContext?.suspend?.()
+	return queue
+}
+
+function thawDosAudio(em: DosEmscriptenModule, queue: (() => void) | undefined) {
+	const audio = em.SDL?.audio
 	if (audio) {
+		if (queue) audio.queueNewAudioData = queue
+		else delete audio.queueNewAudioData
 		audio.nextPlayTime = 0
 		audio.numAudioTimersPending = 0
 		audio.paused = false
@@ -333,16 +348,49 @@ function thawDosRuntime(em: DosEmscriptenModule, reset = false) {
 			audio.timer = window.setTimeout(audio.caller, 1)
 		}
 	}
-	void sdl?.audioContext?.resume?.()
+	void em.SDL?.audioContext?.resume?.()
 }
 
-function withFrozenRuntime<T>(em: DosEmscriptenModule, fn: () => T, reset = false): T {
-	freezeDosRuntime(em)
-	try {
-		return fn()
-	} finally {
-		thawDosRuntime(em, reset)
+function sdlTicksNow(em: DosEmscriptenModule): number {
+	const start = em.SDL?.startTime
+	if (start == null) return 0
+	return (Date.now() - start) | 0
+}
+
+function restoreSdlTicks(em: DosEmscriptenModule, sdlTicks: number) {
+	if (!em.SDL) return
+	em.SDL.startTime = Date.now() - sdlTicks
+}
+
+function resetDosAudioGraph(em: DosEmscriptenModule) {
+	const sdl = em.SDL
+	if (!sdl) return
+	if (sdl.audioContext) {
+		void sdl.audioContext.close()
+		sdl.audioContext = new AudioContext()
 	}
+	const audio = sdl.audio
+	if (audio) {
+		audio.nextPlayTime = 0
+		audio.numAudioTimersPending = 0
+	}
+}
+
+async function withFrozenRuntime<T>(
+	em: DosEmscriptenModule,
+	fn: () => T,
+	resetAudio = false,
+): Promise<T> {
+	return atMainLoopBoundary(em, () => {
+		const queue = freezeDosAudio(em)
+		try {
+			const result = fn()
+			if (resetAudio) resetDosAudioGraph(em)
+			return result
+		} finally {
+			thawDosAudio(em, queue)
+		}
+	})
 }
 
 async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandle> {
@@ -364,11 +412,9 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		)
 		if (!scaled.dx && !scaled.dy) return
 		canvas.dispatchEvent(
-			new MouseEvent('mousemove', {
-				bubbles: true,
+			createDosMouseEvent('mousemove', {
 				button: event.button,
 				buttons: event.buttons,
-				cancelable: true,
 				clientX: event.clientX,
 				clientY: event.clientY,
 				movementX: scaled.dx,
@@ -396,9 +442,25 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	canvas.tabIndex = 0
 	canvas.focus()
 
+	const pointerOpts: AddEventListenerOptions = { passive: false }
+	const touchOpts: AddEventListenerOptions = { capture: true, passive: false }
 	const touch = createTouchMouseState()
 	let longPressTimer: number | null = null
-	const virtual = { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 }
+	let suppressHostMouse = false
+	let releaseHostMouseTimer: number | null = null
+	const virtual = { x: 0, y: 0 }
+	let virtualPlaced = false
+
+	const placeVirtual = () => {
+		if (virtualPlaced) return
+		const width = canvas.clientWidth
+		const height = canvas.clientHeight
+		if (!width || !height) return
+		virtual.x = width / 2
+		virtual.y = height / 2
+		virtualPlaced = true
+	}
+	placeVirtual()
 
 	const clearLongPress = () => {
 		if (longPressTimer !== null) {
@@ -407,14 +469,22 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		}
 	}
 
+	const releaseHostMouseSoon = () => {
+		if (releaseHostMouseTimer !== null) window.clearTimeout(releaseHostMouseTimer)
+		releaseHostMouseTimer = window.setTimeout(() => {
+			releaseHostMouseTimer = null
+			suppressHostMouse = false
+		}, 0)
+	}
+
 	const dispatchMouse = (type: string, button: number, dx = 0, dy = 0) => {
+		placeVirtual()
 		const rect = canvas.getBoundingClientRect()
+		if (!rect.width || !rect.height) return
 		canvas.dispatchEvent(
-			new MouseEvent(type, {
-				bubbles: true,
+			createDosMouseEvent(type, {
 				button,
 				buttons: type === 'mousedown' ? (button === 2 ? 2 : 1) : 0,
-				cancelable: true,
 				clientX: rect.left + virtual.x,
 				clientY: rect.top + virtual.y,
 				movementX: dx,
@@ -424,11 +494,13 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	}
 
 	const applyTouch = (command: TouchMouseCommand) => {
+		placeVirtual()
 		if (command.type === 'move') {
 			const width = canvas.clientWidth || 1
 			const height = canvas.clientHeight || 1
 			virtual.x = Math.min(width, Math.max(0, virtual.x + command.dx))
 			virtual.y = Math.min(height, Math.max(0, virtual.y + command.dy))
+			virtualPlaced = true
 			dispatchMouse('mousemove', 0, command.dx, command.dy)
 			return
 		}
@@ -440,6 +512,12 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	const onPointerDown = (event: PointerEvent) => {
 		if (!isTouchPointer(event)) return
 		event.preventDefault()
+		if (document.pointerLockElement === canvas) document.exitPointerLock()
+		suppressHostMouse = true
+		if (releaseHostMouseTimer !== null) {
+			window.clearTimeout(releaseHostMouseTimer)
+			releaseHostMouseTimer = null
+		}
 		canvas.setPointerCapture(event.pointerId)
 		onTouchMouseDown(touch, event.pointerId, event.clientX, event.clientY)
 		clearLongPress()
@@ -463,43 +541,60 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		clearLongPress()
 		const command = onTouchMouseUp(touch, event.pointerId)
 		if (command) applyTouch(command)
+		releaseHostMouseSoon()
 	}
 	const onPointerCancel = (event: PointerEvent) => {
 		if (!isTouchPointer(event)) return
 		clearLongPress()
 		onTouchMouseCancel(touch, event.pointerId)
+		releaseHostMouseSoon()
 	}
 	const onCompatMouse = (event: MouseEvent) => {
-		if (isCompatTouchMouse(event)) {
-			event.stopImmediatePropagation()
+		if (!event.isTrusted || isCompatTouchMouse(event) || suppressHostMouse) {
+			if (event.isTrusted) event.stopImmediatePropagation()
 			return
 		}
 		if (event.type === 'mousedown' && document.pointerLockElement !== canvas) {
 			void canvas.requestPointerLock?.()
 		}
 	}
+	const onNativeTouch = (event: TouchEvent) => {
+		const target = event.target
+		if (!(target instanceof Node) || (target !== canvas && !canvas.contains(target))) return
+		event.preventDefault()
+		event.stopPropagation()
+	}
 	const onContextMenu = (event: Event) => event.preventDefault()
 
-	canvas.addEventListener('pointerdown', onPointerDown)
-	canvas.addEventListener('pointermove', onPointerMove)
-	canvas.addEventListener('pointerup', onPointerUp)
-	canvas.addEventListener('pointercancel', onPointerCancel)
+	canvas.addEventListener('pointerdown', onPointerDown, pointerOpts)
+	canvas.addEventListener('pointermove', onPointerMove, pointerOpts)
+	canvas.addEventListener('pointerup', onPointerUp, pointerOpts)
+	canvas.addEventListener('pointercancel', onPointerCancel, pointerOpts)
 	canvas.addEventListener('mousedown', onCompatMouse, true)
 	canvas.addEventListener('mouseup', onCompatMouse, true)
 	canvas.addEventListener('mousemove', onCompatMouse, true)
 	canvas.addEventListener('contextmenu', onContextMenu)
+	window.addEventListener('touchstart', onNativeTouch, touchOpts)
+	window.addEventListener('touchmove', onNativeTouch, touchOpts)
+	window.addEventListener('touchend', onNativeTouch, touchOpts)
+	window.addEventListener('touchcancel', onNativeTouch, touchOpts)
 	window.addEventListener('keydown', swallowDosKeyRepeat, true)
 
 	return {
 		destroy: () => {
 			clearLongPress()
+			if (releaseHostMouseTimer !== null) window.clearTimeout(releaseHostMouseTimer)
 			window.removeEventListener('mousemove', onHostMouseMove, true)
 			window.removeEventListener('keydown', swallowDosKeyRepeat, true)
+			window.removeEventListener('touchstart', onNativeTouch, touchOpts)
+			window.removeEventListener('touchmove', onNativeTouch, touchOpts)
+			window.removeEventListener('touchend', onNativeTouch, touchOpts)
+			window.removeEventListener('touchcancel', onNativeTouch, touchOpts)
 			if (document.pointerLockElement === canvas) document.exitPointerLock()
-			canvas.removeEventListener('pointerdown', onPointerDown)
-			canvas.removeEventListener('pointermove', onPointerMove)
-			canvas.removeEventListener('pointerup', onPointerUp)
-			canvas.removeEventListener('pointercancel', onPointerCancel)
+			canvas.removeEventListener('pointerdown', onPointerDown, pointerOpts)
+			canvas.removeEventListener('pointermove', onPointerMove, pointerOpts)
+			canvas.removeEventListener('pointerup', onPointerUp, pointerOpts)
+			canvas.removeEventListener('pointercancel', onPointerCancel, pointerOpts)
 			canvas.removeEventListener('mousedown', onCompatMouse, true)
 			canvas.removeEventListener('mouseup', onCompatMouse, true)
 			canvas.removeEventListener('mousemove', onCompatMouse, true)
@@ -510,7 +605,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			if (!em) {
 				throw new Error('DOS memory snapshot is not available')
 			}
-			const snapshot = withFrozenRuntime(em, () => {
+			const snapshot = await withFrozenRuntime(em, () => {
 				const heap = liveHeap(em)
 				if (!heap) {
 					throw new Error('DOS memory snapshot is not available')
@@ -518,20 +613,26 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 				return {
 					files: memfs ? collectChangedFiles(memfs, baseline) : [],
 					heap: heap.slice(),
+					sdlTicks: sdlTicksNow(em),
 				}
 			})
-			return packDosSaveV2(snapshot.heap.byteLength, await gzipBytes(snapshot.heap), snapshot.files)
+			return packDosSaveV3(
+				snapshot.heap.byteLength,
+				await gzipBytes(snapshot.heap),
+				snapshot.files,
+				snapshot.sdlTicks,
+			)
 		},
 		loadState: async (data) => {
 			const unpacked = unpackDosSave(data)
-			if (unpacked.version !== 2) {
+			if (unpacked.version === 1) {
 				throw new Error('This DOS save cannot rewind the game. Save again, then load.')
 			}
 			const restored = await gunzipBytes(unpacked.heapGzip)
 			if (!em) {
 				throw new Error('DOS memory snapshot is not available')
 			}
-			withFrozenRuntime(
+			await withFrozenRuntime(
 				em,
 				() => {
 					const heap = liveHeap(em)
@@ -542,6 +643,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 						throw new Error('DOS save state does not match this emulator session')
 					}
 					heap.set(restored)
+					if (unpacked.sdlTicks != null) restoreSdlTicks(em, unpacked.sdlTicks)
 					if (memfs) {
 						restoreDosFiles(memfs, unpacked.files)
 						baseline = snapshotDosFs(memfs)

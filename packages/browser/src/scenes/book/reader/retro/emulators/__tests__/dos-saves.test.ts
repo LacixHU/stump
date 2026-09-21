@@ -5,6 +5,7 @@ import {
 	encodeDosSave,
 	isDosFileChanged,
 	packDosSaveV2,
+	packDosSaveV3,
 	selectChangedPaths,
 	shouldSkipDosPath,
 	unpackDosSave,
@@ -64,12 +65,31 @@ describe('DOS save overlay', () => {
 	it('round-trips a memory snapshot plus overlay files', () => {
 		const gzip = new Uint8Array([0x1f, 0x8b, 1, 2, 3])
 		const files = [{ path: '/DOOM.SAV', data: new Uint8Array([9, 8, 7]) }]
-		const unpacked = unpackDosSave(packDosSaveV2(64, gzip, files))
-		expect(unpacked.version).toBe(2)
-		if (unpacked.version !== 2) return
+		const unpacked = unpackDosSave(packDosSaveV3(64, gzip, files, 12345))
+		expect(unpacked.version).toBe(3)
+		if (unpacked.version !== 3) return
 		expect(unpacked.heapLen).toBe(64)
+		expect(unpacked.sdlTicks).toBe(12345)
 		expect(Array.from(unpacked.heapGzip)).toEqual([0x1f, 0x8b, 1, 2, 3])
 		expect(unpacked.files[0]!.path).toBe('/DOOM.SAV')
 		expect(Array.from(unpacked.files[0]!.data)).toEqual([9, 8, 7])
+	})
+
+	it('still reads a v2 snapshot with trailing ticks', () => {
+		const unpacked = unpackDosSave(packDosSaveV2(64, new Uint8Array([0x1f, 0x8b, 1]), [], 99))
+		expect(unpacked.version).toBe(2)
+		if (unpacked.version !== 2) return
+		expect(unpacked.sdlTicks).toBe(99)
+	})
+
+	it('treats a v2 snapshot without ticks as legacy', () => {
+		const packed = new Uint8Array(packDosSaveV2(8, new Uint8Array([1, 2]), []))
+		const legacy = packed.subarray(0, packed.byteLength - 4)
+		const unpacked = unpackDosSave(
+			legacy.buffer.slice(legacy.byteOffset, legacy.byteOffset + legacy.byteLength),
+		)
+		expect(unpacked.version).toBe(2)
+		if (unpacked.version !== 2) return
+		expect(unpacked.sdlTicks).toBeUndefined()
 	})
 })

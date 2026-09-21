@@ -34,9 +34,17 @@ export type DosSaveV2 = {
 	files: DosSaveFile[]
 	heapGzip: Uint8Array
 	heapLen: number
+	sdlTicks?: number
 	version: 2
 }
-export type DosSave = DosSaveV1 | DosSaveV2
+export type DosSaveV3 = {
+	files: DosSaveFile[]
+	heapGzip: Uint8Array
+	heapLen: number
+	sdlTicks: number
+	version: 3
+}
+export type DosSave = DosSaveV1 | DosSaveV2 | DosSaveV3
 
 export function encodeDosSave(files: DosSaveFile[]): ArrayBuffer {
 	const encoder = new TextEncoder()
@@ -84,7 +92,12 @@ function assertMagic(bytes: Uint8Array) {
 	}
 }
 
-function readFiles(bytes: Uint8Array, view: DataView, start: number, count: number): DosSaveFile[] {
+function readFiles(
+	bytes: Uint8Array,
+	view: DataView,
+	start: number,
+	count: number,
+): { files: DosSaveFile[]; offset: number } {
 	const decoder = new TextDecoder()
 	const files: DosSaveFile[] = []
 	let offset = start
@@ -107,16 +120,17 @@ function readFiles(bytes: Uint8Array, view: DataView, start: number, count: numb
 		files.push({ path, data: bytes.slice(offset, offset + dataLen) })
 		offset += dataLen
 	}
-	return files
+	return { files, offset }
 }
 
 export function packDosSaveV2(
 	heapLen: number,
 	heapGzip: Uint8Array,
 	files: DosSaveFile[],
+	sdlTicks = 0,
 ): ArrayBuffer {
 	const overlay = new Uint8Array(encodeDosSave(files))
-	const size = 8 + 1 + 4 + 4 + heapGzip.byteLength + overlay.byteLength - 9
+	const size = 8 + 1 + 4 + 4 + heapGzip.byteLength + overlay.byteLength - 9 + 4
 	const out = new Uint8Array(size)
 	const view = new DataView(out.buffer)
 	out.set(MAGIC, 0)
@@ -124,7 +138,29 @@ export function packDosSaveV2(
 	view.setUint32(9, heapLen, true)
 	view.setUint32(13, heapGzip.byteLength, true)
 	out.set(heapGzip, 17)
-	out.set(overlay.subarray(9), 17 + heapGzip.byteLength)
+	const overlayStart = 17 + heapGzip.byteLength
+	out.set(overlay.subarray(9), overlayStart)
+	view.setUint32(overlayStart + overlay.byteLength - 9, sdlTicks, true)
+	return out.buffer
+}
+
+export function packDosSaveV3(
+	heapLen: number,
+	heapGzip: Uint8Array,
+	files: DosSaveFile[],
+	sdlTicks: number,
+): ArrayBuffer {
+	const overlay = new Uint8Array(encodeDosSave(files))
+	const size = 8 + 1 + 4 + 4 + 4 + heapGzip.byteLength + overlay.byteLength - 9
+	const out = new Uint8Array(size)
+	const view = new DataView(out.buffer)
+	out.set(MAGIC, 0)
+	out[8] = 3
+	view.setUint32(9, heapLen, true)
+	view.setUint32(13, heapGzip.byteLength, true)
+	view.setUint32(17, sdlTicks, true)
+	out.set(heapGzip, 21)
+	out.set(overlay.subarray(9), 21 + heapGzip.byteLength)
 	return out.buffer
 }
 
@@ -138,27 +174,50 @@ export function unpackDosSave(data: ArrayBuffer): DosSave {
 			throw new Error('Invalid DOS save state')
 		}
 		const count = view.getUint32(9, true)
-		return { files: readFiles(bytes, view, 13, count), version: 1 }
+		return { files: readFiles(bytes, view, 13, count).files, version: 1 }
 	}
-	if (version !== 2) {
+	if (version === 2) {
+		if (bytes.byteLength < 17) {
+			throw new Error('Invalid DOS save state')
+		}
+		const heapLen = view.getUint32(9, true)
+		const gzipLen = view.getUint32(13, true)
+		const gzipStart = 17
+		const gzipEnd = gzipStart + gzipLen
+		if (gzipEnd + 4 > bytes.byteLength) {
+			throw new Error('Invalid DOS save state')
+		}
+		const count = view.getUint32(gzipEnd, true)
+		const { files, offset } = readFiles(bytes, view, gzipEnd + 4, count)
+		return {
+			files,
+			heapGzip: bytes.slice(gzipStart, gzipEnd),
+			heapLen,
+			sdlTicks: offset + 4 <= bytes.byteLength ? view.getUint32(offset, true) : undefined,
+			version: 2,
+		}
+	}
+	if (version !== 3) {
 		throw new Error('Unsupported DOS save state version')
 	}
-	if (bytes.byteLength < 17) {
+	if (bytes.byteLength < 21) {
 		throw new Error('Invalid DOS save state')
 	}
 	const heapLen = view.getUint32(9, true)
 	const gzipLen = view.getUint32(13, true)
-	const gzipStart = 17
+	const sdlTicks = view.getUint32(17, true)
+	const gzipStart = 21
 	const gzipEnd = gzipStart + gzipLen
 	if (gzipEnd + 4 > bytes.byteLength) {
 		throw new Error('Invalid DOS save state')
 	}
 	const count = view.getUint32(gzipEnd, true)
 	return {
-		files: readFiles(bytes, view, gzipEnd + 4, count),
+		files: readFiles(bytes, view, gzipEnd + 4, count).files,
 		heapGzip: bytes.slice(gzipStart, gzipEnd),
 		heapLen,
-		version: 2,
+		sdlTicks,
+		version: 3,
 	}
 }
 
