@@ -1,4 +1,11 @@
-import { createDosMouseEvent, isCompatTouchMouse, isTouchPointer } from '../dos-mouse'
+import {
+	createDosMouseEvent,
+	dosContainBox,
+	dosTouchMickeys,
+	dosTouchMoveScale,
+	isCompatTouchMouse,
+	isTouchPointer,
+} from '../dos-mouse'
 
 function withWindowScroll(x: number, y: number, run: () => void) {
 	const restoreX = Object.getOwnPropertyDescriptor(window, 'scrollX')
@@ -47,6 +54,20 @@ describe('DOS mouse events', () => {
 			expect(event.pageX).toBe(24)
 			expect(event.pageY).toBe(16)
 		})
+	})
+
+	it('scales a 320x200 picture so a finger swipe crosses the DOS mouse range', () => {
+		expect(dosTouchMoveScale(320, 200)).toEqual({ x: 2, y: 2 })
+		expect(dosTouchMoveScale(640, 400)).toEqual({ x: 1, y: 1 })
+		expect(dosTouchMoveScale(640, 480)).toEqual({ x: 1, y: 2 })
+		const rect = { height: 360, left: 0, top: 0, width: 800 }
+		const box = dosContainBox(rect, 320, 200)
+		const across = dosTouchMickeys(box.width, box.height, rect, 320, 200)
+		expect(across.dx).toBeCloseTo(640)
+		expect(across.dy).toBeCloseTo(400)
+		const step = dosTouchMickeys(50, 40, rect, 320, 200)
+		expect(step.dx * (box.width / 640)).toBeCloseTo(50)
+		expect(step.dy * (box.height / 400)).toBeCloseTo(40)
 	})
 
 	it('detects touch-generated mouse and touch/pen pointers', () => {

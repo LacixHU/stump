@@ -19,7 +19,12 @@ import {
 	zipEntryNames,
 } from './dos-images'
 import { dispatchableKeyCode, swallowDosKeyRepeat } from './dos-keys'
-import { createDosMouseEvent, isCompatTouchMouse, isTouchPointer } from './dos-mouse'
+import {
+	createDosMouseEvent,
+	dosTouchMickeys,
+	isCompatTouchMouse,
+	isTouchPointer,
+} from './dos-mouse'
 import {
 	type DosFsStamp,
 	type DosSaveFile,
@@ -448,19 +453,9 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	let longPressTimer: number | null = null
 	let suppressHostMouse = false
 	let releaseHostMouseTimer: number | null = null
-	const virtual = { x: 0, y: 0 }
-	let virtualPlaced = false
-
-	const placeVirtual = () => {
-		if (virtualPlaced) return
-		const width = canvas.clientWidth
-		const height = canvas.clientHeight
-		if (!width || !height) return
-		virtual.x = width / 2
-		virtual.y = height / 2
-		virtualPlaced = true
-	}
-	placeVirtual()
+	const touchRemainder = createMouseDeltaRemainder()
+	let sentX = 0
+	let sentY = 0
 
 	const clearLongPress = () => {
 		if (longPressTimer !== null) {
@@ -477,31 +472,53 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		}, 0)
 	}
 
-	const dispatchMouse = (type: string, button: number, dx = 0, dy = 0) => {
-		placeVirtual()
+	const canvasBox = () => {
 		const rect = canvas.getBoundingClientRect()
+		return {
+			height: rect.height,
+			left: rect.left,
+			top: rect.top,
+			width: rect.width,
+		}
+	}
+
+	const dispatchMouse = (type: string, button: number, dx = 0, dy = 0) => {
+		const rect = canvasBox()
 		if (!rect.width || !rect.height) return
 		canvas.dispatchEvent(
 			createDosMouseEvent(type, {
 				button,
 				buttons: type === 'mousedown' ? (button === 2 ? 2 : 1) : 0,
-				clientX: rect.left + virtual.x,
-				clientY: rect.top + virtual.y,
+				clientX: rect.left + sentX,
+				clientY: rect.top + sentY,
 				movementX: dx,
 				movementY: dy,
 			}),
 		)
 	}
 
+	const moveByFinger = (fingerDx: number, fingerDy: number) => {
+		const rect = canvasBox()
+		const raw = dosTouchMickeys(
+			fingerDx,
+			fingerDy,
+			rect,
+			canvas.width,
+			canvas.height,
+			mouseSensitivity,
+		)
+		const stepped = takeScaledMouseDelta(touchRemainder, raw.dx, raw.dy, 1)
+		if (!stepped.dx && !stepped.dy) return
+		const cw = canvas.width || rect.width || 1
+		const ch = canvas.height || rect.height || 1
+		sentX += stepped.dx * (rect.width / cw)
+		sentY += stepped.dy * (rect.height / ch)
+		dispatchMouse('mousemove', 0, stepped.dx, stepped.dy)
+	}
+
 	const applyTouch = (command: TouchMouseCommand) => {
-		placeVirtual()
 		if (command.type === 'move') {
-			const width = canvas.clientWidth || 1
-			const height = canvas.clientHeight || 1
-			virtual.x = Math.min(width, Math.max(0, virtual.x + command.dx))
-			virtual.y = Math.min(height, Math.max(0, virtual.y + command.dy))
-			virtualPlaced = true
-			dispatchMouse('mousemove', 0, command.dx, command.dy)
+			moveByFinger(command.dx, command.dy)
 			return
 		}
 		const button = command.button === 3 ? 2 : 0
@@ -518,6 +535,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			window.clearTimeout(releaseHostMouseTimer)
 			releaseHostMouseTimer = null
 		}
+		if (touch.pointerId !== null) return
 		canvas.setPointerCapture(event.pointerId)
 		onTouchMouseDown(touch, event.pointerId, event.clientX, event.clientY)
 		clearLongPress()
@@ -529,6 +547,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	const onPointerMove = (event: PointerEvent) => {
 		if (!isTouchPointer(event)) return
 		event.preventDefault()
+		if (touch.pointerId !== event.pointerId) return
 		const command = onTouchMouseMove(touch, event.pointerId, event.clientX, event.clientY)
 		if (command) {
 			clearLongPress()
@@ -661,6 +680,8 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			mouseSensitivity = clampMouseSensitivity(value)
 			mouseRemainder.x = 0
 			mouseRemainder.y = 0
+			touchRemainder.x = 0
+			touchRemainder.y = 0
 		},
 	}
 }
