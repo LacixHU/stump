@@ -137,7 +137,7 @@ export function HomeArrangementSheet() {
 
 	const refetch = useCallback(() => {
 		client.refetchQueries({ queryKey: sdk.cacheKey('homeArrangement') })
-		client.refetchQueries({ queryKey: sdk.cacheKey('homeScene') })
+		client.refetchQueries({ queryKey: sdk.cacheKey('homeSceneArrangement') })
 	}, [client, sdk])
 
 	const { mutate: updateArrangement } = useGraphQLMutation(updateMutation, {

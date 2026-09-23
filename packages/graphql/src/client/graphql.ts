@@ -6400,10 +6400,15 @@ export type ContinueReadingMediaQuery = { __typename?: 'Query', keepReading: { _
       & { ' $fragmentRefs'?: { 'ContinueReadingBookFragment': ContinueReadingBookFragment } }
     )>, pageInfo: { __typename: 'CursorPaginationInfo', currentCursor?: string | null, nextCursor?: string | null, limit: number } | { __typename: 'OffsetPaginationInfo', currentPage: number, totalPages: number, pageSize: number, pageOffset: number, zeroBased: boolean } } };
 
-export type HomeSceneQueryQueryVariables = Exact<{ [key: string]: never; }>;
+export type HomeSceneLibrariesQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type HomeSceneQueryQuery = { __typename?: 'Query', numberOfLibraries: number, me: { __typename?: 'User', preferences: { __typename?: 'UserPreferences', homeArrangement: { __typename?: 'HomeArrangement', sections: Array<{ __typename?: 'HomeSection', kind: HomeSectionKind, visible: boolean }> } } } };
+export type HomeSceneLibrariesQuery = { __typename?: 'Query', numberOfLibraries: number };
+
+export type HomeSceneArrangementQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type HomeSceneArrangementQuery = { __typename?: 'Query', me: { __typename?: 'User', preferences: { __typename?: 'UserPreferences', homeArrangement: { __typename?: 'HomeArrangement', sections: Array<{ __typename?: 'HomeSection', kind: HomeSectionKind, visible: boolean }> } } } };
 
 export type LastPlayedGameBookFragment = { __typename?: 'Media', id: string, resolvedName: string, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } } & { ' $fragmentName'?: 'LastPlayedGameBookFragment' };
 
@@ -12180,9 +12185,13 @@ export const ContinueReadingMediaDocument = new TypedDocumentString(`
     updatedAt
   }
 }`) as unknown as TypedDocumentString<ContinueReadingMediaQuery, ContinueReadingMediaQueryVariables>;
-export const HomeSceneQueryDocument = new TypedDocumentString(`
-    query HomeSceneQuery {
+export const HomeSceneLibrariesDocument = new TypedDocumentString(`
+    query HomeSceneLibraries {
   numberOfLibraries
+}
+    `) as unknown as TypedDocumentString<HomeSceneLibrariesQuery, HomeSceneLibrariesQueryVariables>;
+export const HomeSceneArrangementDocument = new TypedDocumentString(`
+    query HomeSceneArrangement {
   me {
     preferences {
       homeArrangement {
@@ -12194,7 +12203,7 @@ export const HomeSceneQueryDocument = new TypedDocumentString(`
     }
   }
 }
-    `) as unknown as TypedDocumentString<HomeSceneQueryQuery, HomeSceneQueryQueryVariables>;
+    `) as unknown as TypedDocumentString<HomeSceneArrangementQuery, HomeSceneArrangementQueryVariables>;
 export const LastPlayedGamesDocument = new TypedDocumentString(`
     query LastPlayedGames($pagination: Pagination!) {
   lastPlayedGames(pagination: $pagination) {

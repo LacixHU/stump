@@ -11,15 +11,25 @@ import { Link } from '@/context'
 import { usePaths } from '@/paths'
 
 import ContinueReadingMedia, { usePrefetchContinueReading } from './ContinueReading'
+import {
+	homeArrangementSupportQuery,
+	LEGACY_HOME_SECTIONS,
+	supportsHomeArrangement,
+} from './homeArrangementSupport'
 import LastPlayedGames, { usePrefetchLastPlayedGames } from './LastPlayedGames'
 import NoLibraries from './NoLibraries'
 import OnDeck, { usePrefetchOnDeck } from './OnDeck'
 import RecentlyAddedMedia, { usePrefetchRecentlyAddedMedia } from './RecentlyAddedMedia'
 import RecentlyAddedSeries, { usePrefetchRecentlyAddedSeries } from './RecentlyAddedSeries'
 
-const query = graphql(`
-	query HomeSceneQuery {
+const librariesQuery = graphql(`
+	query HomeSceneLibraries {
 		numberOfLibraries
+	}
+`)
+
+const arrangementQuery = graphql(`
+	query HomeSceneArrangement {
 		me {
 			preferences {
 				homeArrangement {
@@ -58,12 +68,22 @@ export const usePrefetchHomeScene = () => {
 	const prefetchLastPlayed = usePrefetchLastPlayedGames()
 
 	return useCallback(async () => {
-		const data = await client.fetchQuery({
-			queryKey: sdk.cacheKey('homeScene'),
-			queryFn: () => sdk.execute(query),
+		const support = await client.fetchQuery({
+			queryKey: sdk.cacheKey('homeArrangementSupport'),
+			queryFn: () => sdk.execute(homeArrangementSupportQuery),
 			staleTime: PREFETCH_STALE_TIME,
 		})
-		const kinds = visibleHomeSections(data?.me.preferences.homeArrangement.sections)
+		const kinds = supportsHomeArrangement(support)
+			? visibleHomeSections(
+					(
+						await client.fetchQuery({
+							queryKey: sdk.cacheKey('homeSceneArrangement'),
+							queryFn: () => sdk.execute(arrangementQuery),
+							staleTime: PREFETCH_STALE_TIME,
+						})
+					)?.me?.preferences?.homeArrangement?.sections,
+				)
+			: LEGACY_HOME_SECTIONS
 		const tasks: Array<Promise<unknown>> = []
 		if (kinds.includes(HomeSectionKind.InProgressBooks)) tasks.push(prefetchContinueReading())
 		if (kinds.includes(HomeSectionKind.LastPlayedGames)) tasks.push(prefetchLastPlayed())
@@ -84,19 +104,11 @@ export const usePrefetchHomeScene = () => {
 
 export default function HomeScene() {
 	const { sdk } = useSDK()
-	const { t } = useLocaleContext()
-	const paths = usePaths()
-	const { data } = useSuspenseGraphQL(query, sdk.cacheKey('homeScene'))
-	const [emptyByKind, setEmptyByKind] = useState<Partial<Record<HomeSectionKind, boolean>>>({})
-
-	const visible = useMemo(
-		() => visibleHomeSections(data?.me.preferences.homeArrangement.sections),
-		[data],
+	const { data: support } = useSuspenseGraphQL(
+		homeArrangementSupportQuery,
+		sdk.cacheKey('homeArrangementSupport'),
 	)
-
-	const reportEmpty = useCallback((kind: HomeSectionKind, empty: boolean) => {
-		setEmptyByKind((current) => (current[kind] === empty ? current : { ...current, [kind]: empty }))
-	}, [])
+	const { data } = useSuspenseGraphQL(librariesQuery, sdk.cacheKey('homeScene'))
 
 	const helmet = (
 		<Helmet>
@@ -117,14 +129,48 @@ export default function HomeScene() {
 		)
 	}
 
-	const allReported = visible.every((kind) => emptyByKind[kind] !== undefined)
+	if (!supportsHomeArrangement(support)) {
+		return (
+			<>
+				{helmet}
+				<HomeGroups sections={LEGACY_HOME_SECTIONS} />
+			</>
+		)
+	}
+
+	return (
+		<>
+			{helmet}
+			<ArrangedHome />
+		</>
+	)
+}
+
+function ArrangedHome() {
+	const { sdk } = useSDK()
+	const { data } = useSuspenseGraphQL(arrangementQuery, sdk.cacheKey('homeSceneArrangement'))
+	const sections = useMemo(
+		() => visibleHomeSections(data?.me?.preferences?.homeArrangement?.sections),
+		[data],
+	)
+
+	return <HomeGroups sections={sections} />
+}
+
+function HomeGroups({ sections }: { sections: readonly HomeSectionKind[] }) {
+	const { t } = useLocaleContext()
+	const paths = usePaths()
+	const [emptyByKind, setEmptyByKind] = useState<Partial<Record<HomeSectionKind, boolean>>>({})
+	const reportEmpty = useCallback((kind: HomeSectionKind, empty: boolean) => {
+		setEmptyByKind((current) => (current[kind] === empty ? current : { ...current, [kind]: empty }))
+	}, [])
+	const allReported = sections.every((kind) => emptyByKind[kind] !== undefined)
 	const showFallback =
-		visible.length === 0 || (allReported && visible.every((kind) => emptyByKind[kind]))
+		sections.length === 0 || (allReported && sections.every((kind) => emptyByKind[kind]))
 
 	return (
 		<SceneContainer className="gap-6 flex flex-col">
-			{helmet}
-			{visible.map((kind) => (
+			{sections.map((kind) => (
 				<HomeGroup key={kind} kind={kind} onEmptyChange={reportEmpty} />
 			))}
 			{showFallback ? (

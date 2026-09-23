@@ -1,9 +1,14 @@
+import { useSDK, useSuspenseGraphQL } from '@stump/client'
 import { NewCard } from '@stump/components'
 import { useLocaleContext } from '@stump/i18n'
 import { Suspense } from 'react'
 import { Helmet } from 'react-helmet'
 
 import { Container, ContentContainer } from '@/components/container'
+import {
+	homeArrangementSupportQuery,
+	supportsHomeArrangement,
+} from '@/scenes/home/homeArrangementSupport'
 
 import DebugSettings from './DebugSettings'
 import DisplaySpacingPreference from './DisplaySpacingPreference'
@@ -28,6 +33,12 @@ import ThumbnailAppearancePreference from './ThumbnailAppearancePreference'
 
 export default function AppearanceSettingsScene() {
 	const { t } = useLocaleContext()
+	const { sdk } = useSDK()
+	const { data: homeArrangementSupport } = useSuspenseGraphQL(
+		homeArrangementSupportQuery,
+		sdk.cacheKey('homeArrangementSupport'),
+	)
+	const canArrangeHome = supportsHomeArrangement(homeArrangementSupport)
 
 	return (
 		<Container>
@@ -88,11 +99,13 @@ export default function AppearanceSettingsScene() {
 						</Suspense>
 					</NewCard>
 
-					<NewCard label={t(getKey('home.title'))} description={t(getKey('home.description'))}>
-						<Suspense>
-							<HomeArrangement />
-						</Suspense>
-					</NewCard>
+					{canArrangeHome ? (
+						<NewCard label={t(getKey('home.title'))} description={t(getKey('home.description'))}>
+							<Suspense>
+								<HomeArrangement />
+							</Suspense>
+						</NewCard>
+					) : null}
 
 					<NewCard
 						label={t(getKey('displayAndSpacing.label'))}
