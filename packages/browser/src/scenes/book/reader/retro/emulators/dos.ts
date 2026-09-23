@@ -90,7 +90,9 @@ type DosEmscriptenModule = {
 	HEAPU8?: Uint8Array
 	pauseMainLoop?: () => void
 	preMainLoop?: () => boolean | void
+	receive?: EventListener
 	SDL?: DosSdl
+	sync_wakeUp?: () => void
 	wasmMemory?: WebAssembly.Memory
 }
 
@@ -454,6 +456,31 @@ function detachDosRuntime(em: DosEmscriptenModule | undefined, canvas: HTMLCanva
 	if (ctx && ctx.state !== 'closed') void ctx.close()
 }
 
+/**
+ * Shut a runtime down for good.
+ *
+ * `pauseMainLoop` alone does not stop DOSBox: wdosbox yields through Asyncify sleeps that
+ * are woken by a window `message` listener, so a paused runtime keeps running the game and
+ * drawing into the shared canvas. `exit()` ends the program, and dropping the listener (its
+ * own teardown removes it without the capture flag it was added with) plus the pending
+ * wake-up guarantees the old stack is never resumed.
+ */
+function stopDosRuntime(
+	em: DosEmscriptenModule | undefined,
+	ci: DosCommandInterface | null,
+	canvas: HTMLCanvasElement,
+) {
+	detachDosRuntime(em, canvas)
+	try {
+		ci?.exit()
+	} catch {
+		// Already stopped.
+	}
+	if (!em) return
+	if (em.receive) window.removeEventListener('message', em.receive, true)
+	delete em.sync_wakeUp
+}
+
 async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandle> {
 	const { canvas, image, fileName } = options
 	const imageBytes = image.slice(0)
@@ -582,22 +609,17 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	const bootDos = async () => {
 		const runtime = await Dos(canvas, dosOptions)
 		if (!alive) {
-			detachDosRuntime(runtime.fs.em, canvas)
+			stopDosRuntime(runtime.fs.em, null, canvas)
 			return
 		}
 		const args = await mountImage(runtime.fs, imageBytes.slice(0), fileName)
 		if (!alive) {
-			detachDosRuntime(runtime.fs.em, canvas)
+			stopDosRuntime(runtime.fs.em, null, canvas)
 			return
 		}
 		const nextCi = await runtime.main(args)
 		if (!alive) {
-			detachDosRuntime(runtime.fs.em, canvas)
-			try {
-				nextCi.exit()
-			} catch {
-				// The new runtime was stopped before it was shown.
-			}
+			stopDosRuntime(runtime.fs.em, nextCi, canvas)
 			return
 		}
 		ci = nextCi
@@ -775,13 +797,14 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		if (!alive || resetting) return
 		resetting = true
 		const previous = em
+		const previousCi = ci
 		ci = null
 		em = undefined
 		memfs = null
 		sdl = null
 		try {
 			if (document.pointerLockElement === canvas) document.exitPointerLock()
-			detachDosRuntime(previous, canvas)
+			stopDosRuntime(previous, previousCi, canvas)
 			lockedPoint = { x: 0, y: 0 }
 			mouseRemainder.x = 0
 			mouseRemainder.y = 0
@@ -821,12 +844,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			canvas.removeEventListener('mousemove', onCompatMouse, true)
 			canvas.removeEventListener('contextmenu', onContextMenu)
 			alive = false
-			detachDosRuntime(em, canvas)
-			try {
-				ci?.exit()
-			} catch {
-				// Already stopped.
-			}
+			stopDosRuntime(em, ci, canvas)
 		},
 		reset: () => {
 			void restartDos()
