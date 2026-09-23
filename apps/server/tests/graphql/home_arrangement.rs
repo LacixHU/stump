@@ -135,6 +135,35 @@ async fn test_record_media_play_rejects_non_retro_and_missing() {
 }
 
 #[tokio::test]
+async fn test_recently_added_media_excludes_games() {
+	let app = TestApp::new_with_default_user().await;
+	let book = insert_book(&app, "novel", "epub").await;
+	let game = insert_book(&app, "turrican", "D64").await;
+
+	let listed = app
+		.execute_gql(
+			r#"
+			query RecentlyAdded($pagination: Pagination!) {
+				recentlyAddedMedia(pagination: $pagination) {
+					nodes { id }
+				}
+			}
+			"#,
+			Some(json!({ "pagination": { "offset": { "page": 1, "pageSize": 20 } } })),
+		)
+		.await;
+	let ids = listed["data"]["recentlyAddedMedia"]["nodes"]
+		.as_array()
+		.expect("expected nodes")
+		.iter()
+		.filter_map(|node| node["id"].as_str())
+		.collect::<Vec<_>>();
+
+	assert!(ids.contains(&book.id.as_str()));
+	assert!(!ids.contains(&game.id.as_str()));
+}
+
+#[tokio::test]
 async fn test_last_played_games_rejects_cursor_pagination() {
 	let app = TestApp::new_with_default_user().await;
 	let result = app

@@ -778,9 +778,19 @@ impl MediaQuery {
 	) -> Result<PaginatedResponse<Media>> {
 		let AuthContext { user, .. } = ctx.data::<AuthContext>()?;
 		let conn = ctx.data::<CoreContext>()?.conn.as_ref();
+		let retro_extensions = ContentType::retro_extensions()
+			.iter()
+			.copied()
+			.collect::<Vec<_>>();
 
 		let query = media::ModelWithMetadata::find_for_user(user)
-			.filter(media::Column::DeletedAt.is_null());
+			.filter(media::Column::DeletedAt.is_null())
+			.filter(
+				Expr::expr(Func::lower(Expr::col(
+					media::Column::Extension.as_column_ref(),
+				)))
+				.is_not_in(retro_extensions),
+			);
 
 		match pagination.resolve() {
 			Pagination::Cursor(info) => {
