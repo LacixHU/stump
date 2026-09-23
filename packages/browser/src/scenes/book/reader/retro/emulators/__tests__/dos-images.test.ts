@@ -5,6 +5,8 @@ import {
 	findDosboxConf,
 	isZipBytes,
 	pickRunnable,
+	STUMP_DOS_INPUT_CONF,
+	STUMP_DOS_INPUT_CONF_BODY,
 	STUMP_DOS_MOUNT_CONF,
 	toDos83,
 	zipDirectories,
@@ -68,6 +70,12 @@ describe('DOS image helpers', () => {
 			STUMP_DOS_MOUNT_CONF,
 			'-conf',
 			'dosbox.conf',
+			'-conf',
+			STUMP_DOS_INPUT_CONF,
 		])
+	})
+
+	it('turns autolock off after the bundle conf, without adding autoexec lines', () => {
+		expect(STUMP_DOS_INPUT_CONF_BODY).toMatch(/^\[sdl\]\nautolock=false\n$/)
 	})
 })

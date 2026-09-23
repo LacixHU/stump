@@ -53,6 +53,32 @@ export function dosTouchMickeys(
 	}
 }
 
+/** Virtual touch cursor as a fraction of the canvas, so video mode changes keep its place. */
+export type DosTouchCursor = { x: number; y: number }
+
+export const DOS_TOUCH_CURSOR_START: DosTouchCursor = { x: 0.5, y: 0.5 }
+
+/**
+ * Unlocked DOSBox takes the INT 33h position from the absolute SDL coordinate, so the
+ * virtual cursor must stay on the canvas: once it runs past an edge, DOS pins the pointer
+ * to the corner and every swipe back is spent returning to the visible area.
+ */
+export function stepDosTouchCursor(
+	current: DosTouchCursor,
+	dx: number,
+	dy: number,
+	canvasWidth: number,
+	canvasHeight: number,
+): DosTouchCursor {
+	if (canvasWidth <= 0 || canvasHeight <= 0) return current
+	const maxX = (canvasWidth - 1) / canvasWidth
+	const maxY = (canvasHeight - 1) / canvasHeight
+	return {
+		x: clampDosAxis(current.x + dx / canvasWidth, maxX),
+		y: clampDosAxis(current.y + dy / canvasHeight, maxY),
+	}
+}
+
 export type DosLockedMouse = { x: number; y: number }
 
 function clampDosAxis(value: number, max: number) {

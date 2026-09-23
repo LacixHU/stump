@@ -93,3 +93,15 @@ const m = R.matchRoutes(routes, '/series/abc/settings', '/series')
 This is also why guards that sit on `/:id/settings` need an explicit destination rather than
 a relative one: `LibraryAdminLayout` renders under nested settings paths, so any relative
 form either loops or overshoots.
+
+## DOS mouse fixes: prove them in a real game, not a test program
+
+Two rounds of "touch cursor fixed" failed on the phone. Unit tests passed and a tiny
+mode-13h COM test showed the INT 33h cursor moving, yet Indiana Jones never moved at all:
+its bundled `dosbox.conf` set `autolock=true`, which makes DOSBox drop all mouse motion until
+a click captures the mouse. Desktop worked only because the first click did that capture.
+
+**The rule:** for DOS input bugs, check the bundle's `dosbox.conf` first, since later `-conf`
+files override js-dos options. Then verify in the actual game the user plays, using the
+headless harness (`drive-dos-from-headless-chrome` memory). Also try a real mouse in the same
+session: if the mouse fails too, the bug is below the touch layer.

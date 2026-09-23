@@ -90,12 +90,22 @@ export const STUMP_DOS_MOUNT_CONF = 'stump-mount.conf'
 
 export const STUMP_DOS_MOUNT_CONF_BODY = '[autoexec]\nmount c .\nc:\n'
 
+export const STUMP_DOS_INPUT_CONF = 'stump-input.conf'
+
+/**
+ * Bundles made for desktop DOSBox often ship `autolock=true`. DOSBox then drops every mouse
+ * motion until a click captures the mouse, and releases it again on blur — touch drags never
+ * reach the game, and the unlocked absolute path the player drives is switched off.
+ */
+export const STUMP_DOS_INPUT_CONF_BODY = '[sdl]\nautolock=false\n'
+
 /**
  * js-dos always appends `-c mount c . -c c:` *after* conf `[autoexec]`.
  * A first `-conf` whose autoexec mounts `C:` runs before the bundle conf.
+ * Later confs override earlier ones, so the input conf goes last.
  */
 export function dosboxConfMainArgs(confPath: string): string[] {
-	return ['-conf', STUMP_DOS_MOUNT_CONF, '-conf', confPath]
+	return ['-conf', STUMP_DOS_MOUNT_CONF, '-conf', confPath, '-conf', STUMP_DOS_INPUT_CONF]
 }
 
 export function pickRunnable(names: string[], archiveStem?: string): string | null {

@@ -12,6 +12,8 @@ import {
 	findDosboxConf,
 	isZipBytes,
 	pickRunnable,
+	STUMP_DOS_INPUT_CONF,
+	STUMP_DOS_INPUT_CONF_BODY,
 	STUMP_DOS_MOUNT_CONF,
 	STUMP_DOS_MOUNT_CONF_BODY,
 	toDos83,
@@ -22,11 +24,13 @@ import { dispatchableKeyCode, swallowDosKeyRepeat } from './dos-keys'
 import {
 	createDosMouseEvent,
 	type DosLockedMouse,
+	DOS_TOUCH_CURSOR_START,
 	dosLockedMouseBase,
 	dosTouchMickeys,
 	isCompatTouchMouse,
 	isTouchPointer,
 	seedDosLockedMouse,
+	stepDosTouchCursor,
 } from './dos-mouse'
 import {
 	type DosFsStamp,
@@ -190,6 +194,7 @@ async function mountImage(fs: DosFS, image: ArrayBuffer, fileName?: string): Pro
 		const conf = findDosboxConf(names)
 		if (conf) {
 			fs.createFile(STUMP_DOS_MOUNT_CONF, STUMP_DOS_MOUNT_CONF_BODY)
+			fs.createFile(STUMP_DOS_INPUT_CONF, STUMP_DOS_INPUT_CONF_BODY)
 			return dosboxConfMainArgs(conf)
 		}
 		const stem = name.replace(/\.[^.]+$/, '')
@@ -457,6 +462,8 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	const mouseRemainder = createMouseDeltaRemainder()
 	let lockedPoint: DosLockedMouse = { x: 0, y: 0 }
 	let sdl: DosSdl | null = null
+	let suppressHostMouse = false
+	let hostPointerType = ''
 	let alive = true
 	let resetting = false
 	let ci: DosCommandInterface | null = null
@@ -473,6 +480,11 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		wdosboxUrl: WDOSBOX_URL,
 	}
 
+	const desktopMouse = () =>
+		navigator.maxTouchPoints === 0 &&
+		hostPointerType === 'mouse' &&
+		!window.matchMedia('(pointer: coarse)').matches
+
 	const rememberHostMouse = (clientX: number, clientY: number) => {
 		lockedPoint = seedDosLockedMouse(
 			clientX,
@@ -481,12 +493,10 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			canvas.width,
 			canvas.height,
 		)
-		if (!sdl) return
-		sdl.mouseX = lockedPoint.x
-		sdl.mouseY = lockedPoint.y
 	}
 
 	const publishLockedMouse = (movementX: number, movementY: number) => {
+		if (!desktopMouse()) return
 		const stepped = dosLockedMouseBase(
 			lockedPoint,
 			movementX,
@@ -514,13 +524,35 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		)
 	}
 
-	const onHostMouseMove = (event: MouseEvent) => {
-		if (!event.isTrusted || isCompatTouchMouse(event)) return
+	let pointerWasLocked = false
+	let swallowUnlockMove = false
+	const onPointerLockChange = () => {
 		const locked = document.pointerLockElement === canvas
-		if (!locked && event.target !== canvas) return
-		if (!locked) {
-			rememberHostMouse(event.clientX, event.clientY)
-			if (mouseSensitivity === DEFAULT_MOUSE_SENSITIVITY) return
+		if (!locked && pointerWasLocked) swallowUnlockMove = true
+		pointerWasLocked = locked
+	}
+	document.addEventListener('pointerlockchange', onPointerLockChange)
+	const onEscapeCapture = (event: KeyboardEvent) => {
+		if (event.key !== 'Escape' || document.pointerLockElement !== canvas) return
+		swallowUnlockMove = true
+	}
+	window.addEventListener('keydown', onEscapeCapture, true)
+
+	const onHostMouseMove = (event: MouseEvent) => {
+		if (!event.isTrusted || isCompatTouchMouse(event) || suppressHostMouse) return
+		const locked = document.pointerLockElement === canvas
+		if (swallowUnlockMove || (!locked && pointerWasLocked)) {
+			swallowUnlockMove = false
+			pointerWasLocked = false
+			event.stopImmediatePropagation()
+			return
+		}
+		if (locked) pointerWasLocked = true
+		if (locked && desktopMouse()) {
+			if (mouseSensitivity === DEFAULT_MOUSE_SENSITIVITY) {
+				publishLockedMouse(event.movementX, event.movementY)
+				return
+			}
 			event.stopImmediatePropagation()
 			const scaled = takeScaledMouseDelta(
 				mouseRemainder,
@@ -529,13 +561,12 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 				mouseSensitivity,
 			)
 			if (!scaled.dx && !scaled.dy) return
+			publishLockedMouse(scaled.dx, scaled.dy)
 			dispatchHostMouseMove(event, scaled.dx, scaled.dy)
 			return
 		}
-		if (mouseSensitivity === DEFAULT_MOUSE_SENSITIVITY) {
-			publishLockedMouse(event.movementX, event.movementY)
-			return
-		}
+		if (!locked && event.target !== canvas) return
+		if (mouseSensitivity === DEFAULT_MOUSE_SENSITIVITY) return
 		event.stopImmediatePropagation()
 		const scaled = takeScaledMouseDelta(
 			mouseRemainder,
@@ -544,7 +575,6 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			mouseSensitivity,
 		)
 		if (!scaled.dx && !scaled.dy) return
-		publishLockedMouse(scaled.dx, scaled.dy)
 		dispatchHostMouseMove(event, scaled.dx, scaled.dy)
 	}
 	window.addEventListener('mousemove', onHostMouseMove, true)
@@ -586,11 +616,9 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	const touchOpts: AddEventListenerOptions = { capture: true, passive: false }
 	const touch = createTouchMouseState()
 	let longPressTimer: number | null = null
-	let suppressHostMouse = false
 	let releaseHostMouseTimer: number | null = null
 	const touchRemainder = createMouseDeltaRemainder()
-	let sentX = 0
-	let sentY = 0
+	let cursor = DOS_TOUCH_CURSOR_START
 
 	const clearLongPress = () => {
 		if (longPressTimer !== null) {
@@ -624,8 +652,8 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			createDosMouseEvent(type, {
 				button,
 				buttons: type === 'mousedown' ? (button === 2 ? 2 : 1) : 0,
-				clientX: rect.left + sentX,
-				clientY: rect.top + sentY,
+				clientX: rect.left + cursor.x * rect.width,
+				clientY: rect.top + cursor.y * rect.height,
 				movementX: dx,
 				movementY: dy,
 			}),
@@ -646,9 +674,12 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 		if (!stepped.dx && !stepped.dy) return
 		const cw = canvas.width || rect.width || 1
 		const ch = canvas.height || rect.height || 1
-		sentX += stepped.dx * (rect.width / cw)
-		sentY += stepped.dy * (rect.height / ch)
-		dispatchMouse('mousemove', 0, stepped.dx, stepped.dy)
+		const next = stepDosTouchCursor(cursor, stepped.dx, stepped.dy, cw, ch)
+		const dx = Math.round((next.x - cursor.x) * cw)
+		const dy = Math.round((next.y - cursor.y) * ch)
+		cursor = next
+		if (!dx && !dy) return
+		dispatchMouse('mousemove', 0, dx, dy)
 	}
 
 	const applyTouch = (command: TouchMouseCommand) => {
@@ -662,6 +693,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 	}
 
 	const onPointerDown = (event: PointerEvent) => {
+		hostPointerType = event.pointerType || ''
 		if (!isTouchPointer(event)) return
 		event.preventDefault()
 		if (document.pointerLockElement === canvas) document.exitPointerLock()
@@ -671,7 +703,11 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			releaseHostMouseTimer = null
 		}
 		if (touch.pointerId !== null) return
-		canvas.setPointerCapture(event.pointerId)
+		try {
+			canvas.setPointerCapture(event.pointerId)
+		} catch {
+			void 0
+		}
 		onTouchMouseDown(touch, event.pointerId, event.clientX, event.clientY)
 		clearLongPress()
 		longPressTimer = window.setTimeout(() => {
@@ -708,7 +744,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			if (event.isTrusted) event.stopImmediatePropagation()
 			return
 		}
-		if (event.type === 'mousedown' && document.pointerLockElement !== canvas) {
+		if (event.type === 'mousedown' && desktopMouse() && document.pointerLockElement !== canvas) {
 			rememberHostMouse(event.clientX, event.clientY)
 			void canvas.requestPointerLock?.()
 		}
@@ -751,8 +787,7 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			mouseRemainder.y = 0
 			touchRemainder.x = 0
 			touchRemainder.y = 0
-			sentX = 0
-			sentY = 0
+			cursor = DOS_TOUCH_CURSOR_START
 			await bootDos()
 			if (!alive) return
 			if (!ci) throw new Error('Failed to restart the DOS emulator')
@@ -769,6 +804,8 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			clearLongPress()
 			if (releaseHostMouseTimer !== null) window.clearTimeout(releaseHostMouseTimer)
 			window.removeEventListener('mousemove', onHostMouseMove, true)
+			document.removeEventListener('pointerlockchange', onPointerLockChange)
+			window.removeEventListener('keydown', onEscapeCapture, true)
 			window.removeEventListener('keydown', swallowDosKeyRepeat, true)
 			window.removeEventListener('touchstart', onNativeTouch, touchOpts)
 			window.removeEventListener('touchmove', onNativeTouch, touchOpts)

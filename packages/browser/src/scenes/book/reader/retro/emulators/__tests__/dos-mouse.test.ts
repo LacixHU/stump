@@ -1,5 +1,6 @@
 import {
 	createDosMouseEvent,
+	DOS_TOUCH_CURSOR_START,
 	dosContainBox,
 	dosLockedMouseBase,
 	dosTouchMickeys,
@@ -7,6 +8,7 @@ import {
 	isCompatTouchMouse,
 	isTouchPointer,
 	seedDosLockedMouse,
+	stepDosTouchCursor,
 } from '../dos-mouse'
 
 function withWindowScroll(x: number, y: number, run: () => void) {
@@ -25,6 +27,21 @@ function withWindowScroll(x: number, y: number, run: () => void) {
 }
 
 describe('DOS mouse events', () => {
+	it('keeps the touch cursor on the canvas so swiping back moves it at once', () => {
+		let cursor = DOS_TOUCH_CURSOR_START
+		for (let i = 0; i < 50; i++) cursor = stepDosTouchCursor(cursor, 40, 40, 320, 200)
+		expect(cursor).toEqual({ x: 319 / 320, y: 199 / 200 })
+		cursor = stepDosTouchCursor(cursor, -32, -20, 320, 200)
+		expect(cursor.x * 320).toBeCloseTo(287)
+		expect(cursor.y * 200).toBeCloseTo(179)
+		for (let i = 0; i < 50; i++) cursor = stepDosTouchCursor(cursor, -40, -40, 320, 200)
+		expect(cursor).toEqual({ x: 0, y: 0 })
+	})
+
+	it('holds the touch cursor still while the canvas has no size', () => {
+		expect(stepDosTouchCursor({ x: 0.25, y: 0.75 }, 10, 10, 0, 0)).toEqual({ x: 0.25, y: 0.75 })
+	})
+
 	it('sets pageX/pageY from client plus scroll so unlocked SDL does not snap to 0,0', () => {
 		withWindowScroll(40, 80, () => {
 			const event = createDosMouseEvent('mousemove', {
