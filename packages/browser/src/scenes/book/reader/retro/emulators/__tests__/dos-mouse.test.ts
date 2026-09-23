@@ -1,10 +1,12 @@
 import {
 	createDosMouseEvent,
 	dosContainBox,
+	dosLockedMouseBase,
 	dosTouchMickeys,
 	dosTouchMoveScale,
 	isCompatTouchMouse,
 	isTouchPointer,
+	seedDosLockedMouse,
 } from '../dos-mouse'
 
 function withWindowScroll(x: number, y: number, run: () => void) {
@@ -68,6 +70,31 @@ describe('DOS mouse events', () => {
 		const step = dosTouchMickeys(50, 40, rect, 320, 200)
 		expect(step.dx * (box.width / 640)).toBeCloseTo(50)
 		expect(step.dy * (box.height / 400)).toBeCloseTo(40)
+	})
+
+	it('seeds pointer-lock position in canvas pixels from the click', () => {
+		expect(
+			seedDosLockedMouse(410, 220, { height: 400, left: 10, top: 20, width: 800 }, 320, 200),
+		).toEqual({ x: 160, y: 100 })
+	})
+
+	it('publishes a base so SDL.mouse + movement lands on the scaled canvas position', () => {
+		const rect = { height: 400, left: 10, top: 20, width: 800 }
+		const stepped = dosLockedMouseBase({ x: 100, y: 50 }, 8, -4, rect, 320, 200)
+		expect(stepped.base.x + 8).toBeCloseTo(stepped.next.x)
+		expect(stepped.base.y + -4).toBeCloseTo(stepped.next.y)
+		expect(stepped.next.x).toBeCloseTo(100 + 8 * (320 / 800))
+		expect(stepped.next.y).toBeCloseTo(50 + -4 * (200 / 400))
+	})
+
+	it('clamps locked motion so the cursor can leave the edge it was pinned to', () => {
+		const rect = { height: 200, left: 0, top: 0, width: 320 }
+		const pinned = dosLockedMouseBase({ x: 319, y: 0 }, 40, -10, rect, 320, 200)
+		expect(pinned.next).toEqual({ x: 319, y: 0 })
+		expect(pinned.base.x + 40).toBeCloseTo(319)
+		const back = dosLockedMouseBase(pinned.next, -8, 4, rect, 320, 200)
+		expect(back.next).toEqual({ x: 311, y: 4 })
+		expect(back.base.x + -8).toBeCloseTo(back.next.x)
 	})
 
 	it('detects touch-generated mouse and touch/pen pointers', () => {

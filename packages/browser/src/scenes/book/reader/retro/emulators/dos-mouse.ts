@@ -53,6 +53,58 @@ export function dosTouchMickeys(
 	}
 }
 
+export type DosLockedMouse = { x: number; y: number }
+
+function clampDosAxis(value: number, max: number) {
+	if (!Number.isFinite(value)) return 0
+	if (max < 0) return 0
+	return Math.min(max, Math.max(0, value))
+}
+
+export function seedDosLockedMouse(
+	clientX: number,
+	clientY: number,
+	rect: DosClientBox,
+	canvasWidth: number,
+	canvasHeight: number,
+): DosLockedMouse {
+	const cw = canvasWidth > 0 ? canvasWidth : rect.width
+	const ch = canvasHeight > 0 ? canvasHeight : rect.height
+	if (!rect.width || !rect.height || !cw || !ch) return { x: 0, y: 0 }
+	return {
+		x: clampDosAxis((clientX - rect.left) * (cw / rect.width), cw - 1),
+		y: clampDosAxis((clientY - rect.top) * (ch / rect.height), ch - 1),
+	}
+}
+
+export function dosLockedMouseBase(
+	current: DosLockedMouse,
+	movementX: number,
+	movementY: number,
+	rect: DosClientBox,
+	canvasWidth: number,
+	canvasHeight: number,
+): { base: DosLockedMouse; next: DosLockedMouse } {
+	const dx = Number.isFinite(movementX) ? movementX : 0
+	const dy = Number.isFinite(movementY) ? movementY : 0
+	const cw = canvasWidth > 0 ? canvasWidth : rect.width
+	const ch = canvasHeight > 0 ? canvasHeight : rect.height
+	if (!rect.width || !rect.height || !cw || !ch) {
+		return {
+			base: { x: current.x - dx, y: current.y - dy },
+			next: { x: current.x + dx, y: current.y + dy },
+		}
+	}
+	const next = {
+		x: clampDosAxis(current.x + dx * (cw / rect.width), cw - 1),
+		y: clampDosAxis(current.y + dy * (ch / rect.height), ch - 1),
+	}
+	return {
+		base: { x: next.x - dx, y: next.y - dy },
+		next,
+	}
+}
+
 export function createDosMouseEvent(
 	type: string,
 	init: {
