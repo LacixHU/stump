@@ -1,11 +1,10 @@
 import { PREFETCH_STALE_TIME, useInfiniteSuspenseGraphQL, useSDK } from '@stump/client'
-import { Heading, ProgressBar, Text } from '@stump/components'
+import { ProgressBar, Text } from '@stump/components'
 import { FragmentType, graphql, useFragment } from '@stump/graphql'
 import { useLocaleContext } from '@stump/i18n'
 import { useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
-import { BookMarked } from 'lucide-react'
-import { memo, Suspense, useCallback, useMemo } from 'react'
+import { memo, Suspense, useCallback, useEffect, useMemo } from 'react'
 import { useMediaMatch } from 'rooks'
 
 import HorizontalCardList from '@/components/HorizontalCardList'
@@ -73,7 +72,7 @@ export const usePrefetchContinueReading = () => {
 	const { sdk } = useSDK()
 	const client = useQueryClient()
 	return useCallback(() => {
-		client.prefetchInfiniteQuery({
+		return client.prefetchInfiniteQuery({
 			queryKey: sdk.cacheKey('inProgress'),
 			initialPageParam: {
 				offset: {
@@ -91,15 +90,19 @@ export const usePrefetchContinueReading = () => {
 	}, [sdk, client])
 }
 
-export default function ContinueReadingContainer() {
+type SectionProps = {
+	onEmptyChange?: (empty: boolean) => void
+}
+
+export default function ContinueReadingContainer({ onEmptyChange }: SectionProps) {
 	return (
 		<Suspense>
-			<ContinueReading />
+			<ContinueReading onEmptyChange={onEmptyChange} />
 		</Suspense>
 	)
 }
 
-function ContinueReading() {
+function ContinueReading({ onEmptyChange }: SectionProps) {
 	const { sdk } = useSDK()
 	const { t } = useLocaleContext()
 	const isAtLeastMedium = useMediaMatch('(min-width: 768px)')
@@ -125,23 +128,12 @@ function ContinueReading() {
 		}
 	}, [fetchNextPage, hasNextPage, isFetchingNextPage])
 
+	useEffect(() => {
+		onEmptyChange?.(nodes.length === 0)
+	}, [nodes.length, onEmptyChange])
+
 	if (!nodes.length) {
-		return (
-			<div className="space-y-2 flex flex-col">
-				<Heading size="sm">{t('homeScene.continueReading.title')}</Heading>
-				<div className="space-x-3 px-4 py-4 flex items-start justify-start rounded-lg border border-dashed border-border">
-					<span className="p-2 rounded-lg border border-border bg-muted">
-						<BookMarked className="h-8 w-8 text-muted-foreground" />
-					</span>
-					<div>
-						<Text>{t('homeScene.continueReading.emptyState.heading')}</Text>
-						<Text size="sm" variant="muted">
-							{t('homeScene.continueReading.emptyState.message')}
-						</Text>
-					</div>
-				</div>
-			</div>
-		)
+		return null
 	}
 
 	const cards = nodes.map((node) => <ContinueReadingCard key={node.id} fragment={node} />)

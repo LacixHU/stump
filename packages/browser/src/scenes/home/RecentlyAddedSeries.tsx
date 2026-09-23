@@ -1,5 +1,4 @@
 import { PREFETCH_STALE_TIME, useInfiniteSuspenseGraphQL, useSDK } from '@stump/client'
-import { Text } from '@stump/components'
 import {
 	RecentlyAddedSeriesQuery,
 	RecentlyAddedSeriesQueryVariables,
@@ -8,8 +7,7 @@ import {
 import { useLocaleContext } from '@stump/i18n'
 import { useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
-import { BookCopy } from 'lucide-react'
-import { Suspense, useCallback, useMemo } from 'react'
+import { Suspense, useCallback, useEffect, useMemo } from 'react'
 import { useMediaMatch } from 'rooks'
 
 import MultiRowHorizontalCardList from '@/components/MultiRowHorizontalCardList'
@@ -70,7 +68,7 @@ export const usePrefetchRecentlyAddedSeries = () => {
 	const { sdk } = useSDK()
 	const client = useQueryClient()
 	return useCallback(() => {
-		client.prefetchInfiniteQuery({
+		return client.prefetchInfiniteQuery({
 			queryKey: ['recentlyAddedSeries2'],
 			initialPageParam: {
 				cursor: {
@@ -87,7 +85,11 @@ export const usePrefetchRecentlyAddedSeries = () => {
 	}, [sdk, client])
 }
 
-function RecentlyAddedSeries() {
+type SectionProps = {
+	onEmptyChange?: (empty: boolean) => void
+}
+
+function RecentlyAddedSeries({ onEmptyChange }: SectionProps) {
 	const { t } = useLocaleContext()
 	const {
 		preferences: { thumbnailRatio },
@@ -118,19 +120,13 @@ function RecentlyAddedSeries() {
 		}
 	}, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
-	const emptyState = (
-		<div className="space-x-3 px-4 py-4 flex items-start justify-start rounded-lg border border-dashed border-border">
-			<span className="p-2 rounded-lg border border-border bg-muted">
-				<BookCopy className="h-8 w-8 text-muted-foreground" />
-			</span>
-			<div>
-				<Text>{t('homeScene.recentlyAddedSeries.emptyState.heading')}</Text>
-				<Text size="sm" variant="muted">
-					{t('homeScene.recentlyAddedSeries.emptyState.message')}
-				</Text>
-			</div>
-		</div>
-	)
+	useEffect(() => {
+		onEmptyChange?.(nodes.length === 0)
+	}, [nodes.length, onEmptyChange])
+
+	if (!nodes.length) {
+		return null
+	}
 
 	return (
 		<MultiRowHorizontalCardList
@@ -152,16 +148,16 @@ function RecentlyAddedSeries() {
 				/>
 			)}
 			cardHeight={cardHeight}
+			cardWidth={cardWidth}
 			onFetchMore={handleFetchMore}
-			emptyState={emptyState}
 		/>
 	)
 }
 
-export default function RecentlyAddedSeries2Container() {
+export default function RecentlyAddedSeries2Container({ onEmptyChange }: SectionProps) {
 	return (
 		<Suspense>
-			<RecentlyAddedSeries />
+			<RecentlyAddedSeries onEmptyChange={onEmptyChange} />
 		</Suspense>
 	)
 }

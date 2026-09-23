@@ -901,6 +901,12 @@
 				"heading": "Nincs megjeleníthető tartalom",
 				"message": "Minden újonnan hozzáadott könyv itt fog megjelenni"
 			}
+		},
+		"lastPlayedGames": {
+			"title": "Utoljára játszott játékok"
+		},
+		"emptyFallback": {
+			"link": "Válaszd ki, mi jelenjen meg a főoldalon"
 		}
 	},
 	"metadataEditor": {
@@ -1646,6 +1652,10 @@
 					"title": "Navigáció",
 					"description": "Az alkalmazás navigációs elemeinek testreszabása"
 				},
+				"home": {
+					"title": "Főoldal",
+					"description": "Válaszd ki, mely csoportok jelenjenek meg a főoldalon, és milyen sorrendben"
+				},
 				"layoutAndArrangement": {
 					"label": "Elrendezés",
 					"description": "Szabd testre, hogyan jeleníti meg a Stump az információkat és rendszerezi a tartalmat"
@@ -1670,6 +1680,13 @@
 						"doubleSidebar": "Ehhez a beállításhoz engedélyezni kell a beállítások oldalsávját",
 						"topbar": "Ez a beállítás jelenleg nem támogatott, ha az elsődleges navigáció a felső sáv"
 					}
+				},
+				"homeArrangement": {
+					"label": "Főoldal elrendezése",
+					"description": "A főoldali csoportok megjelenítése, elrejtése vagy átrendezése",
+					"isLocked": "Az elrendezés zárolva van",
+					"lock": "Elrendezés zárolása",
+					"unlock": "Elrendezés feloldása"
 				},
 				"navigationArrangement": {
 					"label": "Navigáció elrendezése",

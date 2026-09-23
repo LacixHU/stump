@@ -1,8 +1,8 @@
 use models::entity::{
 	age_restriction, api_key, kobo_sync_session, library, library_config,
-	library_inclusion, media, media_analysis, media_metadata, media_save_state,
-	media_tag, reading_device, reading_session, refresh_token, series, series_metadata,
-	server_config, session, tag, user, user_preferences,
+	library_inclusion, media, media_analysis, media_last_played, media_metadata,
+	media_save_state, media_tag, reading_device, reading_session, refresh_token, series,
+	series_metadata, server_config, session, tag, user, user_preferences,
 };
 use sea_orm::{ConnectionTrait, Database, DbBackend, DbConn, DbErr, Schema};
 pub async fn test_database() -> DbConn {
@@ -42,11 +42,18 @@ pub async fn create_database_tables(db: &DbConn) -> Result<(), DbErr> {
 		schema.create_table_from_entity(refresh_token::Entity),
 		schema.create_table_from_entity(session::Entity),
 		schema.create_table_from_entity(media_save_state::Entity),
+		schema.create_table_from_entity(media_last_played::Entity),
 	];
 
 	for stmt in tables {
 		db.execute(db.get_database_backend().build(&stmt)).await?;
 	}
+
+	db.execute(sea_orm::Statement::from_string(
+		db.get_database_backend(),
+		"CREATE UNIQUE INDEX IF NOT EXISTS media_last_played_user_media_idx ON media_last_played(user_id, media_id)".to_string(),
+	))
+	.await?;
 
 	Ok(())
 }

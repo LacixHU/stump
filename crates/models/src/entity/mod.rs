@@ -30,6 +30,7 @@ pub mod log;
 pub mod media;
 pub mod media_analysis;
 pub mod media_annotation;
+pub mod media_last_played;
 pub mod media_metadata;
 pub mod media_save_state;
 pub mod media_tag;

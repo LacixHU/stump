@@ -1,6 +1,6 @@
 import { Button, cn, Heading, Text, ToolTip } from '@stump/components'
 import { ChevronLeft, ChevronRight, CircleSlash2 } from 'lucide-react'
-import { forwardRef, ReactNode, useMemo } from 'react'
+import { forwardRef, ReactNode, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ScrollerProps, Virtuoso } from 'react-virtuoso'
 import { useMediaMatch } from 'rooks'
 
@@ -14,8 +14,11 @@ type Props<T> = {
 	onFetchMore?: () => void
 	emptyState?: ReactNode
 	cardHeight: number // Not including gaps/padding, component will calculate total height
+	cardWidth?: number
 	rowCount?: number | 'responsive'
 }
+
+const COLUMN_PADDING = 12
 
 export default function MultiRowHorizontalCardList<T>({
 	title,
@@ -25,6 +28,7 @@ export default function MultiRowHorizontalCardList<T>({
 	onFetchMore,
 	emptyState,
 	cardHeight,
+	cardWidth,
 	rowCount: rowCountProp = 'responsive',
 }: Props<T>) {
 	const {
@@ -35,8 +39,26 @@ export default function MultiRowHorizontalCardList<T>({
 		useHorizontalScroll()
 
 	const isAtLeastLarge = useMediaMatch('(min-width: 1024px)')
+	const containerRef = useRef<HTMLDivElement>(null)
+	const [containerWidth, setContainerWidth] = useState(0)
 
-	const rowCount = rowCountProp === 'responsive' ? (isAtLeastLarge ? 2 : 1) : rowCountProp
+	useLayoutEffect(() => {
+		const element = containerRef.current
+		if (!element) return
+
+		const updateWidth = () => setContainerWidth(element.clientWidth)
+		updateWidth()
+		const observer = new ResizeObserver(updateWidth)
+		observer.observe(element)
+		return () => observer.disconnect()
+	}, [])
+
+	const preferredRowCount = rowCountProp === 'responsive' ? (isAtLeastLarge ? 2 : 1) : rowCountProp
+	const fitsInOneRow =
+		cardWidth != null &&
+		containerWidth > 0 &&
+		items.length * (cardWidth + COLUMN_PADDING) <= containerWidth
+	const rowCount = fitsInOneRow ? 1 : preferredRowCount
 
 	const columns = useMemo(() => {
 		const cols: T[][] = []
@@ -98,7 +120,7 @@ export default function MultiRowHorizontalCardList<T>({
 	}
 
 	return (
-		<div className="space-y-2 flex flex-col">
+		<div ref={containerRef} className="space-y-2 flex flex-col">
 			<div className="flex flex-row items-center justify-between">
 				<Heading size="sm">{title}</Heading>
 				<div className={cn('self-end', { hidden: !items.length })}>

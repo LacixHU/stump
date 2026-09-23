@@ -901,6 +901,12 @@
 				"heading": "Nothing to show",
 				"message": "Any recent books you add will show up here"
 			}
+		},
+		"lastPlayedGames": {
+			"title": "Last played games"
+		},
+		"emptyFallback": {
+			"link": "Choose what appears on your home screen"
 		}
 	},
 	"metadataEditor": {
@@ -1646,6 +1652,10 @@
 					"title": "Navigation",
 					"description": "Customize the navigation elements of the app"
 				},
+				"home": {
+					"title": "Home",
+					"description": "Choose which groups appear on your home screen and in what order"
+				},
 				"layoutAndArrangement": {
 					"label": "Layout and arrangement",
 					"description": "Customize how Stump displays information and organizes content"
@@ -1670,6 +1680,13 @@
 						"doubleSidebar": "This setting requires the settings sidebar to be enabled",
 						"topbar": "This setting is not currently supported when the primary navigation is set to top bar"
 					}
+				},
+				"homeArrangement": {
+					"label": "Home arrangement",
+					"description": "Show, hide, or reorder the groups on your home screen",
+					"isLocked": "Arrangement is locked",
+					"lock": "Lock arrangement",
+					"unlock": "Unlock arrangement"
 				},
 				"navigationArrangement": {
 					"label": "Navigation arrangement",

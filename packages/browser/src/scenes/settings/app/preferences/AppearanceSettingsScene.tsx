@@ -13,6 +13,7 @@ import EnableJobOverlayToggle from './EnableJobOverlayToggle'
 import FontSelect from './FontSelect'
 import GradientToggle from './GradientToggle'
 import HideScrollbarToggle from './HideScrollbarToggle'
+import { HomeArrangement } from './home-arrangement'
 import InterfaceRoundnessPreference from './InterfaceRoundnessPreference'
 import LiveRefetchToggle from './LiveRefetchToggle'
 import MaxWidthPreference from './MaxWidthPreference'
@@ -84,6 +85,12 @@ export default function AppearanceSettingsScene() {
 						<ReplacePrimarySidebarToggle />
 						<Suspense>
 							<NavigationArrangement />
+						</Suspense>
+					</NewCard>
+
+					<NewCard label={t(getKey('home.title'))} description={t(getKey('home.description'))}>
+						<Suspense>
+							<HomeArrangement />
 						</Suspense>
 					</NewCard>
 

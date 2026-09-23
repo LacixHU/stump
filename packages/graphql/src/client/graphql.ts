@@ -950,6 +950,35 @@ export type FitWithinResizeInput = {
   width: Scalars['Int']['input'];
 };
 
+export type HomeArrangement = {
+  __typename?: 'HomeArrangement';
+  locked: Scalars['Boolean']['output'];
+  sections: Array<HomeSection>;
+};
+
+export type HomeArrangementInput = {
+  sections: Array<HomeSectionInput>;
+};
+
+export type HomeSection = {
+  __typename?: 'HomeSection';
+  kind: HomeSectionKind;
+  visible: Scalars['Boolean']['output'];
+};
+
+export type HomeSectionInput = {
+  kind: HomeSectionKind;
+  visible: Scalars['Boolean']['input'];
+};
+
+export enum HomeSectionKind {
+  InProgressBooks = 'IN_PROGRESS_BOOKS',
+  LastPlayedGames = 'LAST_PLAYED_GAMES',
+  OnDeck = 'ON_DECK',
+  RecentlyAddedBooks = 'RECENTLY_ADDED_BOOKS',
+  RecentlyAddedSeries = 'RECENTLY_ADDED_SERIES'
+}
+
 export type ImageColor = {
   __typename?: 'ImageColor';
   color: Scalars['String']['output'];
@@ -1114,6 +1143,12 @@ export type JobUpdate = {
   subtitle?: Maybe<Scalars['String']['output']>;
   /** The number of subtasks that exist in the current task */
   totalSubtasks?: Maybe<Scalars['Int']['output']>;
+};
+
+export type LastPlayedGame = {
+  __typename?: 'LastPlayedGame';
+  lastPlayedAt: Scalars['DateTime']['output'];
+  media: Media;
 };
 
 export type Library = {
@@ -2137,6 +2172,7 @@ export type Mutation = {
   /** Pin or unpin a message (Moderator+) */
   pinMessage: Scalars['Boolean']['output'];
   processLibraryThumbnails: Scalars['Boolean']['output'];
+  recordMediaPlay: Scalars['Boolean']['output'];
   /**
    * Rebuild the thumbnail for a library from its contents, discarding whatever is there
    * now. The cover is taken from the first book of its first series, whose own thumbnail
@@ -2226,6 +2262,8 @@ export type Mutation = {
   updateCustomEmoji: CustomEmoji;
   updateEmailDevice: RegisteredEmailDevice;
   updateEmailer: Emailer;
+  updateHomeArrangement: HomeArrangement;
+  updateHomeArrangementLock: HomeArrangement;
   /**
    * Update an existing library with the provided configuration. If `scan_after_persist` is `true`,
    * the library will be scanned immediately after updating.
@@ -2733,6 +2771,11 @@ export type MutationProcessLibraryThumbnailsArgs = {
 };
 
 
+export type MutationRecordMediaPlayArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
 export type MutationRegenerateLibraryThumbnailArgs = {
   id: Scalars['ID']['input'];
 };
@@ -2920,6 +2963,16 @@ export type MutationUpdateEmailDeviceArgs = {
 export type MutationUpdateEmailerArgs = {
   id: Scalars['Int']['input'];
   input: EmailerInput;
+};
+
+
+export type MutationUpdateHomeArrangementArgs = {
+  input: HomeArrangementInput;
+};
+
+
+export type MutationUpdateHomeArrangementLockArgs = {
+  locked: Scalars['Boolean']['input'];
 };
 
 
@@ -3276,6 +3329,12 @@ export type PaginatedJobResponse = {
   pageInfo: PaginationInfo;
 };
 
+export type PaginatedLastPlayedGameResponse = {
+  __typename?: 'PaginatedLastPlayedGameResponse';
+  nodes: Array<LastPlayedGame>;
+  pageInfo: PaginationInfo;
+};
+
 export type PaginatedLibraryResponse = {
   __typename?: 'PaginatedLibraryResponse';
   nodes: Array<Library>;
@@ -3444,6 +3503,7 @@ export type Query = {
   jobById?: Maybe<Job>;
   jobs: PaginatedJobResponse;
   keepReading: PaginatedMediaResponse;
+  lastPlayedGames: PaginatedLastPlayedGameResponse;
   lastVisitedLibrary?: Maybe<Library>;
   libraries: PaginatedLibraryResponse;
   /** Returns the available alphabet for all libraries in the server */
@@ -3642,6 +3702,11 @@ export type QueryJobsArgs = {
 
 
 export type QueryKeepReadingArgs = {
+  pagination?: Pagination;
+};
+
+
+export type QueryLastPlayedGamesArgs = {
   pagination?: Pagination;
 };
 
@@ -5013,7 +5078,7 @@ export type UserPreferences = {
   enableLiveRefetch: Scalars['Boolean']['output'];
   enableReadingJournal: Scalars['Boolean']['output'];
   enableReplacePrimarySidebar: Scalars['Boolean']['output'];
-  homeArrangement: Arrangement;
+  homeArrangement: HomeArrangement;
   interfaceRoundness: InterfaceRoundness;
   layoutMaxWidthPx?: Maybe<Scalars['Int']['output']>;
   locale: Scalars['String']['output'];
@@ -6152,6 +6217,13 @@ export type UpdateReadProgressMutationVariables = Exact<{
 
 export type UpdateReadProgressMutation = { __typename?: 'Mutation', updateMediaProgress: { __typename: 'ReadingSession' } };
 
+export type RecordMediaPlayMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type RecordMediaPlayMutation = { __typename?: 'Mutation', recordMediaPlay: boolean };
+
 export type BookManagementSceneQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
@@ -6331,7 +6403,19 @@ export type ContinueReadingMediaQuery = { __typename?: 'Query', keepReading: { _
 export type HomeSceneQueryQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type HomeSceneQueryQuery = { __typename?: 'Query', numberOfLibraries: number };
+export type HomeSceneQueryQuery = { __typename?: 'Query', numberOfLibraries: number, me: { __typename?: 'User', preferences: { __typename?: 'UserPreferences', homeArrangement: { __typename?: 'HomeArrangement', sections: Array<{ __typename?: 'HomeSection', kind: HomeSectionKind, visible: boolean }> } } } };
+
+export type LastPlayedGameBookFragment = { __typename?: 'Media', id: string, resolvedName: string, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } } & { ' $fragmentName'?: 'LastPlayedGameBookFragment' };
+
+export type LastPlayedGamesQueryVariables = Exact<{
+  pagination: Pagination;
+}>;
+
+
+export type LastPlayedGamesQuery = { __typename?: 'Query', lastPlayedGames: { __typename?: 'PaginatedLastPlayedGameResponse', nodes: Array<{ __typename?: 'LastPlayedGame', lastPlayedAt: any, media: (
+        { __typename?: 'Media', id: string }
+        & { ' $fragmentRefs'?: { 'LastPlayedGameBookFragment': LastPlayedGameBookFragment } }
+      ) }>, pageInfo: { __typename: 'CursorPaginationInfo' } | { __typename: 'OffsetPaginationInfo', currentPage: number, totalPages: number, pageSize: number, pageOffset: number, zeroBased: boolean } } };
 
 export type OnDeckBookFragment = { __typename?: 'Media', id: string, resolvedName: string, seriesPosition?: number | null, metadata?: { __typename?: 'MediaMetadata', number?: any | null } | null, series: { __typename?: 'Series', mediaCount: number, metadata?: { __typename?: 'SeriesMetadata', totalIssues?: number | null } | null }, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } } & { ' $fragmentName'?: 'OnDeckBookFragment' };
 
@@ -6688,6 +6772,25 @@ export type UpdateUserProfileFormMutationVariables = Exact<{
 
 
 export type UpdateUserProfileFormMutation = { __typename?: 'Mutation', updateViewer: { __typename?: 'User', id: string, username: string } };
+
+export type HomeArrangementQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type HomeArrangementQuery = { __typename?: 'Query', me: { __typename?: 'User', preferences: { __typename?: 'UserPreferences', homeArrangement: { __typename?: 'HomeArrangement', locked: boolean, sections: Array<{ __typename?: 'HomeSection', kind: HomeSectionKind, visible: boolean }> } } } };
+
+export type HomeArrangementUpdateMutationVariables = Exact<{
+  input: HomeArrangementInput;
+}>;
+
+
+export type HomeArrangementUpdateMutation = { __typename?: 'Mutation', updateHomeArrangement: { __typename?: 'HomeArrangement', locked: boolean, sections: Array<{ __typename?: 'HomeSection', kind: HomeSectionKind, visible: boolean }> } };
+
+export type HomeArrangementUpdateLockStatusMutationVariables = Exact<{
+  locked: Scalars['Boolean']['input'];
+}>;
+
+
+export type HomeArrangementUpdateLockStatusMutation = { __typename?: 'Mutation', updateHomeArrangementLock: { __typename?: 'HomeArrangement', locked: boolean } };
 
 export type NavigationArrangementQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -7996,6 +8099,23 @@ export const ContinueReadingBookFragmentDoc = new TypedDocumentString(`
   }
 }
     `, {"fragmentName":"ContinueReadingBook"}) as unknown as TypedDocumentString<ContinueReadingBookFragment, unknown>;
+export const LastPlayedGameBookFragmentDoc = new TypedDocumentString(`
+    fragment LastPlayedGameBook on Media {
+  id
+  resolvedName
+  thumbnail {
+    url
+    metadata {
+      averageColor
+      colors {
+        color
+        percentage
+      }
+      thumbhash
+    }
+  }
+}
+    `, {"fragmentName":"LastPlayedGameBook"}) as unknown as TypedDocumentString<LastPlayedGameBookFragment, unknown>;
 export const OnDeckBookFragmentDoc = new TypedDocumentString(`
     fragment OnDeckBook on Media {
   id
@@ -11574,6 +11694,11 @@ export const UpdateReadProgressDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<UpdateReadProgressMutation, UpdateReadProgressMutationVariables>;
+export const RecordMediaPlayDocument = new TypedDocumentString(`
+    mutation RecordMediaPlay($id: ID!) {
+  recordMediaPlay(id: $id)
+}
+    `) as unknown as TypedDocumentString<RecordMediaPlayMutation, RecordMediaPlayMutationVariables>;
 export const BookManagementSceneDocument = new TypedDocumentString(`
     query BookManagementScene($id: ID!) {
   mediaById(id: $id) {
@@ -12058,8 +12183,55 @@ export const ContinueReadingMediaDocument = new TypedDocumentString(`
 export const HomeSceneQueryDocument = new TypedDocumentString(`
     query HomeSceneQuery {
   numberOfLibraries
+  me {
+    preferences {
+      homeArrangement {
+        sections {
+          kind
+          visible
+        }
+      }
+    }
+  }
 }
     `) as unknown as TypedDocumentString<HomeSceneQueryQuery, HomeSceneQueryQueryVariables>;
+export const LastPlayedGamesDocument = new TypedDocumentString(`
+    query LastPlayedGames($pagination: Pagination!) {
+  lastPlayedGames(pagination: $pagination) {
+    nodes {
+      lastPlayedAt
+      media {
+        id
+        ...LastPlayedGameBook
+      }
+    }
+    pageInfo {
+      __typename
+      ... on OffsetPaginationInfo {
+        currentPage
+        totalPages
+        pageSize
+        pageOffset
+        zeroBased
+      }
+    }
+  }
+}
+    fragment LastPlayedGameBook on Media {
+  id
+  resolvedName
+  thumbnail {
+    url
+    metadata {
+      averageColor
+      colors {
+        color
+        percentage
+      }
+      thumbhash
+    }
+  }
+}`) as unknown as TypedDocumentString<LastPlayedGamesQuery, LastPlayedGamesQueryVariables>;
 export const OnDeckBooksWebDocument = new TypedDocumentString(`
     query OnDeckBooksWeb($pagination: Pagination!) {
   onDeck(pagination: $pagination) {
@@ -12880,6 +13052,39 @@ export const UpdateUserProfileFormDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<UpdateUserProfileFormMutation, UpdateUserProfileFormMutationVariables>;
+export const HomeArrangementDocument = new TypedDocumentString(`
+    query HomeArrangement {
+  me {
+    preferences {
+      homeArrangement {
+        locked
+        sections {
+          kind
+          visible
+        }
+      }
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<HomeArrangementQuery, HomeArrangementQueryVariables>;
+export const HomeArrangementUpdateDocument = new TypedDocumentString(`
+    mutation HomeArrangementUpdate($input: HomeArrangementInput!) {
+  updateHomeArrangement(input: $input) {
+    locked
+    sections {
+      kind
+      visible
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<HomeArrangementUpdateMutation, HomeArrangementUpdateMutationVariables>;
+export const HomeArrangementUpdateLockStatusDocument = new TypedDocumentString(`
+    mutation HomeArrangementUpdateLockStatus($locked: Boolean!) {
+  updateHomeArrangementLock(locked: $locked) {
+    locked
+  }
+}
+    `) as unknown as TypedDocumentString<HomeArrangementUpdateLockStatusMutation, HomeArrangementUpdateLockStatusMutationVariables>;
 export const NavigationArrangementDocument = new TypedDocumentString(`
     query NavigationArrangement {
   me {

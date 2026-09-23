@@ -3,8 +3,8 @@ use crate::{
 	error_message::FORBIDDEN_ACTION,
 	guard::{OptionalFeature, OptionalFeatureGuard, PermissionGuard, ServerOwnerGuard},
 	input::user::{
-		AgeRestrictionInput, CreateUserInput, NavigationArrangementInput,
-		UpdateUserInput, UpdateUserPreferencesInput,
+		AgeRestrictionInput, CreateUserInput, HomeArrangementInput,
+		NavigationArrangementInput, UpdateUserInput, UpdateUserPreferencesInput,
 	},
 	object::{user::User, user_preferences::UserPreferences},
 	utils::save_user_session,
@@ -17,7 +17,8 @@ use models::{
 		user_login_activity, user_preferences,
 	},
 	shared::{
-		arrangement::Arrangement, enums::UserPermission, permission_set::PermissionSet,
+		arrangement::Arrangement, enums::UserPermission,
+		home_arrangement::HomeArrangement, permission_set::PermissionSet,
 	},
 };
 use sea_orm::{
@@ -487,6 +488,57 @@ impl UserMutation {
 		let mut active_model = preferences.into_active_model();
 		active_model.navigation_arrangement = Set(Some(updated_arrangement.clone()));
 
+		active_model.update(conn).await?;
+
+		Ok(updated_arrangement)
+	}
+
+	async fn update_home_arrangement_lock(
+		&self,
+		ctx: &Context<'_>,
+		locked: bool,
+	) -> Result<HomeArrangement> {
+		let conn = ctx.data::<CoreContext>()?.conn.as_ref();
+		let AuthContext { user, .. } = ctx.data::<AuthContext>()?;
+
+		let preferences = user_preferences::Entity::find()
+			.filter(user_preferences::Column::UserId.eq(&user.id))
+			.one(conn)
+			.await?
+			.ok_or("User preferences not found")?;
+
+		let updated_arrangement = HomeArrangement {
+			locked,
+			..preferences.home_arrangement.clone().unwrap_or_default()
+		};
+
+		let mut active_model = preferences.into_active_model();
+		active_model.home_arrangement = Set(Some(updated_arrangement.clone()));
+		active_model.update(conn).await?;
+
+		Ok(updated_arrangement)
+	}
+
+	async fn update_home_arrangement(
+		&self,
+		ctx: &Context<'_>,
+		input: HomeArrangementInput,
+	) -> Result<HomeArrangement> {
+		let conn = ctx.data::<CoreContext>()?.conn.as_ref();
+		let AuthContext { user, .. } = ctx.data::<AuthContext>()?;
+
+		let preferences = user_preferences::Entity::find()
+			.filter(user_preferences::Column::UserId.eq(&user.id))
+			.one(conn)
+			.await?
+			.ok_or("User preferences not found")?;
+
+		let arrangement = preferences.home_arrangement.clone().unwrap_or_default();
+		let updated_arrangement = arrangement
+			.try_replace_sections(input.sections.into_iter().map(Into::into).collect())?;
+
+		let mut active_model = preferences.into_active_model();
+		active_model.home_arrangement = Set(Some(updated_arrangement.clone()));
 		active_model.update(conn).await?;
 
 		Ok(updated_arrangement)

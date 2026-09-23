@@ -4,6 +4,7 @@ pub mod api_key;
 pub mod arrangement;
 pub mod book_club;
 pub mod enums;
+pub mod home_arrangement;
 pub mod ignore_rules;
 pub mod image;
 pub mod image_processor_options;

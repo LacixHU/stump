@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use async_graphql::{Context, Object, Result, ID};
 use models::{
-	entity::{media, media_metadata, reading_session, user::AuthUser},
+	entity::{media, media_last_played, media_metadata, reading_session, user::AuthUser},
 	shared::{
 		alphabet::{AvailableAlphabet, EntityLetter},
 		enums::{ReadingStatus, UserPermission},
@@ -11,15 +11,16 @@ use models::{
 };
 use sea_orm::{
 	prelude::*,
-	sea_query::{ExprTrait, Query},
+	sea_query::{Expr, ExprTrait, Func, Query},
 	Condition, FromQueryResult, JoinType, QueryOrder, QuerySelect,
 };
+use stump_core::filesystem::ContentType;
 
 use crate::{
 	data::{AuthContext, CoreContext},
 	filter::{media::MediaFilterInput, IntoFilter},
 	guard::{PermissionGuard, ServerOwnerGuard},
-	object::media::Media,
+	object::media::{LastPlayedGame, Media},
 	order::MediaOrderBy,
 	pagination::{
 		CursorPaginationInfo, OffsetPaginationInfo, PaginatedResponse, Pagination,
@@ -432,6 +433,91 @@ impl MediaQuery {
 
 				Ok(PaginatedResponse {
 					nodes: models.into_iter().map(Media::from).collect(),
+					page_info: OffsetPaginationInfo::unpaged(count).into(),
+				})
+			},
+		}
+	}
+
+	pub(crate) async fn last_played_games(
+		&self,
+		ctx: &Context<'_>,
+		#[graphql(default, validator(custom = "PaginationValidator"))]
+		pagination: Pagination,
+	) -> Result<PaginatedResponse<LastPlayedGame>> {
+		let AuthContext { user, .. } = ctx.data::<AuthContext>()?;
+		let conn = ctx.data::<CoreContext>()?.conn.as_ref();
+		let user_id = user.id.clone();
+		let retro_extensions = ContentType::retro_extensions()
+			.iter()
+			.copied()
+			.collect::<Vec<_>>();
+
+		let query = media::Entity::apply_for_user(user, media::Entity::find())
+			.filter(media::Column::DeletedAt.is_null())
+			.filter(
+				Expr::expr(Func::lower(Expr::col(
+					media::Column::Extension.as_column_ref(),
+				)))
+				.is_in(retro_extensions),
+			)
+			.select_also(media_last_played::Entity)
+			.join_rev(
+				JoinType::InnerJoin,
+				media_last_played::Entity::belongs_to(media::Entity)
+					.from(media_last_played::Column::MediaId)
+					.to(media::Column::Id)
+					.on_condition(move |_left, _right| {
+						Condition::all()
+							.add(media_last_played::Column::UserId.eq(user_id.clone()))
+					})
+					.into(),
+			)
+			.order_by_desc(media_last_played::Column::LastPlayedAt);
+
+		match pagination.resolve() {
+			Pagination::Cursor(_) => Err(
+				"Cursor pagination not supported for lastPlayedGames at this time".into(),
+			),
+			Pagination::Offset(info) => {
+				let count = query.clone().count(conn).await?;
+				let models = query
+					.select_also(media_metadata::Entity)
+					.offset(info.offset())
+					.limit(info.limit())
+					.all(conn)
+					.await?
+					.into_iter()
+					.filter_map(|(media, last_played, metadata)| {
+						last_played.map(|last_played| LastPlayedGame {
+							last_played_at: last_played.last_played_at,
+							media: media::ModelWithMetadata { media, metadata }.into(),
+						})
+					})
+					.collect();
+
+				Ok(PaginatedResponse {
+					nodes: models,
+					page_info: OffsetPaginationInfo::new(info, count).into(),
+				})
+			},
+			Pagination::None(_) => {
+				let models = query
+					.select_also(media_metadata::Entity)
+					.all(conn)
+					.await?
+					.into_iter()
+					.filter_map(|(media, last_played, metadata)| {
+						last_played.map(|last_played| LastPlayedGame {
+							last_played_at: last_played.last_played_at,
+							media: media::ModelWithMetadata { media, metadata }.into(),
+						})
+					})
+					.collect::<Vec<_>>();
+				let count = models.len().try_into()?;
+
+				Ok(PaginatedResponse {
+					nodes: models,
 					page_info: OffsetPaginationInfo::unpaged(count).into(),
 				})
 			},

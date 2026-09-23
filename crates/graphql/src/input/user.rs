@@ -5,6 +5,7 @@ use models::shared::{
 		InterfaceLayout, InterfaceRoundness, SupportedFont, ThumbnailPlaceholderStyle,
 		UserPermission,
 	},
+	home_arrangement::{HomeSection, HomeSectionKind},
 };
 
 #[derive(InputObject)]
@@ -65,4 +66,24 @@ pub struct UpdateUserPreferencesInput {
 #[derive(InputObject, Debug)]
 pub struct NavigationArrangementInput {
 	pub sections: Vec<ArrangementSection>,
+}
+
+#[derive(InputObject, Debug)]
+pub struct HomeSectionInput {
+	pub kind: HomeSectionKind,
+	pub visible: bool,
+}
+
+impl From<HomeSectionInput> for HomeSection {
+	fn from(input: HomeSectionInput) -> Self {
+		Self {
+			kind: input.kind,
+			visible: input.visible,
+		}
+	}
+}
+
+#[derive(InputObject, Debug)]
+pub struct HomeArrangementInput {
+	pub sections: Vec<HomeSectionInput>,
 }

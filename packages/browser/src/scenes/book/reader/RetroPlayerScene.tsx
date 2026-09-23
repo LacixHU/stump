@@ -6,8 +6,9 @@ import {
 	useSuspenseGraphQL,
 } from '@stump/client'
 import { Button, cn, ConfirmationModal } from '@stump/components'
-import { TypedDocumentString, UserPermission } from '@stump/graphql'
+import { graphql, TypedDocumentString, UserPermission } from '@stump/graphql'
 import { useLocaleContext } from '@stump/i18n'
+import { useQueryClient } from '@tanstack/react-query'
 import { Fullscreen, HardDrive, Keyboard, RotateCcw, Save } from 'lucide-react'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
@@ -106,6 +107,12 @@ export const RETRO_PLAYER_SCENE_QUERY = new TypedDocumentString(`
 	}
 `) as unknown as TypedDocumentString<RetroPlayerSceneQuery, RetroPlayerSceneQueryVariables>
 
+const recordMediaPlay = graphql(`
+	mutation RecordMediaPlay($id: ID!) {
+		recordMediaPlay(id: $id)
+	}
+`)
+
 export default function RetroPlayerSceneContainer() {
 	const { id } = useParams()
 	const { t } = useLocaleContext()
@@ -131,12 +138,14 @@ function RetroPlayerScene({ id }: { id: string }) {
 	const paths = usePaths()
 	const { t } = useLocaleContext()
 	const { sdk } = useSDK()
+	const client = useQueryClient()
 	const { checkPermission } = useAppContext()
 	const userId = useUserStore((state) => state.user?.id)
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 	const playfieldRef = useRef<HTMLDivElement>(null)
 	const handleRef = useRef<RetroEmulatorHandle | null>(null)
 	const hasSaveStateRef = useRef(false)
+	const recordedIds = useRef(new Set<string>())
 	const canEditOverlay = checkPermission(UserPermission.ManageLibrary)
 
 	const {
@@ -189,6 +198,21 @@ function RetroPlayerScene({ id }: { id: string }) {
 		[disks, activeMediaId, media],
 	)
 
+	const recordPlay = useCallback(
+		(mediaId: string) => {
+			if (recordedIds.current.has(mediaId)) return
+			recordedIds.current.add(mediaId)
+			void sdk
+				.execute(recordMediaPlay, { id: mediaId })
+				.then(() => client.invalidateQueries({ queryKey: ['lastPlayedGames'] }))
+				.catch((error) => {
+					recordedIds.current.delete(mediaId)
+					console.error('Failed to record media play', error)
+				})
+		},
+		[client, sdk],
+	)
+
 	useEffect(() => {
 		if (!media) {
 			navigate(paths.notFound(), { replace: true })
@@ -196,8 +220,10 @@ function RetroPlayerScene({ id }: { id: string }) {
 		}
 		if (!isRetroExtension(media.extension || '')) {
 			navigate(paths.bookOverview(id), { replace: true })
+			return
 		}
-	}, [media, navigate, paths, id])
+		recordPlay(media.id)
+	}, [media, navigate, paths, id, recordPlay])
 
 	const stopEmulator = useCallback(() => {
 		handleRef.current?.destroy()
@@ -381,6 +407,9 @@ function RetroPlayerScene({ id }: { id: string }) {
 	const onSwapDisk = async (diskId: string) => {
 		const disk = disks.find((d) => d.id === diskId)
 		if (!disk || diskId === activeMediaId) return
+		if (isRetroExtension(disk.extension || '')) {
+			recordPlay(diskId)
+		}
 		const handle = handleRef.current
 		if (status === 'playing' && handle?.mountImage) {
 			try {

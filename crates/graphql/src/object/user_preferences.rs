@@ -1,6 +1,9 @@
 use async_graphql::{ComplexObject, SimpleObject};
 
-use models::{entity::user_preferences, shared::arrangement::Arrangement};
+use models::{
+	entity::user_preferences,
+	shared::{arrangement::Arrangement, home_arrangement::HomeArrangement},
+};
 
 #[derive(Debug, SimpleObject)]
 #[graphql(complex)]
@@ -17,11 +20,8 @@ impl From<user_preferences::Model> for UserPreferences {
 
 #[ComplexObject]
 impl UserPreferences {
-	async fn home_arrangement(&self) -> Arrangement {
-		self.model
-			.home_arrangement
-			.clone()
-			.unwrap_or(Arrangement::default_home())
+	async fn home_arrangement(&self) -> HomeArrangement {
+		self.model.home_arrangement.clone().unwrap_or_default()
 	}
 
 	async fn navigation_arrangement(&self) -> Arrangement {

@@ -7,6 +7,7 @@ use crate::shared::{
 	enums::{
 		InterfaceLayout, InterfaceRoundness, SupportedFont, ThumbnailPlaceholderStyle,
 	},
+	home_arrangement::HomeArrangement,
 };
 
 #[derive(
@@ -57,7 +58,7 @@ pub struct Model {
 	#[sea_orm(column_type = "Json", nullable)]
 	#[graphql(skip)]
 	#[serde(default = "Model::default_home_arrangement")]
-	pub home_arrangement: Option<Arrangement>,
+	pub home_arrangement: Option<HomeArrangement>,
 
 	pub enable_reading_journal: bool,
 	/// hour offset from midnight at which a new "logical day" begins for reading sessions
@@ -86,8 +87,8 @@ impl Model {
 		Some(Arrangement::default_navigation())
 	}
 
-	pub fn default_home_arrangement() -> Option<Arrangement> {
-		Some(Arrangement::default_home())
+	pub fn default_home_arrangement() -> Option<HomeArrangement> {
+		Some(HomeArrangement::default())
 	}
 }
 

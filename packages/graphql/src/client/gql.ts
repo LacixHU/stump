@@ -176,6 +176,7 @@ type Documents = {
     "\n\tmutation SendEmailAttachment($id: ID!, $sendTo: [EmailerSendTo!]!) {\n\t\tsendAttachmentEmail(input: { mediaIds: [$id], sendTo: $sendTo }) {\n\t\t\tsentCount\n\t\t\terrors\n\t\t}\n\t}\n": typeof types.SendEmailAttachmentDocument,
     "\n\tquery BookReaderScene($id: ID!) {\n\t\tmediaById(id: $id) {\n\t\t\tid\n\t\t\tresolvedName\n\t\t\tpages\n\t\t\textension\n\t\t\treadProgress {\n\t\t\t\tpercentageCompleted\n\t\t\t\tepubcfi\n\t\t\t\tpage\n\t\t\t\telapsedSeconds\n\t\t\t}\n\t\t\tlibraryConfig {\n\t\t\t\tdefaultReadingImageScaleFit\n\t\t\t\tdefaultReadingMode\n\t\t\t\tdefaultReadingDir\n\t\t\t}\n\t\t\tanalysisData {\n\t\t\t\tdimensions {\n\t\t\t\t\theight\n\t\t\t\t\twidth\n\t\t\t\t}\n\t\t\t}\n\t\t\tnextInSeries(pagination: { cursor: { limit: 1 } }) {\n\t\t\t\tnodes {\n\t\t\t\t\tid\n\t\t\t\t\tname: resolvedName\n\t\t\t\t\tthumbnail {\n\t\t\t\t\t\turl\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n": typeof types.BookReaderSceneDocument,
     "\n\tmutation UpdateReadProgress($id: ID!, $input: MediaProgressInput!) {\n\t\tupdateMediaProgress(id: $id, input: $input) {\n\t\t\t__typename\n\t\t}\n\t}\n": typeof types.UpdateReadProgressDocument,
+    "\n\tmutation RecordMediaPlay($id: ID!) {\n\t\trecordMediaPlay(id: $id)\n\t}\n": typeof types.RecordMediaPlayDocument,
     "\n\tquery BookManagementScene($id: ID!) {\n\t\tmediaById(id: $id) {\n\t\t\tid\n\t\t\tresolvedName\n\t\t\tlibrary {\n\t\t\t\tid\n\t\t\t\tname\n\t\t\t}\n\t\t\tseries {\n\t\t\t\tid\n\t\t\t\tresolvedName\n\t\t\t}\n\t\t\ttags {\n\t\t\t\tid\n\t\t\t\tname\n\t\t\t}\n\t\t\t...BookThumbnailSelector\n\t\t}\n\t}\n": typeof types.BookManagementSceneDocument,
     "\n\tmutation BookManagementSceneAnalyze($id: ID!) {\n\t\tanalyzeMedia(id: $id)\n\t}\n": typeof types.BookManagementSceneAnalyzeDocument,
     "\n\tquery BookMetadataSearchProviders {\n\t\tmetadataProviderConfigs {\n\t\t\tid\n\t\t\tproviderType\n\t\t\tenabled\n\t\t}\n\t}\n": typeof types.BookMetadataSearchProvidersDocument,
@@ -201,7 +202,9 @@ type Documents = {
     "\n\tmutation CreateSmartListScene($input: SaveSmartListInput!) {\n\t\tcreateSmartList(input: $input) {\n\t\t\tid\n\t\t\tname\n\t\t}\n\t}\n": typeof types.CreateSmartListSceneDocument,
     "\n\tfragment ContinueReadingBook on Media {\n\t\tid\n\t\tresolvedName\n\t\tpages\n\t\tthumbnail {\n\t\t\turl\n\t\t\tmetadata {\n\t\t\t\taverageColor\n\t\t\t\tcolors {\n\t\t\t\t\tcolor\n\t\t\t\t\tpercentage\n\t\t\t\t}\n\t\t\t\tthumbhash\n\t\t\t}\n\t\t}\n\t\treadProgress {\n\t\t\tpercentageCompleted\n\t\t\tepubcfi\n\t\t\tpage\n\t\t\tupdatedAt\n\t\t}\n\t}\n": typeof types.ContinueReadingBookFragmentDoc,
     "\n\tquery ContinueReadingMedia($pagination: Pagination!) {\n\t\tkeepReading(pagination: $pagination) {\n\t\t\tnodes {\n\t\t\t\tid\n\t\t\t\t...ContinueReadingBook\n\t\t\t}\n\t\t\tpageInfo {\n\t\t\t\t__typename\n\t\t\t\t... on CursorPaginationInfo {\n\t\t\t\t\tcurrentCursor\n\t\t\t\t\tnextCursor\n\t\t\t\t\tlimit\n\t\t\t\t}\n\t\t\t\t... on OffsetPaginationInfo {\n\t\t\t\t\tcurrentPage\n\t\t\t\t\ttotalPages\n\t\t\t\t\tpageSize\n\t\t\t\t\tpageOffset\n\t\t\t\t\tzeroBased\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n": typeof types.ContinueReadingMediaDocument,
-    "\n\tquery HomeSceneQuery {\n\t\tnumberOfLibraries\n\t}\n": typeof types.HomeSceneQueryDocument,
+    "\n\tquery HomeSceneQuery {\n\t\tnumberOfLibraries\n\t\tme {\n\t\t\tpreferences {\n\t\t\t\thomeArrangement {\n\t\t\t\t\tsections {\n\t\t\t\t\t\tkind\n\t\t\t\t\t\tvisible\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n": typeof types.HomeSceneQueryDocument,
+    "\n\tfragment LastPlayedGameBook on Media {\n\t\tid\n\t\tresolvedName\n\t\tthumbnail {\n\t\t\turl\n\t\t\tmetadata {\n\t\t\t\taverageColor\n\t\t\t\tcolors {\n\t\t\t\t\tcolor\n\t\t\t\t\tpercentage\n\t\t\t\t}\n\t\t\t\tthumbhash\n\t\t\t}\n\t\t}\n\t}\n": typeof types.LastPlayedGameBookFragmentDoc,
+    "\n\tquery LastPlayedGames($pagination: Pagination!) {\n\t\tlastPlayedGames(pagination: $pagination) {\n\t\t\tnodes {\n\t\t\t\tlastPlayedAt\n\t\t\t\tmedia {\n\t\t\t\t\tid\n\t\t\t\t\t...LastPlayedGameBook\n\t\t\t\t}\n\t\t\t}\n\t\t\tpageInfo {\n\t\t\t\t__typename\n\t\t\t\t... on OffsetPaginationInfo {\n\t\t\t\t\tcurrentPage\n\t\t\t\t\ttotalPages\n\t\t\t\t\tpageSize\n\t\t\t\t\tpageOffset\n\t\t\t\t\tzeroBased\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n": typeof types.LastPlayedGamesDocument,
     "\n\tfragment OnDeckBook on Media {\n\t\tid\n\t\tmetadata {\n\t\t\tnumber\n\t\t}\n\t\tresolvedName\n\t\tseriesPosition\n\t\tseries {\n\t\t\tmediaCount\n\t\t\tmetadata {\n\t\t\t\ttotalIssues\n\t\t\t}\n\t\t}\n\t\tthumbnail {\n\t\t\turl\n\t\t\tmetadata {\n\t\t\t\taverageColor\n\t\t\t\tcolors {\n\t\t\t\t\tcolor\n\t\t\t\t\tpercentage\n\t\t\t\t}\n\t\t\t\tthumbhash\n\t\t\t}\n\t\t}\n\t}\n": typeof types.OnDeckBookFragmentDoc,
     "\n\tquery OnDeckBooksWeb($pagination: Pagination!) {\n\t\tonDeck(pagination: $pagination) {\n\t\t\tnodes {\n\t\t\t\tid\n\t\t\t\t...OnDeckBook\n\t\t\t}\n\t\t\tpageInfo {\n\t\t\t\t__typename\n\t\t\t\t... on OffsetPaginationInfo {\n\t\t\t\t\tcurrentPage\n\t\t\t\t\ttotalPages\n\t\t\t\t\tpageSize\n\t\t\t\t\tpageOffset\n\t\t\t\t\tzeroBased\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n": typeof types.OnDeckBooksWebDocument,
     "\n\tfragment RecentlyAddedBook on Media {\n\t\tid\n\t\tresolvedName\n\t\tcreatedAt\n\t\tthumbnail {\n\t\t\turl\n\t\t\tmetadata {\n\t\t\t\taverageColor\n\t\t\t\tcolors {\n\t\t\t\t\tcolor\n\t\t\t\t\tpercentage\n\t\t\t\t}\n\t\t\t\tthumbhash\n\t\t\t}\n\t\t}\n\t}\n": typeof types.RecentlyAddedBookFragmentDoc,
@@ -251,6 +254,9 @@ type Documents = {
     "\n\tmutation UploadUserAvatar($file: Upload!) {\n\t\tuploadUserAvatar(upload: $file) {\n\t\t\tid\n\t\t\tavatarUrl\n\t\t}\n\t}\n": typeof types.UploadUserAvatarDocument,
     "\n\tmutation DeleteUserAvatar {\n\t\tdeleteUserAvatar {\n\t\t\tid\n\t\t\tavatarUrl\n\t\t}\n\t}\n": typeof types.DeleteUserAvatarDocument,
     "\n\tmutation UpdateUserProfileForm($input: UpdateUserInput!) {\n\t\tupdateViewer(input: $input) {\n\t\t\tid\n\t\t\tusername\n\t\t}\n\t}\n": typeof types.UpdateUserProfileFormDocument,
+    "\n\tquery HomeArrangement {\n\t\tme {\n\t\t\tpreferences {\n\t\t\t\thomeArrangement {\n\t\t\t\t\tlocked\n\t\t\t\t\tsections {\n\t\t\t\t\t\tkind\n\t\t\t\t\t\tvisible\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n": typeof types.HomeArrangementDocument,
+    "\n\tmutation HomeArrangementUpdate($input: HomeArrangementInput!) {\n\t\tupdateHomeArrangement(input: $input) {\n\t\t\tlocked\n\t\t\tsections {\n\t\t\t\tkind\n\t\t\t\tvisible\n\t\t\t}\n\t\t}\n\t}\n": typeof types.HomeArrangementUpdateDocument,
+    "\n\tmutation HomeArrangementUpdateLockStatus($locked: Boolean!) {\n\t\tupdateHomeArrangementLock(locked: $locked) {\n\t\t\tlocked\n\t\t}\n\t}\n": typeof types.HomeArrangementUpdateLockStatusDocument,
     "\n\tquery NavigationArrangement {\n\t\tme {\n\t\t\tpreferences {\n\t\t\t\tnavigationArrangement {\n\t\t\t\t\tlocked\n\t\t\t\t\tsections {\n\t\t\t\t\t\t__typename\n\t\t\t\t\t\tconfig {\n\t\t\t\t\t\t\t__typename\n\t\t\t\t\t\t\t... on SystemArrangementConfig {\n\t\t\t\t\t\t\t\tvariant\n\t\t\t\t\t\t\t\tlinks\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t\tvisible\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n": typeof types.NavigationArrangementDocument,
     "\n\tmutation NavigationArrangementUpdate($input: NavigationArrangementInput!) {\n\t\tupdateNavigationArrangement(input: $input) {\n\t\t\t__typename\n\t\t}\n\t}\n": typeof types.NavigationArrangementUpdateDocument,
     "\n\tmutation NavigationArrangementUpdateLockStatus($locked: Boolean!) {\n\t\tupdateNavigationArrangementLock(locked: $locked) {\n\t\t\t__typename\n\t\t}\n\t}\n": typeof types.NavigationArrangementUpdateLockStatusDocument,
@@ -486,6 +492,7 @@ const documents: Documents = {
     "\n\tmutation SendEmailAttachment($id: ID!, $sendTo: [EmailerSendTo!]!) {\n\t\tsendAttachmentEmail(input: { mediaIds: [$id], sendTo: $sendTo }) {\n\t\t\tsentCount\n\t\t\terrors\n\t\t}\n\t}\n": types.SendEmailAttachmentDocument,
     "\n\tquery BookReaderScene($id: ID!) {\n\t\tmediaById(id: $id) {\n\t\t\tid\n\t\t\tresolvedName\n\t\t\tpages\n\t\t\textension\n\t\t\treadProgress {\n\t\t\t\tpercentageCompleted\n\t\t\t\tepubcfi\n\t\t\t\tpage\n\t\t\t\telapsedSeconds\n\t\t\t}\n\t\t\tlibraryConfig {\n\t\t\t\tdefaultReadingImageScaleFit\n\t\t\t\tdefaultReadingMode\n\t\t\t\tdefaultReadingDir\n\t\t\t}\n\t\t\tanalysisData {\n\t\t\t\tdimensions {\n\t\t\t\t\theight\n\t\t\t\t\twidth\n\t\t\t\t}\n\t\t\t}\n\t\t\tnextInSeries(pagination: { cursor: { limit: 1 } }) {\n\t\t\t\tnodes {\n\t\t\t\t\tid\n\t\t\t\t\tname: resolvedName\n\t\t\t\t\tthumbnail {\n\t\t\t\t\t\turl\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n": types.BookReaderSceneDocument,
     "\n\tmutation UpdateReadProgress($id: ID!, $input: MediaProgressInput!) {\n\t\tupdateMediaProgress(id: $id, input: $input) {\n\t\t\t__typename\n\t\t}\n\t}\n": types.UpdateReadProgressDocument,
+    "\n\tmutation RecordMediaPlay($id: ID!) {\n\t\trecordMediaPlay(id: $id)\n\t}\n": types.RecordMediaPlayDocument,
     "\n\tquery BookManagementScene($id: ID!) {\n\t\tmediaById(id: $id) {\n\t\t\tid\n\t\t\tresolvedName\n\t\t\tlibrary {\n\t\t\t\tid\n\t\t\t\tname\n\t\t\t}\n\t\t\tseries {\n\t\t\t\tid\n\t\t\t\tresolvedName\n\t\t\t}\n\t\t\ttags {\n\t\t\t\tid\n\t\t\t\tname\n\t\t\t}\n\t\t\t...BookThumbnailSelector\n\t\t}\n\t}\n": types.BookManagementSceneDocument,
     "\n\tmutation BookManagementSceneAnalyze($id: ID!) {\n\t\tanalyzeMedia(id: $id)\n\t}\n": types.BookManagementSceneAnalyzeDocument,
     "\n\tquery BookMetadataSearchProviders {\n\t\tmetadataProviderConfigs {\n\t\t\tid\n\t\t\tproviderType\n\t\t\tenabled\n\t\t}\n\t}\n": types.BookMetadataSearchProvidersDocument,
@@ -511,7 +518,9 @@ const documents: Documents = {
     "\n\tmutation CreateSmartListScene($input: SaveSmartListInput!) {\n\t\tcreateSmartList(input: $input) {\n\t\t\tid\n\t\t\tname\n\t\t}\n\t}\n": types.CreateSmartListSceneDocument,
     "\n\tfragment ContinueReadingBook on Media {\n\t\tid\n\t\tresolvedName\n\t\tpages\n\t\tthumbnail {\n\t\t\turl\n\t\t\tmetadata {\n\t\t\t\taverageColor\n\t\t\t\tcolors {\n\t\t\t\t\tcolor\n\t\t\t\t\tpercentage\n\t\t\t\t}\n\t\t\t\tthumbhash\n\t\t\t}\n\t\t}\n\t\treadProgress {\n\t\t\tpercentageCompleted\n\t\t\tepubcfi\n\t\t\tpage\n\t\t\tupdatedAt\n\t\t}\n\t}\n": types.ContinueReadingBookFragmentDoc,
     "\n\tquery ContinueReadingMedia($pagination: Pagination!) {\n\t\tkeepReading(pagination: $pagination) {\n\t\t\tnodes {\n\t\t\t\tid\n\t\t\t\t...ContinueReadingBook\n\t\t\t}\n\t\t\tpageInfo {\n\t\t\t\t__typename\n\t\t\t\t... on CursorPaginationInfo {\n\t\t\t\t\tcurrentCursor\n\t\t\t\t\tnextCursor\n\t\t\t\t\tlimit\n\t\t\t\t}\n\t\t\t\t... on OffsetPaginationInfo {\n\t\t\t\t\tcurrentPage\n\t\t\t\t\ttotalPages\n\t\t\t\t\tpageSize\n\t\t\t\t\tpageOffset\n\t\t\t\t\tzeroBased\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n": types.ContinueReadingMediaDocument,
-    "\n\tquery HomeSceneQuery {\n\t\tnumberOfLibraries\n\t}\n": types.HomeSceneQueryDocument,
+    "\n\tquery HomeSceneQuery {\n\t\tnumberOfLibraries\n\t\tme {\n\t\t\tpreferences {\n\t\t\t\thomeArrangement {\n\t\t\t\t\tsections {\n\t\t\t\t\t\tkind\n\t\t\t\t\t\tvisible\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n": types.HomeSceneQueryDocument,
+    "\n\tfragment LastPlayedGameBook on Media {\n\t\tid\n\t\tresolvedName\n\t\tthumbnail {\n\t\t\turl\n\t\t\tmetadata {\n\t\t\t\taverageColor\n\t\t\t\tcolors {\n\t\t\t\t\tcolor\n\t\t\t\t\tpercentage\n\t\t\t\t}\n\t\t\t\tthumbhash\n\t\t\t}\n\t\t}\n\t}\n": types.LastPlayedGameBookFragmentDoc,
+    "\n\tquery LastPlayedGames($pagination: Pagination!) {\n\t\tlastPlayedGames(pagination: $pagination) {\n\t\t\tnodes {\n\t\t\t\tlastPlayedAt\n\t\t\t\tmedia {\n\t\t\t\t\tid\n\t\t\t\t\t...LastPlayedGameBook\n\t\t\t\t}\n\t\t\t}\n\t\t\tpageInfo {\n\t\t\t\t__typename\n\t\t\t\t... on OffsetPaginationInfo {\n\t\t\t\t\tcurrentPage\n\t\t\t\t\ttotalPages\n\t\t\t\t\tpageSize\n\t\t\t\t\tpageOffset\n\t\t\t\t\tzeroBased\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n": types.LastPlayedGamesDocument,
     "\n\tfragment OnDeckBook on Media {\n\t\tid\n\t\tmetadata {\n\t\t\tnumber\n\t\t}\n\t\tresolvedName\n\t\tseriesPosition\n\t\tseries {\n\t\t\tmediaCount\n\t\t\tmetadata {\n\t\t\t\ttotalIssues\n\t\t\t}\n\t\t}\n\t\tthumbnail {\n\t\t\turl\n\t\t\tmetadata {\n\t\t\t\taverageColor\n\t\t\t\tcolors {\n\t\t\t\t\tcolor\n\t\t\t\t\tpercentage\n\t\t\t\t}\n\t\t\t\tthumbhash\n\t\t\t}\n\t\t}\n\t}\n": types.OnDeckBookFragmentDoc,
     "\n\tquery OnDeckBooksWeb($pagination: Pagination!) {\n\t\tonDeck(pagination: $pagination) {\n\t\t\tnodes {\n\t\t\t\tid\n\t\t\t\t...OnDeckBook\n\t\t\t}\n\t\t\tpageInfo {\n\t\t\t\t__typename\n\t\t\t\t... on OffsetPaginationInfo {\n\t\t\t\t\tcurrentPage\n\t\t\t\t\ttotalPages\n\t\t\t\t\tpageSize\n\t\t\t\t\tpageOffset\n\t\t\t\t\tzeroBased\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n": types.OnDeckBooksWebDocument,
     "\n\tfragment RecentlyAddedBook on Media {\n\t\tid\n\t\tresolvedName\n\t\tcreatedAt\n\t\tthumbnail {\n\t\t\turl\n\t\t\tmetadata {\n\t\t\t\taverageColor\n\t\t\t\tcolors {\n\t\t\t\t\tcolor\n\t\t\t\t\tpercentage\n\t\t\t\t}\n\t\t\t\tthumbhash\n\t\t\t}\n\t\t}\n\t}\n": types.RecentlyAddedBookFragmentDoc,
@@ -561,6 +570,9 @@ const documents: Documents = {
     "\n\tmutation UploadUserAvatar($file: Upload!) {\n\t\tuploadUserAvatar(upload: $file) {\n\t\t\tid\n\t\t\tavatarUrl\n\t\t}\n\t}\n": types.UploadUserAvatarDocument,
     "\n\tmutation DeleteUserAvatar {\n\t\tdeleteUserAvatar {\n\t\t\tid\n\t\t\tavatarUrl\n\t\t}\n\t}\n": types.DeleteUserAvatarDocument,
     "\n\tmutation UpdateUserProfileForm($input: UpdateUserInput!) {\n\t\tupdateViewer(input: $input) {\n\t\t\tid\n\t\t\tusername\n\t\t}\n\t}\n": types.UpdateUserProfileFormDocument,
+    "\n\tquery HomeArrangement {\n\t\tme {\n\t\t\tpreferences {\n\t\t\t\thomeArrangement {\n\t\t\t\t\tlocked\n\t\t\t\t\tsections {\n\t\t\t\t\t\tkind\n\t\t\t\t\t\tvisible\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n": types.HomeArrangementDocument,
+    "\n\tmutation HomeArrangementUpdate($input: HomeArrangementInput!) {\n\t\tupdateHomeArrangement(input: $input) {\n\t\t\tlocked\n\t\t\tsections {\n\t\t\t\tkind\n\t\t\t\tvisible\n\t\t\t}\n\t\t}\n\t}\n": types.HomeArrangementUpdateDocument,
+    "\n\tmutation HomeArrangementUpdateLockStatus($locked: Boolean!) {\n\t\tupdateHomeArrangementLock(locked: $locked) {\n\t\t\tlocked\n\t\t}\n\t}\n": types.HomeArrangementUpdateLockStatusDocument,
     "\n\tquery NavigationArrangement {\n\t\tme {\n\t\t\tpreferences {\n\t\t\t\tnavigationArrangement {\n\t\t\t\t\tlocked\n\t\t\t\t\tsections {\n\t\t\t\t\t\t__typename\n\t\t\t\t\t\tconfig {\n\t\t\t\t\t\t\t__typename\n\t\t\t\t\t\t\t... on SystemArrangementConfig {\n\t\t\t\t\t\t\t\tvariant\n\t\t\t\t\t\t\t\tlinks\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t\tvisible\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n": types.NavigationArrangementDocument,
     "\n\tmutation NavigationArrangementUpdate($input: NavigationArrangementInput!) {\n\t\tupdateNavigationArrangement(input: $input) {\n\t\t\t__typename\n\t\t}\n\t}\n": types.NavigationArrangementUpdateDocument,
     "\n\tmutation NavigationArrangementUpdateLockStatus($locked: Boolean!) {\n\t\tupdateNavigationArrangementLock(locked: $locked) {\n\t\t\t__typename\n\t\t}\n\t}\n": types.NavigationArrangementUpdateLockStatusDocument,
@@ -1282,6 +1294,10 @@ export function graphql(source: "\n\tmutation UpdateReadProgress($id: ID!, $inpu
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "\n\tmutation RecordMediaPlay($id: ID!) {\n\t\trecordMediaPlay(id: $id)\n\t}\n"): typeof import('./graphql').RecordMediaPlayDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "\n\tquery BookManagementScene($id: ID!) {\n\t\tmediaById(id: $id) {\n\t\t\tid\n\t\t\tresolvedName\n\t\t\tlibrary {\n\t\t\t\tid\n\t\t\t\tname\n\t\t\t}\n\t\t\tseries {\n\t\t\t\tid\n\t\t\t\tresolvedName\n\t\t\t}\n\t\t\ttags {\n\t\t\t\tid\n\t\t\t\tname\n\t\t\t}\n\t\t\t...BookThumbnailSelector\n\t\t}\n\t}\n"): typeof import('./graphql').BookManagementSceneDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -1382,7 +1398,15 @@ export function graphql(source: "\n\tquery ContinueReadingMedia($pagination: Pag
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n\tquery HomeSceneQuery {\n\t\tnumberOfLibraries\n\t}\n"): typeof import('./graphql').HomeSceneQueryDocument;
+export function graphql(source: "\n\tquery HomeSceneQuery {\n\t\tnumberOfLibraries\n\t\tme {\n\t\t\tpreferences {\n\t\t\t\thomeArrangement {\n\t\t\t\t\tsections {\n\t\t\t\t\t\tkind\n\t\t\t\t\t\tvisible\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n"): typeof import('./graphql').HomeSceneQueryDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n\tfragment LastPlayedGameBook on Media {\n\t\tid\n\t\tresolvedName\n\t\tthumbnail {\n\t\t\turl\n\t\t\tmetadata {\n\t\t\t\taverageColor\n\t\t\t\tcolors {\n\t\t\t\t\tcolor\n\t\t\t\t\tpercentage\n\t\t\t\t}\n\t\t\t\tthumbhash\n\t\t\t}\n\t\t}\n\t}\n"): typeof import('./graphql').LastPlayedGameBookFragmentDoc;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n\tquery LastPlayedGames($pagination: Pagination!) {\n\t\tlastPlayedGames(pagination: $pagination) {\n\t\t\tnodes {\n\t\t\t\tlastPlayedAt\n\t\t\t\tmedia {\n\t\t\t\t\tid\n\t\t\t\t\t...LastPlayedGameBook\n\t\t\t\t}\n\t\t\t}\n\t\t\tpageInfo {\n\t\t\t\t__typename\n\t\t\t\t... on OffsetPaginationInfo {\n\t\t\t\t\tcurrentPage\n\t\t\t\t\ttotalPages\n\t\t\t\t\tpageSize\n\t\t\t\t\tpageOffset\n\t\t\t\t\tzeroBased\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n"): typeof import('./graphql').LastPlayedGamesDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -1579,6 +1603,18 @@ export function graphql(source: "\n\tmutation DeleteUserAvatar {\n\t\tdeleteUser
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n\tmutation UpdateUserProfileForm($input: UpdateUserInput!) {\n\t\tupdateViewer(input: $input) {\n\t\t\tid\n\t\t\tusername\n\t\t}\n\t}\n"): typeof import('./graphql').UpdateUserProfileFormDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n\tquery HomeArrangement {\n\t\tme {\n\t\t\tpreferences {\n\t\t\t\thomeArrangement {\n\t\t\t\t\tlocked\n\t\t\t\t\tsections {\n\t\t\t\t\t\tkind\n\t\t\t\t\t\tvisible\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n"): typeof import('./graphql').HomeArrangementDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n\tmutation HomeArrangementUpdate($input: HomeArrangementInput!) {\n\t\tupdateHomeArrangement(input: $input) {\n\t\t\tlocked\n\t\t\tsections {\n\t\t\t\tkind\n\t\t\t\tvisible\n\t\t\t}\n\t\t}\n\t}\n"): typeof import('./graphql').HomeArrangementUpdateDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n\tmutation HomeArrangementUpdateLockStatus($locked: Boolean!) {\n\t\tupdateHomeArrangementLock(locked: $locked) {\n\t\t\tlocked\n\t\t}\n\t}\n"): typeof import('./graphql').HomeArrangementUpdateLockStatusDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

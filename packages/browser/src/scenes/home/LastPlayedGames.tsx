@@ -7,21 +7,20 @@ import { formatDistanceToNow } from 'date-fns'
 import { memo, Suspense, useCallback, useEffect, useMemo } from 'react'
 import { useMediaMatch } from 'rooks'
 
-import MultiRowHorizontalCardList from '@/components/MultiRowHorizontalCardList'
+import HorizontalCardList from '@/components/HorizontalCardList'
 import { ThumbnailImage } from '@/components/thumbnail/ThumbnailImage'
 import { ThumbnailPlaceholderData } from '@/components/thumbnail/ThumbnailPlaceholder'
 import { Link } from '@/context'
 import { usePreferences } from '@/hooks/usePreferences'
 import { usePaths } from '@/paths'
 
-const IMAGE_WIDTH_MOBILE = 112
-const IMAGE_WIDTH_TABLET = 140
+const IMAGE_WIDTH_MOBILE = 200
+const IMAGE_WIDTH_TABLET = 220
 
-const RecentlyAddedBookFragment = graphql(`
-	fragment RecentlyAddedBook on Media {
+const LastPlayedGameFragment = graphql(`
+	fragment LastPlayedGameBook on Media {
 		id
 		resolvedName
-		createdAt
 		thumbnail {
 			url
 			metadata {
@@ -37,33 +36,39 @@ const RecentlyAddedBookFragment = graphql(`
 `)
 
 const query = graphql(`
-	query RecentlyAddedMedia($pagination: Pagination!) {
-		recentlyAddedMedia(pagination: $pagination) {
+	query LastPlayedGames($pagination: Pagination!) {
+		lastPlayedGames(pagination: $pagination) {
 			nodes {
-				id
-				...RecentlyAddedBook
+				lastPlayedAt
+				media {
+					id
+					...LastPlayedGameBook
+				}
 			}
 			pageInfo {
 				__typename
-				... on CursorPaginationInfo {
-					currentCursor
-					nextCursor
-					limit
+				... on OffsetPaginationInfo {
+					currentPage
+					totalPages
+					pageSize
+					pageOffset
+					zeroBased
 				}
 			}
 		}
 	}
 `)
 
-export const usePrefetchRecentlyAddedMedia = () => {
+export const usePrefetchLastPlayedGames = () => {
 	const { sdk } = useSDK()
 	const client = useQueryClient()
 	return useCallback(() => {
 		return client.prefetchInfiniteQuery({
-			queryKey: ['recentlyAddedMedia'],
+			queryKey: ['lastPlayedGames'],
 			initialPageParam: {
-				cursor: {
-					limit: 20,
+				offset: {
+					pageSize: 20,
+					page: 1,
 				},
 			},
 			queryFn: ({ pageParam }) => {
@@ -80,25 +85,23 @@ type SectionProps = {
 	onEmptyChange?: (empty: boolean) => void
 }
 
-function RecentlyAddedMedia({ onEmptyChange }: SectionProps) {
+function LastPlayedGames({ onEmptyChange }: SectionProps) {
 	const { t } = useLocaleContext()
 	const {
 		preferences: { thumbnailRatio },
 	} = usePreferences()
-
 	const isAtLeastMedium = useMediaMatch('(min-width: 768px)')
-
-	const cardWidth = isAtLeastMedium ? IMAGE_WIDTH_TABLET : IMAGE_WIDTH_MOBILE
-	const cardHeight = cardWidth / thumbnailRatio
+	const imageWidth = isAtLeastMedium ? IMAGE_WIDTH_TABLET : IMAGE_WIDTH_MOBILE
+	const listHeight = imageWidth / thumbnailRatio + 17
 
 	const { data, hasNextPage, isFetchingNextPage, fetchNextPage } = useInfiniteSuspenseGraphQL(
 		query,
-		['recentlyAddedMedia'],
+		['lastPlayedGames'],
 		{
-			pagination: { cursor: { limit: 20 } },
+			pagination: { offset: { pageSize: 20, page: 1 } },
 		},
 	)
-	const nodes = data.pages.flatMap((page) => page.recentlyAddedMedia.nodes)
+	const nodes = data.pages.flatMap((page) => page.lastPlayedGames.nodes)
 
 	const handleFetchMore = useCallback(() => {
 		if (hasNextPage && !isFetchingNextPage) {
@@ -115,37 +118,42 @@ function RecentlyAddedMedia({ onEmptyChange }: SectionProps) {
 	}
 
 	return (
-		<MultiRowHorizontalCardList
-			title={t('homeScene.recentlyAddedBooks.title')}
-			items={nodes}
-			keyExtractor={(node) => node.id}
-			renderItem={(node) => <RecentlyAddedBookCard fragment={node} cardWidth={cardWidth} />}
-			cardHeight={cardHeight}
-			cardWidth={cardWidth}
+		<HorizontalCardList
+			title={t('homeScene.lastPlayedGames.title')}
+			items={nodes.map((node) => (
+				<LastPlayedGameCard
+					key={node.media.id}
+					fragment={node.media}
+					lastPlayedAt={node.lastPlayedAt}
+				/>
+			))}
+			height={listHeight}
 			onFetchMore={handleFetchMore}
 		/>
 	)
 }
 
-export default function RecentlyAddedMediaContainer({ onEmptyChange }: SectionProps) {
+export default function LastPlayedGamesContainer({ onEmptyChange }: SectionProps) {
 	return (
 		<Suspense>
-			<RecentlyAddedMedia onEmptyChange={onEmptyChange} />
+			<LastPlayedGames onEmptyChange={onEmptyChange} />
 		</Suspense>
 	)
 }
 
-type RecentlyAddedBookCardProps = {
-	fragment: FragmentType<typeof RecentlyAddedBookFragment>
-	cardWidth: number
+type LastPlayedGameCardProps = {
+	fragment: FragmentType<typeof LastPlayedGameFragment>
+	lastPlayedAt: string
 }
 
-const RecentlyAddedBookCard = memo(function RecentlyAddedBookCard({
+const LastPlayedGameCard = memo(function LastPlayedGameCard({
 	fragment,
-	cardWidth,
-}: RecentlyAddedBookCardProps) {
-	const data = useFragment(RecentlyAddedBookFragment, fragment)
+	lastPlayedAt,
+}: LastPlayedGameCardProps) {
+	const data = useFragment(LastPlayedGameFragment, fragment)
 	const paths = usePaths()
+	const isAtLeastMedium = useMediaMatch('(min-width: 768px)')
+	const cardWidth = isAtLeastMedium ? IMAGE_WIDTH_TABLET : IMAGE_WIDTH_MOBILE
 	const {
 		preferences: { thumbnailRatio },
 	} = usePreferences()
@@ -160,14 +168,9 @@ const RecentlyAddedBookCard = memo(function RecentlyAddedBookCard({
 		}
 	}, [data.thumbnail.metadata])
 
-	const gradient = {
-		colors: ['transparent', 'transparent', 'rgba(0, 0, 0, 0.4)', 'rgba(0, 0, 0, 0.85)'],
-		direction: 'to bottom',
-	}
-
 	return (
 		<Link
-			to={paths.bookOverview(data.id)}
+			to={paths.bookReader(data.id, { isRetro: true })}
 			className="group relative block shrink-0 rounded-thumbnail transition-opacity hover:opacity-90"
 			style={{ width: cardWidth }}
 		>
@@ -176,29 +179,27 @@ const RecentlyAddedBookCard = memo(function RecentlyAddedBookCard({
 				alt={data.resolvedName}
 				size={{ width: cardWidth, height: cardWidth / thumbnailRatio }}
 				placeholderData={placeholderData}
-				gradient={gradient}
+				gradient={{
+					colors: ['transparent', 'transparent', 'rgba(0, 0, 0, 0.4)', 'rgba(0, 0, 0, 0.85)'],
+					direction: 'to bottom',
+				}}
 				borderAndShadowStyle={{
 					shadowColor: 'rgba(0, 0, 0, 0.2)',
 					shadowRadius: 2,
 				}}
 			/>
-
 			<div className="bottom-0 left-0 right-0 p-2 pointer-events-none absolute z-30">
 				<Text
 					className="text-sm font-semibold leading-tight text-white line-clamp-2 text-wrap!"
-					style={{
-						textShadow: '1px 1px 2px rgba(0, 0, 0, 0.5)',
-					}}
+					style={{ textShadow: '1px 1px 2px rgba(0, 0, 0, 0.5)' }}
 				>
 					{data.resolvedName}
 				</Text>
 				<Text
 					className="mt-0.5 text-xs text-gray-200"
-					style={{
-						textShadow: '1px 1px 2px rgba(0, 0, 0, 0.5)',
-					}}
+					style={{ textShadow: '1px 1px 2px rgba(0, 0, 0, 0.5)' }}
 				>
-					{formatDistanceToNow(new Date(data.createdAt), { addSuffix: true })}
+					{formatDistanceToNow(new Date(lastPlayedAt), { addSuffix: true })}
 				</Text>
 			</div>
 		</Link>

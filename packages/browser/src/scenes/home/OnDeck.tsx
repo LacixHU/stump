@@ -3,8 +3,7 @@ import { Text } from '@stump/components'
 import { FragmentType, graphql, useFragment } from '@stump/graphql'
 import { useLocaleContext } from '@stump/i18n'
 import { useQueryClient } from '@tanstack/react-query'
-import { BookMarked } from 'lucide-react'
-import { memo, Suspense, useCallback, useMemo } from 'react'
+import { memo, Suspense, useCallback, useEffect, useMemo } from 'react'
 import { useMediaMatch } from 'rooks'
 
 import HorizontalCardList from '@/components/HorizontalCardList'
@@ -70,7 +69,7 @@ export const usePrefetchOnDeck = () => {
 	const { sdk } = useSDK()
 	const client = useQueryClient()
 	return useCallback(() => {
-		client.prefetchInfiniteQuery({
+		return client.prefetchInfiniteQuery({
 			queryKey: sdk.cacheKey('onDeck'),
 			initialPageParam: {
 				offset: {
@@ -88,15 +87,19 @@ export const usePrefetchOnDeck = () => {
 	}, [sdk, client])
 }
 
-export default function OnDeckContainer() {
+type SectionProps = {
+	onEmptyChange?: (empty: boolean) => void
+}
+
+export default function OnDeckContainer({ onEmptyChange }: SectionProps) {
 	return (
 		<Suspense>
-			<OnDeck />
+			<OnDeck onEmptyChange={onEmptyChange} />
 		</Suspense>
 	)
 }
 
-function OnDeck() {
+function OnDeck({ onEmptyChange }: SectionProps) {
 	const { t } = useLocaleContext()
 	const {
 		preferences: { thumbnailRatio },
@@ -122,6 +125,14 @@ function OnDeck() {
 		}
 	}, [fetchNextPage, hasNextPage, isFetchingNextPage])
 
+	useEffect(() => {
+		onEmptyChange?.(nodes.length === 0)
+	}, [nodes.length, onEmptyChange])
+
+	if (!nodes.length) {
+		return null
+	}
+
 	const cards = nodes.map((node) => (
 		<OnDeckBookCard key={node.id} fragment={node} cardWidth={imageWidth} />
 	))
@@ -132,19 +143,6 @@ function OnDeck() {
 			items={cards}
 			height={listHeight}
 			onFetchMore={handleFetchMore}
-			emptyState={
-				<div className="space-x-3 px-4 py-4 flex items-start justify-start rounded-lg border border-dashed border-border">
-					<span className="p-2 rounded-lg border border-border bg-muted">
-						<BookMarked className="h-8 w-8 text-muted-foreground" />
-					</span>
-					<div>
-						<Text>{t('homeScene.onDeck.emptyState.heading')}</Text>
-						<Text size="sm" variant="muted">
-							{t('homeScene.onDeck.emptyState.message')}
-						</Text>
-					</div>
-				</div>
-			}
 		/>
 	)
 }

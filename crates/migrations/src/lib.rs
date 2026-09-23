@@ -36,6 +36,7 @@ mod m20260809_000000_nested_series;
 mod m20260810_000000_library_inclusions;
 mod m20260903_000000_series_use_single_thumbnail;
 mod m20260914_000000_add_media_save_states;
+mod m20260922_000000_add_media_last_played;
 
 pub struct Migrator;
 
@@ -78,6 +79,7 @@ impl MigratorTrait for Migrator {
 			Box::new(m20260810_000000_library_inclusions::Migration),
 			Box::new(m20260903_000000_series_use_single_thumbnail::Migration),
 			Box::new(m20260914_000000_add_media_save_states::Migration),
+			Box::new(m20260922_000000_add_media_last_played::Migration),
 		]
 	}
 }

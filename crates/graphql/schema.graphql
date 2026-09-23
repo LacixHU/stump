@@ -886,6 +886,33 @@ input FitWithinResizeInput {
 	height: Int!
 }
 
+type HomeArrangement {
+	locked: Boolean!
+	sections: [HomeSection!]!
+}
+
+input HomeArrangementInput {
+	sections: [HomeSectionInput!]!
+}
+
+type HomeSection {
+	kind: HomeSectionKind!
+	visible: Boolean!
+}
+
+input HomeSectionInput {
+	kind: HomeSectionKind!
+	visible: Boolean!
+}
+
+enum HomeSectionKind {
+	IN_PROGRESS_BOOKS
+	LAST_PLAYED_GAMES
+	ON_DECK
+	RECENTLY_ADDED_BOOKS
+	RECENTLY_ADDED_SERIES
+}
+
 type ImageColor {
 	color: String!
 	percentage: Decimal!
@@ -1046,6 +1073,11 @@ type JobUpdate {
 	completedSubtasks: Int
 	"The number of subtasks that exist in the current task"
 	totalSubtasks: Int
+}
+
+type LastPlayedGame {
+	lastPlayedAt: DateTime!
+	media: Media!
 }
 
 type Library {
@@ -1915,6 +1947,7 @@ type Mutation {
 	re-extracts the cover page.
 	"""
 	regenerateMediaThumbnail(id: ID!): Media!
+	recordMediaPlay(id: ID!): Boolean!
 	updateMediaMetadata(id: ID!, input: MediaMetadataInput!): Media!
 	"""
 	Search external metadata providers for a media item and return the resulting fetch
@@ -2114,6 +2147,8 @@ type Mutation {
 	updateUserLockStatus(id: ID!, lock: Boolean!): User!
 	updateNavigationArrangementLock(locked: Boolean!): Arrangement!
 	updateNavigationArrangement(input: NavigationArrangementInput!): Arrangement!
+	updateHomeArrangementLock(locked: Boolean!): HomeArrangement!
+	updateHomeArrangement(input: HomeArrangementInput!): HomeArrangement!
 	createEmailer(input: EmailerInput!): Emailer!
 	updateEmailer(id: Int!, input: EmailerInput!): Emailer!
 	deleteEmailer(id: Int!): Emailer!
@@ -2362,6 +2397,11 @@ type PaginatedJobResponse {
 	pageInfo: PaginationInfo!
 }
 
+type PaginatedLastPlayedGameResponse {
+	nodes: [LastPlayedGame!]!
+	pageInfo: PaginationInfo!
+}
+
 type PaginatedLibraryResponse {
 	nodes: [Library!]!
 	pageInfo: PaginationInfo!
@@ -2523,6 +2563,7 @@ type Query {
 	"Returns the available alphabet for all media in the server"
 	mediaAlphabet: JSONObject!
 	keepReading(pagination: Pagination! = {offset: {page: 1, pageSize: 20, zeroBased: false}}): PaginatedMediaResponse!
+	lastPlayedGames(pagination: Pagination! = {offset: {page: 1, pageSize: 20, zeroBased: false}}): PaginatedLastPlayedGameResponse!
 	onDeck(pagination: Pagination! = {offset: {page: 1, pageSize: 20, zeroBased: false}}): PaginatedMediaResponse!
 	recentlyAddedMedia(pagination: Pagination! = {offset: {page: 1, pageSize: 20, zeroBased: false}}): PaginatedMediaResponse!
 	duplicateMedia: [Media!]!
@@ -3768,7 +3809,7 @@ type UserPreferences {
 	"seconds of inactivity after which the current reading session is considered ended"
 	readingSessionGracePeriodSecs: Int!
 	userId: String
-	homeArrangement: Arrangement!
+	homeArrangement: HomeArrangement!
 	navigationArrangement: Arrangement!
 }
 

@@ -1,7 +1,7 @@
 use async_graphql::{Context, Object, Result, ID};
 use chrono::Utc;
 use models::{
-	entity::{favorite_media, library, library_config, media, series},
+	entity::{favorite_media, library, library_config, media, media_last_played, series},
 	shared::{
 		enums::{LibraryType, UserPermission},
 		image_processor_options::ImageProcessorOptions,
@@ -18,6 +18,7 @@ use stump_core::{
 			generate_book_thumbnail, retro_cover_image_options, GenerateThumbnailOptions,
 		},
 		media::analysis::{AnalysisJobConfig, MediaAnalysisJobScope},
+		ContentType,
 	},
 	job::stump_job::StumpJob,
 };
@@ -235,6 +236,41 @@ impl MediaMutation {
 			.ok_or("Book not found")?;
 
 		Ok(refreshed.into())
+	}
+
+	async fn record_media_play(&self, ctx: &Context<'_>, id: ID) -> Result<bool> {
+		let AuthContext { user, .. } = ctx.data::<AuthContext>()?;
+		let conn = ctx.data::<CoreContext>()?.conn.as_ref();
+		let media_id = id.to_string();
+
+		let model = media::Entity::find_for_user(user)
+			.filter(media::Column::Id.eq(media_id.clone()))
+			.one(conn)
+			.await?
+			.ok_or("Media not found")?;
+
+		if !ContentType::is_retro_extension(&model.extension) {
+			return Err("Media is not a retro game".into());
+		}
+
+		media_last_played::Entity::insert(media_last_played::ActiveModel {
+			id: Set(Uuid::new_v4().to_string()),
+			user_id: Set(user.id.clone()),
+			media_id: Set(media_id),
+			last_played_at: Set(Utc::now()),
+		})
+		.on_conflict(
+			OnConflict::columns([
+				media_last_played::Column::UserId,
+				media_last_played::Column::MediaId,
+			])
+			.update_columns([media_last_played::Column::LastPlayedAt])
+			.to_owned(),
+		)
+		.exec(conn)
+		.await?;
+
+		Ok(true)
 	}
 }
 

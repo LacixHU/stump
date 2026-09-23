@@ -393,3 +393,9 @@ impl Media {
 		Ok(self.model.path.replace(&library_path, ""))
 	}
 }
+
+#[derive(Debug, Clone, SimpleObject)]
+pub struct LastPlayedGame {
+	pub last_played_at: DateTimeUtc,
+	pub media: Media,
+}
