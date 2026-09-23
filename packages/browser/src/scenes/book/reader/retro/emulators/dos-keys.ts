@@ -119,6 +119,8 @@ const OVERLAY_TO_CODE: Partial<Record<OverlayKeyId, number>> = {
 	f8: 119,
 	f9: 120,
 	f10: 121,
+	f11: 122,
+	f12: 123,
 	cursorup: 38,
 	cursordown: 40,
 	cursorleft: 37,

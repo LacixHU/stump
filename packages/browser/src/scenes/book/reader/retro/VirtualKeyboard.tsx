@@ -384,7 +384,7 @@ const DOS_SHIFT: Modifier = { key: 'shift', name: 'shift' }
 
 const DOS_ROWS: CapRow[] = [
 	[
-		key('runstop', 'Esc', undefined, { width: 1.25, aria: 'Escape' }),
+		key('runstop', 'Esc', undefined, { aria: 'Escape' }),
 		amigaFn('f1', 'F1'),
 		amigaFn('f2', 'F2'),
 		amigaFn('f3', 'F3'),
@@ -395,8 +395,10 @@ const DOS_ROWS: CapRow[] = [
 		amigaFn('f8', 'F8'),
 		amigaFn('f9', 'F9'),
 		amigaFn('f10', 'F10'),
-		key('delete', 'Del', undefined, { width: 1.75, aria: 'Delete' }),
-		key('home', 'Home', undefined, { width: 2 }),
+		amigaFn('f11', 'F11'),
+		amigaFn('f12', 'F12'),
+		key('delete', 'Del', undefined, { aria: 'Delete' }),
+		key('home', 'Home'),
 	],
 	[
 		key('backquote', '`', '~'),
