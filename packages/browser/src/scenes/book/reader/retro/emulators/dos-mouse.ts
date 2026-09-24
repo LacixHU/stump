@@ -26,10 +26,12 @@ export function dosContainBox(
 	}
 }
 
-export function dosTouchMoveScale(canvasWidth: number, canvasHeight: number) {
-	const x = canvasWidth > 0 && canvasWidth < 480 ? 640 / canvasWidth : 1
-	const y = canvasHeight > 240 && canvasHeight < 420 ? 400 / canvasHeight : 2
-	return { x, y }
+/**
+ * One gain for both axes: the picture is drawn at a uniform scale, so any difference
+ * between them makes vertical swipes move faster or slower than horizontal ones.
+ */
+export function dosTouchMoveScale(canvasWidth: number) {
+	return canvasWidth > 0 && canvasWidth < 480 ? 640 / canvasWidth : 1
 }
 
 export function dosTouchMickeys(
@@ -45,11 +47,11 @@ export function dosTouchMickeys(
 	if (!rect.width || !rect.height || !cw || !ch) return { dx: 0, dy: 0 }
 	const box = dosContainBox(rect, cw, ch)
 	if (!box.width || !box.height) return { dx: 0, dy: 0 }
-	const scale = dosTouchMoveScale(cw, ch)
+	const scale = dosTouchMoveScale(cw)
 	const sens = Number.isFinite(sensitivity) ? sensitivity : 1
 	return {
-		dx: fingerDx * (cw / box.width) * scale.x * sens,
-		dy: fingerDy * (ch / box.height) * scale.y * sens,
+		dx: fingerDx * (cw / box.width) * scale * sens,
+		dy: fingerDy * (ch / box.height) * scale * sens,
 	}
 }
 
@@ -59,9 +61,11 @@ export type DosTouchCursor = { x: number; y: number }
 export const DOS_TOUCH_CURSOR_START: DosTouchCursor = { x: 0.5, y: 0.5 }
 
 /**
- * Unlocked DOSBox takes the INT 33h position from the absolute SDL coordinate, so the
- * virtual cursor must stay on the canvas: once it runs past an edge, DOS pins the pointer
- * to the corner and every swipe back is spent returning to the visible area.
+ * The cursor is not clamped to the canvas. Unlocked SDL turns position changes into the
+ * motion deltas, and games that steer their own pointer from those deltas (Fate of
+ * Atlantis) drift away from the virtual cursor: a cursor held at the edge stops the
+ * motion and strands their pointer short of it. Games that read the absolute position
+ * pin at the edge instead, and a swipe back first walks the cursor onto the canvas.
  */
 export function stepDosTouchCursor(
 	current: DosTouchCursor,
@@ -71,11 +75,11 @@ export function stepDosTouchCursor(
 	canvasHeight: number,
 ): DosTouchCursor {
 	if (canvasWidth <= 0 || canvasHeight <= 0) return current
-	const maxX = (canvasWidth - 1) / canvasWidth
-	const maxY = (canvasHeight - 1) / canvasHeight
+	const x = current.x + dx / canvasWidth
+	const y = current.y + dy / canvasHeight
 	return {
-		x: clampDosAxis(current.x + dx / canvasWidth, maxX),
-		y: clampDosAxis(current.y + dy / canvasHeight, maxY),
+		x: Number.isFinite(x) ? x : current.x,
+		y: Number.isFinite(y) ? y : current.y,
 	}
 }
 

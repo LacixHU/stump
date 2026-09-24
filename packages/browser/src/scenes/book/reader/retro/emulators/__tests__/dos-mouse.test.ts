@@ -27,15 +27,14 @@ function withWindowScroll(x: number, y: number, run: () => void) {
 }
 
 describe('DOS mouse events', () => {
-	it('keeps the touch cursor on the canvas so swiping back moves it at once', () => {
+	it('keeps moving the touch cursor past the edges so motion never stalls', () => {
 		let cursor = DOS_TOUCH_CURSOR_START
-		for (let i = 0; i < 50; i++) cursor = stepDosTouchCursor(cursor, 40, 40, 320, 200)
-		expect(cursor).toEqual({ x: 319 / 320, y: 199 / 200 })
+		for (let i = 0; i < 10; i++) cursor = stepDosTouchCursor(cursor, 40, 40, 320, 200)
+		expect(cursor.x * 320).toBeCloseTo(160 + 400)
+		expect(cursor.y * 200).toBeCloseTo(100 + 400)
 		cursor = stepDosTouchCursor(cursor, -32, -20, 320, 200)
-		expect(cursor.x * 320).toBeCloseTo(287)
-		expect(cursor.y * 200).toBeCloseTo(179)
-		for (let i = 0; i < 50; i++) cursor = stepDosTouchCursor(cursor, -40, -40, 320, 200)
-		expect(cursor).toEqual({ x: 0, y: 0 })
+		expect(cursor.x * 320).toBeCloseTo(528)
+		expect(cursor.y * 200).toBeCloseTo(480)
 	})
 
 	it('holds the touch cursor still while the canvas has no size', () => {
@@ -76,9 +75,8 @@ describe('DOS mouse events', () => {
 	})
 
 	it('scales a 320x200 picture so a finger swipe crosses the DOS mouse range', () => {
-		expect(dosTouchMoveScale(320, 200)).toEqual({ x: 2, y: 2 })
-		expect(dosTouchMoveScale(640, 400)).toEqual({ x: 1, y: 1 })
-		expect(dosTouchMoveScale(640, 480)).toEqual({ x: 1, y: 2 })
+		expect(dosTouchMoveScale(320)).toBe(2)
+		expect(dosTouchMoveScale(640)).toBe(1)
 		const rect = { height: 360, left: 0, top: 0, width: 800 }
 		const box = dosContainBox(rect, 320, 200)
 		const across = dosTouchMickeys(box.width, box.height, rect, 320, 200)
@@ -87,6 +85,14 @@ describe('DOS mouse events', () => {
 		const step = dosTouchMickeys(50, 40, rect, 320, 200)
 		expect(step.dx * (box.width / 640)).toBeCloseTo(50)
 		expect(step.dy * (box.height / 400)).toBeCloseTo(40)
+	})
+
+	it('moves a 640x480 cursor at the same speed on both axes', () => {
+		const rect = { height: 382, left: 0, top: 30, width: 915 }
+		const box = dosContainBox(rect, 640, 480)
+		const step = dosTouchMickeys(30, 30, rect, 640, 480)
+		expect(step.dx * (box.width / 640)).toBeCloseTo(30)
+		expect(step.dy * (box.height / 480)).toBeCloseTo(30)
 	})
 
 	it('seeds pointer-lock position in canvas pixels from the click', () => {
