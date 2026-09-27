@@ -261,8 +261,13 @@ pub fn find_auto_apply_candidate(
 	for candidate in candidates {
 		if let Some(config) = provider_configs
 			.iter()
-			.find(|c| c.provider_type.to_string() == candidate.provider)
-		{
+			// A candidate names its provider by the client id (`wikipedia`), the config by
+			// the enum (`WIKIPEDIA`), so an exact comparison never matched anything
+			.find(|c| {
+				c.provider_type
+					.to_string()
+					.eq_ignore_ascii_case(&candidate.provider)
+			}) {
 			if let Some(auto_config) = config
 				.auto_apply_config
 				.as_ref()
@@ -307,20 +312,21 @@ where
 		query = query.filter(metadata_fetch_record::Column::MediaId.eq(mid));
 	}
 
-	// Note: This realistically shouldn't happen but is more of a safeguard
 	if let Some(status) = query.one(conn).await? {
-		tracing::warn!(
-			?series_id,
-			?media_id,
-			?candidate,
-			"Unable to fetch the original fetch record!"
-		);
 		let mut active: metadata_fetch_record::ActiveModel = status.into();
 		active.status = Set(MetadataFetchStatus::Fetched);
 		active.accepted_match_candidate = Set(Some(candidate_json));
 		metadata_fetch_record::Entity::update(active)
 			.exec(conn)
 			.await?;
+	} else {
+		// Note: This realistically shouldn't happen but is more of a safeguard
+		tracing::warn!(
+			?series_id,
+			?media_id,
+			?candidate,
+			"Unable to fetch the original fetch record!"
+		);
 	}
 
 	Ok(())
@@ -516,6 +522,28 @@ fn apply_media_fields(
 		active.pencillers = Set(v);
 	}
 
+	if let Some(v) =
+		merger.merge_scalar(MetadataField::Publisher, &model.publisher, &ext.publisher)
+	{
+		active.publisher = Set(v);
+	}
+
+	if let Some(v) = merger.merge_comma_list(
+		MetadataField::Developers,
+		&model.developers,
+		&ext.developers,
+	) {
+		active.developers = Set(v);
+	}
+
+	if let Some(v) = merger.merge_comma_list(
+		MetadataField::Platforms,
+		&model.platforms,
+		&ext.platforms,
+	) {
+		active.platforms = Set(v);
+	}
+
 	if let Some(v) = merger.apply_scalar_override::<String>(MetadataField::Title) {
 		active.title = Set(v);
 	}
@@ -558,6 +586,15 @@ fn apply_media_fields(
 	}
 	if let Some(v) = merger.apply_comma_list_override(MetadataField::Artists) {
 		active.pencillers = Set(v);
+	}
+	if let Some(v) = merger.apply_scalar_override::<String>(MetadataField::Publisher) {
+		active.publisher = Set(v);
+	}
+	if let Some(v) = merger.apply_comma_list_override(MetadataField::Developers) {
+		active.developers = Set(v);
+	}
+	if let Some(v) = merger.apply_comma_list_override(MetadataField::Platforms) {
+		active.platforms = Set(v);
 	}
 }
 
@@ -612,6 +649,9 @@ fn build_media_metadata_insert(
 		letterers: Set(ext.letterers.as_ref().map(|l| l.join(", "))),
 		cover_artists: Set(ext.cover_artists.as_ref().map(|c| c.join(", "))),
 		pencillers: Set(ext.artists.as_ref().map(|a| a.join(", "))),
+		publisher: Set(ext.publisher.clone()),
+		developers: Set(ext.developers.as_ref().map(|d| d.join(", "))),
+		platforms: Set(ext.platforms.as_ref().map(|p| p.join(", "))),
 		metadata_source: Set(Some(provider.to_string())),
 		metadata_external_id: Set(Some(external_id.to_string())),
 		..Default::default()
@@ -621,6 +661,7 @@ fn build_media_metadata_insert(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use sea_orm::ActiveValue::Unchanged;
 
 	fn external_media(
 		series_name: Option<&str>,
@@ -672,5 +713,133 @@ mod tests {
 
 		assert_eq!(active.series, Set(Some("Wayfarers".to_string())));
 		assert_eq!(active.number, Set(Decimal::from_f32(1.0)));
+	}
+
+	fn uridium() -> ExternalMediaMetadata {
+		ExternalMediaMetadata {
+			title: Some("Uridium".to_string()),
+			publisher: Some("Hewson Consultants".to_string()),
+			developers: Some(vec!["Andrew Braybrook".to_string()]),
+			platforms: Some(vec!["Commodore 64".to_string(), "ZX Spectrum".to_string()]),
+			..Default::default()
+		}
+	}
+
+	#[test]
+	fn game_details_fill_the_gaps() {
+		let merger = FieldMerger::new(MergeStrategy::FillGaps, vec![], vec![]);
+		let model = media_metadata::Model {
+			publisher: Some("Edited by hand".to_string()),
+			..Default::default()
+		};
+		let mut active = model.clone().into_active_model();
+
+		apply_media_fields(&merger, &model, &mut active, &uridium());
+
+		assert_eq!(active.developers, Set(Some("Andrew Braybrook".to_string())));
+		assert_eq!(
+			active.platforms,
+			Set(Some("Commodore 64, ZX Spectrum".to_string()))
+		);
+		// A value already there is kept
+		assert_eq!(
+			active.publisher,
+			Unchanged(Some("Edited by hand".to_string()))
+		);
+	}
+
+	#[test]
+	fn locked_game_fields_are_not_overwritten() {
+		let merger = FieldMerger::new(
+			MergeStrategy::PreferExternal,
+			vec![MetadataField::Developers, MetadataField::Platforms],
+			vec![],
+		);
+		let model = media_metadata::Model {
+			developers: Some("Mine".to_string()),
+			..Default::default()
+		};
+		let mut active = model.clone().into_active_model();
+
+		apply_media_fields(&merger, &model, &mut active, &uridium());
+
+		assert_eq!(active.developers, Unchanged(Some("Mine".to_string())));
+		assert_eq!(active.platforms, Unchanged(None));
+		assert_eq!(
+			active.publisher,
+			Set(Some("Hewson Consultants".to_string()))
+		);
+	}
+
+	#[test]
+	fn game_details_are_inserted_for_a_game_with_no_metadata_row() {
+		let active =
+			build_media_metadata_insert("m1", &uridium(), "wikipedia", "Uridium");
+		assert_eq!(active.title, Set(Some("Uridium".to_string())));
+		assert_eq!(
+			active.publisher,
+			Set(Some("Hewson Consultants".to_string()))
+		);
+		assert_eq!(active.developers, Set(Some("Andrew Braybrook".to_string())));
+		assert_eq!(
+			active.platforms,
+			Set(Some("Commodore 64, ZX Spectrum".to_string()))
+		);
+	}
+
+	fn provider_config(
+		provider_type: models::shared::enums::MetadataProvider,
+		auto_apply: AutoApplyConfig,
+	) -> models::entity::metadata_provider_config::Model {
+		models::entity::metadata_provider_config::Model {
+			id: 1,
+			provider_type,
+			enabled: true,
+			encrypted_api_token: None,
+			api_token_expires_at: None,
+			auto_apply_config: Some(serde_json::to_value(auto_apply).unwrap()),
+			created_at: chrono::Utc::now().into(),
+			updated_at: None,
+		}
+	}
+
+	fn candidate(provider: &str, confidence: f32) -> MatchCandidate {
+		MatchCandidate {
+			provider: provider.to_string(),
+			external_id: "Uridium".to_string(),
+			metadata: ExternalMetadata::Media(uridium()),
+			confidence,
+			confidence_factors: vec![],
+		}
+	}
+
+	#[test]
+	fn auto_apply_finds_the_config_for_a_candidates_provider() {
+		use models::shared::enums::MetadataProvider;
+
+		let configs = vec![provider_config(
+			MetadataProvider::Wikipedia,
+			AutoApplyConfig {
+				enabled: true,
+				threshold: Decimal::new(80, 2),
+				..Default::default()
+			},
+		)];
+
+		// The candidate says `wikipedia`, the config `WIKIPEDIA`
+		let found = find_auto_apply_candidate(&[candidate("wikipedia", 0.8)], &configs);
+		assert!(
+			found.is_some(),
+			"the seeded Wikipedia threshold must accept 0.8"
+		);
+
+		assert!(
+			find_auto_apply_candidate(&[candidate("wikipedia", 0.7)], &configs).is_none()
+		);
+		// Another provider's candidate must not borrow Wikipedia's settings
+		assert!(
+			find_auto_apply_candidate(&[candidate("hardcover", 0.99)], &configs)
+				.is_none()
+		);
 	}
 }

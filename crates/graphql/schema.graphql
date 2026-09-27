@@ -776,6 +776,11 @@ type ExternalMediaMetadata {
 	colorists: [String!]
 	letterers: [String!]
 	coverArtists: [String!]
+	publisher: String
+	"The studios or people who made a game"
+	developers: [String!]
+	"The machines a game was released on"
+	platforms: [String!]
 	coverUrl: String
 	providerUrl: String
 }
@@ -1495,6 +1500,8 @@ type MediaMetadata {
 	links: [String!]!
 	pencillers: [String!]!
 	teams: [String!]!
+	developers: [String!]!
+	platforms: [String!]!
 	lockedFields: [MetadataField!]!
 }
 
@@ -1559,6 +1566,8 @@ input MediaMetadataInput {
 	identifierMobiAsin: String
 	identifierUuid: String
 	language: String
+	developers: [String!]
+	platforms: [String!]
 }
 
 enum MediaMetadataModelOrdering {
@@ -1599,6 +1608,8 @@ enum MediaMetadataModelOrdering {
 	VOLUME
 	WRITERS
 	YEAR
+	DEVELOPERS
+	PLATFORMS
 	METADATA_SOURCE
 	METADATA_EXTERNAL_ID
 	LOCKED_FIELDS
@@ -1803,6 +1814,8 @@ enum MetadataField {
 	META_TYPE
 	COMIC_IMAGE
 	DESCRIPTION_FORMATTED
+	DEVELOPERS
+	PLATFORMS
 }
 
 "A user-provided override value for a specific metadata field"
@@ -1825,7 +1838,7 @@ enum MetadataProvider {
 	WORLD_OF_SPECTRUM
 	"Lemon Amiga (or similar); may be stubbed if scrape is fragile"
 	LEMON_AMIGA
-	"Wikipedia Category:Video game covers (MediaWiki API; no token)"
+	"Wikipedia video game articles and their Wikidata items (MediaWiki API; no token)"
 	WIKIPEDIA
 }
 

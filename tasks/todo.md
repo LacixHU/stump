@@ -1,3 +1,165 @@
+# Game info: pick the match yourself
+
+## Problem
+
+"Duke Nukem 3D" (`DUKE_NUKEM_3D.dosz`) matched _Duke Nukem_, the 1991 2D platformer, and
+**Fetch game info** offers one candidate with no way to change the search.
+
+Causes: the title candidates kept the ALL-CAPS stem over the folder's `Duke Nukem 3D`, so the
+case-sensitive direct summary lookup missed; then `titles_similar` accepted "Duke Nukem" for
+"Duke Nukem 3D" through its substring shortcut ("3D" is what tells the games apart).
+
+## Plan
+
+- [x] Matching: numbers in a title must agree (`3D`, `64`, `2`/`II`); `1` is ignored
+- [x] Candidates: when two differ only in case, keep the folder's / mixed-case one
+- [x] `SearchQuery.interactive`: a person is choosing, so the Wikipedia provider returns up
+      to 5 game articles, loosely related ones included at low confidence, best first
+- [x] Core manual fetch: an explicit term is searched alone; otherwise every title candidate
+      is searched and the results merged (deduped by article, best confidence kept)
+- [x] `GameInfoSearchDialog`: term field + results list (cover, title, year, developers,
+      platforms, confidence, Wikipedia link); picking one opens the review at that candidate
+      (`open(..., candidateIndex)`, since accept applies by index)
+- [x] Tests, live check on Duke Nukem 3D / Wolfenstein 3D, headless browser check
+
+## Review
+
+**Fetch game info** now opens a dialog. It searches immediately by the game's file and
+folder names, lists up to five Wikipedia articles (cover, year, developers, publisher,
+platforms, confidence, Wikipedia link), and takes a typed term for another search. Picking a
+row opens the existing review at that candidate. Verified in headless Chrome: searching
+"Duke Nukem" lists Duke Nukem / Forever / 3D, and picking 3D opens "Candidate 3 of 3" with
+its 1996 details. The rescan now matches `DUKE_NUKEM_3D.dosz` to Duke Nukem 3D on its own.
+
+Matching fixes found on the way, all with tests:
+
+- the already-tried list compared names case-insensitively, so `Duke Nukem 3D` was skipped
+  after the case-sensitive `DUKE NUKEM 3D` lookup missed
+- franchise, series, character and "List of" pages are not games (by short description)
+- a loosely related interactive result must describe itself as a game, as must a
+  dropped-prefix match (keeps out Conan the Barbarian, ScummVM, composers)
+- the substring shortcut accepts only a title that _runs on_ past the query
+  (Zak McKracken…), not one that ends with it
+
+Jest cannot import the dialog (the component library pulls in ESM-only react-markdown), so
+its one pure helper lives in `scenes/book/gameInfo.ts` and is tested there.
+
+# Game info from Wikipedia + Wikidata
+
+## Problem
+
+A retro game's metadata today is its file stem as the title and nothing else. The Wikipedia
+lookup already finds the game's own article to take its box art, then throws everything
+else on that page away. Users want title, release year, platforms, developer, publisher
+and a description.
+
+## Decisions
+
+| Question | Decision                                                                                                                        |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Source   | Wikipedia article (already matched for covers) + its Wikidata item. No token                                                    |
+| Storage  | New `developers`, `platforms` columns on `media_metadata`; title/year/month/day/publisher/summary/genres reuse existing columns |
+| Trigger  | Automatic after scan (new games) via the existing `MetadataFetchJob` + a manual "Fetch game info" action on the game page       |
+| Merge    | Existing `FieldMerger`: locked fields are respected, auto-apply is `FILL_GAPS`                                                  |
+
+Wikidata properties: P178 developer, P123 publisher, P400 platform, P577 publication date
+(with precision -> year / month / day), P136 genre. Labels resolved in one batched
+`wbgetentities&props=labels` call. Probed live: Uridium (Q1665169) returns all five.
+
+## Plan
+
+### Provider crate (`crates/integrations/metadata`)
+
+- [x] `ExternalMediaMetadata`: add `publisher`, `developers`, `platforms`
+- [x] `MetadataField`: add `Developers`, `Platforms`
+- [x] `providers/wikidata.rs`: fetch claims + labels for a Q-id -> `GameFacts`; pure
+      parsing fns unit-tested against fixture JSON (date precision, missing claims,
+      unlabelled ids)
+- [x] `wikipedia.rs`: split the article path out of `lookup_cover_url` into a
+      `lookup_game_article` that returns the accepted `PageSummary` (+ how it matched);
+      `lookup_cover_url` keeps its file-category fallback unchanged
+- [x] `search_media` returns a candidate only for an article match: title (qualifier
+      stripped), summary (extract), date, developers, publisher, platforms, genres,
+      cover, article URL; `external_id` = article title. Confidence 0.9 for a title match,
+      0.8 for dropped-prefix + platform. A Wikidata failure still yields the summary-only
+      candidate. `fetch_media_metadata(article)` rebuilds the same thing
+- [x] Rename provider label to "Wikipedia (video games)"
+
+### Core / DB
+
+- [x] Migration `m20260927_000000_game_metadata`: add `developers`, `platforms` (text) to
+      `media_metadata`; seed an enabled `WIKIPEDIA` provider config with auto-apply
+      `{enabled, threshold 0.8, FILL_GAPS}`, `INSERT OR IGNORE` so an existing row is untouched
+- [x] Entity + GraphQL object (`Vec<String>` like `writers`) + `MediaMetadataInput` +
+      update mutation
+- [x] `ProviderClientCache`: tokenless providers (`MetadataProvider::requires_api_token`)
+- [x] `apply.rs`: merge publisher/developers/platforms; **fix auto-apply never matching**
+      (`"WIKIPEDIA" != "wikipedia"` — compare case-insensitively)
+- [x] `fetch_job.rs` media task: pass the platform hint and use the same provider filter
+      as `fetch.rs`; retro-only providers are skipped for non-retro media (Mixed libraries)
+- [x] `RetroProcessor` stops defaulting `title` to the file stem, so the article title can
+      fill it (display already falls back to the file name — verify)
+
+### Client
+
+- [x] Codegen; fragments + game detail block on the overview (Developer, Publisher,
+      Platforms, Released, description) shown for retro media
+- [x] Editor rows + review-dialog `fieldDefs` for Developers / Platforms
+- [x] "Fetch game info" action for retro media opening the existing metadata search/review
+- [x] `PROVIDER_LABELS` for all providers; en i18n strings
+
+### Docs + verification
+
+- [x] `retro-libraries.mdx`: "Game info" section
+- [x] cargo tests (wikidata parsing, merge, fetch filter), jest for UI bits
+- [x] Live check via the `cover_lookup` example on a handful of C64/Spectrum/Amiga/DOS titles
+- [x] Headless browser check of the game page; prettier + cargo fmt
+
+## Review
+
+Games now get title, description, release date, developers, publisher, platforms and genres
+from their Wikipedia article and its Wikidata item: automatically after a scan, and on demand
+through **Fetch game info** in the game's menu. Verified end to end on a scratch server
+scanning copies of `F:\Retro` (C64, Spectrum, Amiga, DOS) and in headless Chrome.
+
+### Deviations from the plan, and why
+
+- **Wikimedia rate limiting was the first real failure.** The scan's thumbnail job and the
+  metadata job hit Wikipedia in parallel and 25 requests came back 429; Wikidata failures
+  then left half-filled matches. All Wikimedia traffic now goes through one process-wide
+  client (`providers/wikimedia.rs`): 4 req/s shared limiter, retry with backoff, and a 429
+  that outlasts the retries becomes `RateLimited` (so the record says so, and a Wikidata 429
+  fails the lookup instead of applying a partial match). Next run: zero 429s.
+- **Titles come from the folder too.** Searching by file name alone missed `ZAK-1`, `bar2`,
+  `WOLF3D`. The thumbnail job's folder/stem candidate list moved to
+  `media::retro_title_candidates` and both fetch paths try each title in turn.
+- **Confidence got stricter than planned.** The wider search surfaced wrong matches
+  (Aladdin -> Aladdin4D, Barbarian 2 -> Barbarian, REVENGE -> Montezuma's Revenge). Only a
+  title match that names the machine (in the prose, or via Wikidata's platform list) is 0.9
+  and auto-applies; dropped-prefix and unconfirmed title matches are 0.7 and wait for review.
+  The sequel check now runs both ways and treats `II` and `2` alike; a page must call itself
+  a game even when it names the machine; release date prefers this machine's, else the
+  earliest (Bomb Jack's unqualified date is a 2015 re-release).
+- **Port-qualified statements are dropped** for developer/publisher (Doom's publishers are
+  all ports; Nerve Software only did the 360 port). `mul` labels are read as well as `en`
+  (id Software has no English label).
+- **`recursion_limit = "256"` in `graphql` and `stump_server`** (as core already has): the
+  retrying client's futures push the Send proof of the GraphQL resolvers over the default.
+  Boxing individual futures was tried and does not bound it.
+- **Two upstream bugs fixed on the way:** auto-apply compared `WIKIPEDIA` to `wikipedia` and
+  never fired for any provider; `mark_fetch_status_accepted` logged its "unable to fetch"
+  warning on every success.
+- **Review dialog hides rows empty on both sides** (a game match has no ISBN or colorists).
+
+### Known limits
+
+- Same-name games on one machine can still collide (the C64 `Barbarian` matched Psygnosis'
+  1987 Barbarian, which was also on the C64, not Palace's).
+- Wikidata's data is what it is: Wolfenstein 3D lists 12 unqualified publishers.
+- Pre-existing test failures, unchanged by this work: 7 `kobo::entity` tests (confirmed on a
+  clean HEAD worktree) and `graphql::query::media::test_media_query` (ordering changed in
+  07d8fde0).
+
 # Server-side retro save states
 
 ## Problem

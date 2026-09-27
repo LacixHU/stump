@@ -19,6 +19,63 @@ use crate::{
 	},
 };
 
+fn is_generic_cover_folder(name: &str) -> bool {
+	matches!(
+		name.to_ascii_lowercase().as_str(),
+		"c64"
+			| "commodore"
+			| "spectrum"
+			| "zx" | "amiga"
+			| "dos" | "msdos"
+			| "pc" | "games"
+			| "game" | "retro"
+			| "roms" | "disks"
+			| "tapes" | "commodore 64"
+			| "zx spectrum"
+			| "amiga 500"
+			| "ms-dos"
+	)
+}
+
+/// The titles a game file might go by, longest first: its folder's name (unless the folder
+/// is a generic one such as `C64` or `roms`) and its own file name, both stripped of
+/// release tags. A game's folder usually carries its full name (`Zack McKracken and the
+/// Alien Mindbenders`) where the disk carries a short one (`ZAK-1`), so both are worth a
+/// search.
+pub fn retro_title_candidates(path: &Path) -> Vec<String> {
+	let file_stem = path
+		.file_stem()
+		.and_then(|s| s.to_str())
+		.unwrap_or_default();
+	let mut titles = Vec::new();
+	if let Some(parent) = path
+		.parent()
+		.and_then(|p| p.file_name())
+		.and_then(|n| n.to_str())
+	{
+		let parent = metadata_integrations::sanitize_game_title(parent);
+		if parent.len() >= 2 && !is_generic_cover_folder(&parent) {
+			titles.push(parent);
+		}
+	}
+	let stem = metadata_integrations::sanitize_game_title(file_stem);
+	if stem.len() >= 2 {
+		titles.push(stem);
+	}
+	// Of two spellings that differ only in case, the one with lowercase letters is kept:
+	// Wikipedia's direct article lookup is case-sensitive, so `Duke Nukem 3D` finds the
+	// article where the disk's `DUKE NUKEM 3D` does not
+	let is_all_caps = |t: &str| !t.chars().any(char::is_lowercase);
+	titles.sort_by(|a, b| {
+		b.len()
+			.cmp(&a.len())
+			.then_with(|| is_all_caps(a).cmp(&is_all_caps(b)))
+			.then_with(|| a.cmp(b))
+	});
+	titles.dedup_by(|later, kept| later.eq_ignore_ascii_case(kept));
+	titles
+}
+
 /// Platform for retro computer disk/tape images.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RetroPlatform {
@@ -512,15 +569,15 @@ impl FileProcessor for RetroProcessor {
 		})
 	}
 
-	fn process_metadata(path: &str) -> Result<Option<ProcessedMediaMetadata>, FileError> {
-		let FileParts { file_stem, .. } = Path::new(path).file_parts();
-		if file_stem.is_empty() {
-			return Ok(None);
-		}
-		Ok(Some(ProcessedMediaMetadata {
-			title: Some(file_stem),
-			..Default::default()
-		}))
+	/// A disk or tape image carries no metadata of its own. Its title is deliberately left
+	/// unset rather than copied from the file name: the name already shows wherever the
+	/// title is missing, and an empty title is what lets a Wikipedia match fill in the
+	/// game's real one (`Sid Meier's Pirates!` for `Pirates [Sir 13].d64`). It also keeps a
+	/// rescan from overwriting fetched details with a row that holds nothing but a title.
+	fn process_metadata(
+		_path: &str,
+	) -> Result<Option<ProcessedMediaMetadata>, FileError> {
+		Ok(None)
 	}
 
 	fn process(
@@ -756,10 +813,8 @@ mod tests {
 		let processed = result.unwrap();
 		assert_eq!(processed.pages, -1);
 		assert!(processed.hash.is_some());
-		assert_eq!(
-			processed.metadata.as_ref().and_then(|m| m.title.clone()),
-			Some(path.file_stem().unwrap().to_string_lossy().to_string())
-		);
+		// The title is left for a metadata match to fill; the file name shows until then
+		assert!(processed.metadata.is_none());
 	}
 
 	#[test]
@@ -1011,4 +1066,65 @@ pub async fn remove_save_states(
 	}
 
 	Ok(())
+}
+
+#[cfg(test)]
+mod title_candidate_tests {
+	use super::*;
+
+	fn candidates(path: &str) -> Vec<String> {
+		retro_title_candidates(Path::new(path))
+	}
+
+	#[test]
+	fn release_tags_do_not_survive_into_candidates() {
+		// Previously this produced "Operation Wolf [Sir 13]", which Wikipedia answers
+		// with a 403 that aborted the whole lookup before the clean folder name was tried
+		assert_eq!(
+			candidates(r"F:\Retro\C64\Operation Wolf\Operation Wolf [Sir 13].d64"),
+			vec!["Operation Wolf".to_string()]
+		);
+	}
+
+	#[test]
+	fn stem_and_folder_both_offered_when_they_differ() {
+		assert_eq!(
+			candidates(r"F:\Retro\C64\Zamzara\Zamzara-TCF.d64"),
+			vec!["Zamzara TCF".to_string(), "Zamzara".to_string()]
+		);
+	}
+
+	#[test]
+	fn generic_parent_folders_are_skipped() {
+		assert_eq!(
+			candidates(r"F:\Retro\roms\Uridium.d64"),
+			vec!["Uridium".to_string()]
+		);
+		// A folder named after the whole machine says nothing about the game either
+		assert_eq!(
+			candidates(r"F:\Retro\ZX Spectrum\Bomb Jack.tzx"),
+			vec!["Bomb Jack".to_string()]
+		);
+	}
+
+	#[test]
+	fn the_folders_spelling_wins_over_a_shouting_disk_name() {
+		assert_eq!(
+			candidates(r"F:\Retro\DOS\Duke Nukem 3D\DUKE_NUKEM_3D.dosz"),
+			vec!["Duke Nukem 3D".to_string()]
+		);
+	}
+
+	#[test]
+	fn a_disk_with_a_short_name_offers_its_folders_full_one() {
+		assert_eq!(
+			candidates(
+				r"F:\Retro\C64\Zack McKracken and the Alien Mindbenders\ZAK-1.D64"
+			),
+			vec![
+				"Zack McKracken and the Alien Mindbenders".to_string(),
+				"ZAK 1".to_string()
+			]
+		);
+	}
 }

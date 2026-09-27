@@ -1,3 +1,5 @@
+// The GraphQL schema's futures outgrow the default limit; see crates/graphql/src/lib.rs
+#![recursion_limit = "256"]
 use cli::{handle_command, Cli, Parser};
 use errors::EntryError;
 use stump_core::{

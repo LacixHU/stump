@@ -217,6 +217,41 @@ If no sidecar is found, Stump searches Wikipedia via the MediaWiki API in [Categ
 
 Sidecar files always win over Wikipedia. Many Wikipedia covers are fair-use; only use this for your own library. Manual upload on the book manage page still works.
 
+## Game info
+
+After a scan, Stump looks each new game up on Wikipedia and fills in its details from the
+game's article and the article's [Wikidata](https://www.wikidata.org) item:
+
+| Field       | Source                                                         |
+| ----------- | -------------------------------------------------------------- |
+| Title       | The article's title (`Sid Meier's Pirates!` for `Pirates.d64`) |
+| Description | The article's opening paragraph                                |
+| Released    | Wikidata publication date, this machine's release when known   |
+| Developers  | Wikidata developers, leaving out the studios behind ports      |
+| Publisher   | Wikidata publishers, leaving out the publishers of ports       |
+| Platforms   | Every machine Wikidata lists the game for                      |
+| Genres      | Wikidata genres                                                |
+
+No account or API key is needed; the **Wikipedia** provider is switched on by default under
+**Settings → Metadata integrations**, where it can be turned off.
+
+A game is searched by its folder's name as well as its file name, so `ZAK-1.d64` in a
+`Zack McKracken and the Alien Mindbenders` folder is found. A match is applied on its own
+only when the article's title is the game's and the article (or its Wikidata item) names the
+game's machine. Anything less certain — the article only ends with the name, or never
+mentions the machine — waits in the pending matches for you to accept or reject. Fields you
+have filled in or locked are never overwritten.
+
+To look a game up again, for example after renaming it, after a wrong match, or for a game
+scanned before this existed, use **Fetch game info** in the game's `⋯` menu. It searches
+straight away by the game's file and folder names and lists up to five Wikipedia articles,
+each with its cover, year, developers and platforms. If the right game is not there, type
+another name and search again — a looser term like `Duke Nukem` lists the whole series.
+Picking an article opens it for review, with Wikipedia's values ready to replace the
+current ones field by field.
+
+Games with no English Wikipedia article (many European and homebrew titles) get no details.
+
 ## Save states
 
 A save state is the complete memory image of the emulated machine — CPU, RAM, and chip

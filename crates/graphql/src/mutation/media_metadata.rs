@@ -123,6 +123,10 @@ impl MediaMetadataMutation {
 			.map(|l| l.max(0) as u32);
 		let provider_filter = search.as_ref().and_then(|s| s.provider);
 		let skip_auto_apply = search.is_some();
+		// A search the caller asked for is one a person reviews, so it may offer several
+		// candidates; a title they typed is searched as typed
+		let interactive = search.is_some();
+		let title_is_explicit = search.as_ref().is_some_and(|s| s.title.is_some());
 
 		stump_core::filesystem::metadata::fetch_media_metadata(
 			conn,
@@ -135,10 +139,12 @@ impl MediaMetadataMutation {
 				number,
 				limit: limit.or(Some(10)),
 				provider_hints,
+				interactive,
 			},
 			&provider_cache,
 			provider_filter,
 			skip_auto_apply,
+			title_is_explicit,
 		)
 		.await?;
 

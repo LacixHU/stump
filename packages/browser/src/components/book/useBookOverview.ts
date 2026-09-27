@@ -21,6 +21,8 @@ const query = graphql(`
 				language
 				publisher
 				writers
+				developers
+				platforms
 				year
 				...MediaMetadataEditor
 			}

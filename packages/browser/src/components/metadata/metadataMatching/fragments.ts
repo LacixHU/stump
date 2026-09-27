@@ -33,6 +33,9 @@ export const pendingMatchRecordFragment = graphql(`
 					colorists
 					letterers
 					coverArtists
+					publisher
+					developers
+					platforms
 				}
 				... on ExternalSeriesMetadata {
 					seriesTitle: title
@@ -73,6 +76,8 @@ export const pendingMatchRecordFragment = graphql(`
 				letterers
 				coverArtists
 				publisher
+				developers
+				platforms
 				year
 				month
 				day

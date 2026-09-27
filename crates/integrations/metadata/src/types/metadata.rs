@@ -59,6 +59,12 @@ pub struct ExternalMediaMetadata {
 	pub letterers: Option<Vec<String>>,
 	pub cover_artists: Option<Vec<String>>,
 
+	pub publisher: Option<String>,
+	/// The studios or people who made a game
+	pub developers: Option<Vec<String>>,
+	/// The machines a game was released on
+	pub platforms: Option<Vec<String>>,
+
 	pub cover_url: Option<String>,
 
 	pub provider_url: Option<String>,

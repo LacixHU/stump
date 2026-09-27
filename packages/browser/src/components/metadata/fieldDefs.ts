@@ -54,10 +54,29 @@ export const MEDIA_FIELD_DEFS: MetadataFieldDef[] = [
 		editorType: 'badgeList',
 	},
 	{
+		field: MetadataField.Developers,
+		binding: 'developers',
+		candidateKey: 'developers',
+		editorType: 'badgeList',
+	},
+	{
+		field: MetadataField.Platforms,
+		binding: 'platforms',
+		candidateKey: 'platforms',
+		editorType: 'badgeList',
+	},
+	{
+		field: MetadataField.Publisher,
+		binding: 'publisher',
+		candidateKey: 'publisher',
+		editorType: 'text',
+	},
+	{
 		field: MetadataField.Year,
 		binding: 'year',
 		candidateKey: 'year',
 		editorType: 'number',
+		// Home computer games go back to the 1970s
 		validation: { min: 1900, max: CURRENT_YEAR },
 	},
 	{
@@ -88,7 +107,6 @@ export const MEDIA_FIELD_DEFS: MetadataFieldDef[] = [
 	{ field: MetadataField.SeriesGroup, binding: 'seriesGroup' },
 	{ field: MetadataField.StoryArc, binding: 'storyArc' },
 	{ field: MetadataField.StoryArcNumber, binding: 'storyArcNumber' },
-	{ field: MetadataField.Publisher, binding: 'publisher' },
 	{ field: MetadataField.AgeRating, binding: 'ageRating', validation: { min: 0 } },
 	{ field: MetadataField.Editors, binding: 'editors' },
 	{ field: MetadataField.Pencillers, binding: 'pencillers' },

@@ -2,6 +2,8 @@ mod comic_vine;
 mod hardcover;
 mod lemon64;
 mod lemon_amiga;
+mod wikidata;
+mod wikimedia;
 pub mod wikipedia;
 mod world_of_spectrum;
 

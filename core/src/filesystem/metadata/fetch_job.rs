@@ -22,7 +22,11 @@ use crate::job::{
 	JobTaskOutput, WorkingState,
 };
 
-use super::{apply, ProviderClientCache};
+use super::{
+	apply,
+	fetch::{filter_providers, search_titles, RetroTarget},
+	ProviderClientCache,
+};
 
 type Id = String;
 
@@ -595,15 +599,20 @@ impl JobLifecycle for MetadataFetchJob {
 				library_type,
 				..
 			} => {
-				let provider_configs: Vec<_> = all_provider_configs
-					.iter()
-					.filter(|c| library_type.has_provider_overlap(&c.provider_type))
-					.collect();
+				// The same filter as a manual search, so a job does not look a C64 game up
+				// in the Spectrum database, or a book in a Mixed library up on Wikipedia
+				let target = RetroTarget::for_media(conn, &media_id).await;
+				let provider_configs = filter_providers(
+					all_provider_configs.clone(),
+					&library_type,
+					None,
+					target,
+				);
 
 				if provider_configs.is_empty() {
 					tracing::debug!(
 						?library_type,
-						"No compatible providers for this library type, skipping media"
+						"No compatible providers for this media, skipping it"
 					);
 					output.total_processed = 1;
 					output.skipped = 1;
@@ -644,47 +653,61 @@ impl JobLifecycle for MetadataFetchJob {
 				let mut was_rate_limited = false;
 				let mut raw_hits: i32 = 0;
 
-				for config in &provider_configs {
-					match provider_cache.get_or_create(config).await {
-						Ok(provider) => {
-							let query = SearchQuery {
-								title: media_name.clone(),
-								limit: Some(10),
-								..Default::default()
-							};
+				let titles = search_titles(conn, &media_id, target, &media_name).await;
+				for title in titles {
+					for config in &provider_configs {
+						match provider_cache.get_or_create(config).await {
+							Ok(provider) => {
+								let mut query = SearchQuery {
+									title: title.clone(),
+									limit: Some(10),
+									..Default::default()
+								};
+								if let Some(platform) = target.platform() {
+									query.provider_hints.insert(
+										"platform".to_string(),
+										platform.as_str().to_string(),
+									);
+								}
 
-							match provider.search_media(&query).await {
-								Ok(outcome) => {
-									raw_hits += outcome.requested as i32;
-									all_candidates.extend(outcome.candidates);
-								},
-								Err(e) if e.is_rate_limited() => {
-									was_rate_limited = true;
-									logs.push(JobExecuteLog::error(format!(
+								match provider.search_media(&query).await {
+									Ok(outcome) => {
+										raw_hits += outcome.requested as i32;
+										all_candidates.extend(outcome.candidates);
+									},
+									Err(e) if e.is_rate_limited() => {
+										was_rate_limited = true;
+										logs.push(JobExecuteLog::error(format!(
 										"Rate limited by provider {:?} for media metadata",
 										config.provider_type
 									)));
-									tracing::warn!(
-										provider = ?config.provider_type,
-										"Rate limited after retries for media metadata"
-									);
-								},
-								Err(e) => {
-									tracing::error!(
-										provider = ?config.provider_type,
-										error = ?e,
-										"Failed to search provider for media metadata"
-									);
-								},
-							}
-						},
-						Err(e) => {
-							tracing::error!(
-								provider = ?config.provider_type,
-								error = ?e,
-								"Failed to get provider client"
-							);
-						},
+										tracing::warn!(
+											provider = ?config.provider_type,
+											"Rate limited after retries for media metadata"
+										);
+									},
+									Err(e) => {
+										tracing::error!(
+											provider = ?config.provider_type,
+											error = ?e,
+											"Failed to search provider for media metadata"
+										);
+									},
+								}
+							},
+							Err(e) => {
+								tracing::error!(
+									provider = ?config.provider_type,
+									error = ?e,
+									"Failed to get provider client"
+								);
+							},
+						}
+					}
+					// Another title is only worth trying when this one came back empty, and
+					// not while the providers are asking us to slow down
+					if !all_candidates.is_empty() || was_rate_limited {
+						break;
 					}
 				}
 

@@ -100,6 +100,14 @@ pub struct Model {
 	#[graphql(skip)]
 	pub writers: Option<String>,
 	pub year: Option<i32>,
+	/// The studios or people who made a game, comma separated
+	#[sea_orm(column_type = "Text", nullable)]
+	#[graphql(skip)]
+	pub developers: Option<String>,
+	/// The machines a game was released on, comma separated
+	#[sea_orm(column_type = "Text", nullable)]
+	#[graphql(skip)]
+	pub platforms: Option<String>,
 	/// The external metadata provider that supplied this metadata (e.g., "HARDCOVER")
 	#[sea_orm(column_type = "Text", nullable)]
 	pub metadata_source: Option<String>,

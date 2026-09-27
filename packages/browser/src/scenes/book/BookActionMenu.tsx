@@ -14,6 +14,7 @@ import {
 	EllipsisVertical,
 	EyeOff,
 	FileText,
+	Globe,
 	Play,
 	Send,
 	Settings,
@@ -22,11 +23,13 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 
+import { MatchReviewDialog } from '@/components/metadata/metadataMatching'
 import { useAppContext } from '@/context'
 import { usePaths } from '@/paths'
 
 import DeleteHistoryConfirmation from './DeleteHistoryConfirmation'
 import EmailBookDialog from './EmailBookDialog'
+import GameInfoSearchDialog from './GameInfoSearchDialog'
 
 const completedMutation = graphql(`
 	mutation BookActionMenuComplete($id: ID!) {
@@ -102,6 +105,7 @@ export default function BookActionMenu({ book }: Props) {
 	)
 
 	const [showEmailDialog, setShowEmailDialog] = useState(false)
+	const [showGameInfoSearch, setShowGameInfoSearch] = useState(false)
 	const [showDeleteHistoryConfirmation, setShowDeleteHistoryConfirmation] = useState(false)
 
 	const downloadRef = useRef<HTMLAnchorElement>(null)
@@ -136,6 +140,7 @@ export default function BookActionMenu({ book }: Props) {
 	)
 
 	const isRetro = isRetroExtension(book.extension || '')
+	const canFetchGameInfo = isRetro && checkPermission(UserPermission.MetadataFetchRecordManage)
 
 	const groups = useMemo<DropdownItemGroup[]>(
 		() =>
@@ -232,6 +237,15 @@ export default function BookActionMenu({ book }: Props) {
 									},
 								]
 							: []),
+						...(canFetchGameInfo
+							? [
+									{
+										label: t('bookActions.fetchGameInfo'),
+										leftIcon: <Globe className="mr-2 h-4 w-4" />,
+										onClick: () => setShowGameInfoSearch(true),
+									},
+								]
+							: []),
 						...(checkPermission(UserPermission.EmailSend) ||
 						checkPermission(UserPermission.EmailArbitrarySend)
 							? [
@@ -254,6 +268,8 @@ export default function BookActionMenu({ book }: Props) {
 			actions,
 			continueReadingLink,
 			getReadFromBeginningLink,
+			isRetro,
+			canFetchGameInfo,
 			t,
 		],
 	)
@@ -265,6 +281,18 @@ export default function BookActionMenu({ book }: Props) {
 				isOpen={showEmailDialog}
 				onClose={() => setShowEmailDialog(false)}
 			/>
+
+			{canFetchGameInfo && (
+				<>
+					<GameInfoSearchDialog
+						mediaId={book.id}
+						initialTerm={book.resolvedName}
+						isOpen={showGameInfoSearch}
+						onClose={() => setShowGameInfoSearch(false)}
+					/>
+					<MatchReviewDialog />
+				</>
+			)}
 
 			<DeleteHistoryConfirmation
 				isOpen={showDeleteHistoryConfirmation}

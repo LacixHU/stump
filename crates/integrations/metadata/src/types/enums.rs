@@ -51,6 +51,8 @@ pub enum MetadataField {
 	MetaType,
 	ComicImage,
 	DescriptionFormatted,
+	Developers,
+	Platforms,
 }
 
 /// Types of media that can be handled by metadata providers

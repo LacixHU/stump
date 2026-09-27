@@ -119,59 +119,19 @@ pub fn retro_cover_image_options() -> ImageProcessorOptions {
 	}
 }
 
-fn is_generic_cover_folder(name: &str) -> bool {
-	matches!(
-		name.to_ascii_lowercase().as_str(),
-		"c64"
-			| "commodore"
-			| "spectrum"
-			| "zx" | "amiga"
-			| "dos" | "msdos"
-			| "pc" | "games"
-			| "game" | "retro"
-			| "roms" | "disks"
-			| "tapes"
-	)
-}
-
-fn retro_cover_title_candidates(path: &Path, file_stem: &str) -> Vec<String> {
-	let mut titles = Vec::new();
-	if let Some(parent) = path
-		.parent()
-		.and_then(|p| p.file_name())
-		.and_then(|n| n.to_str())
-	{
-		let parent = metadata_integrations::sanitize_game_title(parent);
-		if parent.len() >= 2 && !is_generic_cover_folder(&parent) {
-			titles.push(parent);
-		}
-	}
-	let stem = metadata_integrations::sanitize_game_title(file_stem);
-	if stem.len() >= 2 {
-		titles.push(stem);
-	}
-	titles.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
-	titles.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
-	titles
-}
-
 /// Try each title candidate in turn, returning the first cover we can actually
 /// download. A candidate that errors (a junk filename Wikipedia rejects, a transient
 /// HTTP failure) must not prevent the remaining -- usually cleaner -- candidates from
 /// being tried, so failures are logged and skipped rather than propagated.
 async fn fetch_wikipedia_cover_bytes(book_path: &str) -> Option<Vec<u8>> {
-	use crate::filesystem::media::resolve_retro_platform;
+	use crate::filesystem::media::{resolve_retro_platform, retro_title_candidates};
 	use crate::filesystem::{FileParts, PathUtils};
 
 	let path = Path::new(book_path);
-	let FileParts {
-		file_stem,
-		extension,
-		..
-	} = path.file_parts();
+	let FileParts { extension, .. } = path.file_parts();
 	let platform = resolve_retro_platform(book_path, &extension);
 
-	for title in retro_cover_title_candidates(path, &file_stem) {
+	for title in retro_title_candidates(path) {
 		let url = match metadata_integrations::lookup_wikipedia_game_cover(
 			&title,
 			Some(platform.as_str()),
@@ -1082,42 +1042,5 @@ pub async fn safely_generate_placeholder_batch(
 		output,
 		logs,
 		subtasks: vec![],
-	}
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	fn candidates(path: &str) -> Vec<String> {
-		let path = Path::new(path);
-		let stem = path.file_stem().unwrap().to_str().unwrap();
-		retro_cover_title_candidates(path, stem)
-	}
-
-	#[test]
-	fn release_tags_do_not_survive_into_candidates() {
-		// Previously this produced "Operation Wolf [Sir 13]", which Wikipedia answers
-		// with a 403 that aborted the whole lookup before the clean folder name was tried
-		assert_eq!(
-			candidates(r"F:\Retro\C64\Operation Wolf\Operation Wolf [Sir 13].d64"),
-			vec!["Operation Wolf".to_string()]
-		);
-	}
-
-	#[test]
-	fn stem_and_folder_both_offered_when_they_differ() {
-		assert_eq!(
-			candidates(r"F:\Retro\C64\Zamzara\Zamzara-TCF.d64"),
-			vec!["Zamzara TCF".to_string(), "Zamzara".to_string()]
-		);
-	}
-
-	#[test]
-	fn generic_parent_folders_are_skipped() {
-		assert_eq!(
-			candidates(r"F:\Retro\roms\Uridium.d64"),
-			vec!["Uridium".to_string()]
-		);
 	}
 }

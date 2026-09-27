@@ -106,6 +106,22 @@ impl MediaMetadata {
 			.unwrap_or_default()
 	}
 
+	async fn developers(&self) -> Vec<String> {
+		self.model
+			.developers
+			.clone()
+			.map(comma_separated_list_to_vec)
+			.unwrap_or_default()
+	}
+
+	async fn platforms(&self) -> Vec<String> {
+		self.model
+			.platforms
+			.clone()
+			.map(comma_separated_list_to_vec)
+			.unwrap_or_default()
+	}
+
 	async fn locked_fields(&self) -> Vec<MetadataField> {
 		self.model
 			.locked_fields

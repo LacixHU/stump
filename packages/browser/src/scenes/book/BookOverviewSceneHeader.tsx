@@ -32,6 +32,8 @@ export default function BookOverviewSceneHeader({ media, book, completedAt }: Pr
 		metadata?.publisher || metadata?.language || (metadata?.ageRating && metadata.ageRating > 0)
 	const hasGenres = metadata?.genres && metadata.genres.length > 0
 	const hasWriters = metadata?.writers && metadata.writers.length > 0
+	const developers = metadata?.developers ?? []
+	const platforms = metadata?.platforms ?? []
 	const hasTags = tags && tags.length > 0
 	const hasLinks = metadata?.links && metadata.links.filter((l) => !!l).length > 0
 
@@ -158,6 +160,10 @@ export default function BookOverviewSceneHeader({ media, book, completedAt }: Pr
 				</div>
 			)}
 
+			{developers.length > 0 && <PlainBadgeList label="Developers" values={developers} />}
+
+			{platforms.length > 0 && <PlainBadgeList label="Platforms" values={platforms} />}
+
 			{hasTags && (
 				<div className="gap-1 flex flex-col">
 					<Text size="xs" variant="muted">
@@ -197,6 +203,32 @@ export default function BookOverviewSceneHeader({ media, book, completedAt }: Pr
 					</BadgeList>
 				</div>
 			)}
+		</div>
+	)
+}
+
+type PlainBadgeListProps = {
+	label: string
+	values: string[]
+}
+
+/**
+ * A labelled list of badges that link nowhere. Genres and writers link to a filtered search,
+ * but the book search has no filter for a game's developers or platforms.
+ */
+function PlainBadgeList({ label, values }: PlainBadgeListProps) {
+	return (
+		<div className="gap-1 flex flex-col">
+			<Text size="xs" variant="muted">
+				{label}
+			</Text>
+			<BadgeList>
+				{values.map((value) => (
+					<Badge key={value} variant="secondary" rounded="full">
+						{value}
+					</Badge>
+				))}
+			</BadgeList>
 		</div>
 	)
 }

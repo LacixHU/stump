@@ -37,6 +37,7 @@ const fragment = graphql(`
 		colorists
 		coverArtists
 		day
+		developers
 		editors
 		format
 		identifierAmazon
@@ -55,6 +56,7 @@ const fragment = graphql(`
 		number
 		pageCount
 		pencillers
+		platforms
 		publisher
 		series
 		seriesGroup
@@ -180,6 +182,10 @@ export default function MediaMetadataEditor({ mediaId, data }: Props) {
 								)
 							},
 						)
+						// The book search has no filter for these, so their badges link nowhere
+						.with(P.union('developers', 'platforms'), (field) => (
+							<BadgeListCell binding={field} values={getProperty(metadata, field) ?? []} />
+						))
 						.with('links', () => {
 							const safeUrls = (getProperty(metadata, 'links') ?? []).map((url) => {
 								try {

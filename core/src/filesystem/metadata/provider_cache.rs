@@ -37,13 +37,16 @@ impl ProviderClientCache {
 			}
 		}
 
-		let encrypted_token = config
-			.encrypted_api_token
-			.as_ref()
-			.ok_or(ProviderCacheError::MissingApiToken)?;
-
-		let decrypted_token = decrypt_string(encrypted_token, &self.encryption_key)
-			.map_err(|e| ProviderCacheError::DecryptionFailed(e.to_string()))?;
+		let decrypted_token = match config.encrypted_api_token.as_ref() {
+			Some(encrypted_token) => {
+				decrypt_string(encrypted_token, &self.encryption_key)
+					.map_err(|e| ProviderCacheError::DecryptionFailed(e.to_string()))?
+			},
+			None if config.provider_type.requires_api_token() => {
+				return Err(ProviderCacheError::MissingApiToken)
+			},
+			None => String::new(),
+		};
 
 		let provider_type_str = config.provider_type.to_string();
 		let client = create_provider(&provider_type_str, decrypted_token)

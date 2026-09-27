@@ -105,3 +105,24 @@ a click captures the mouse. Desktop worked only because the first click did that
 files override js-dos options. Then verify in the actual game the user plays, using the
 headless harness (`drive-dos-from-headless-chrome` memory). Also try a real mouse in the same
 session: if the mouse fails too, the bug is below the touch layer.
+
+## Title matching: test the near-misses, not just the hits
+
+"Duke Nukem 3D" matched _Duke Nukem_ (1991) because `titles_similar` accepted any title
+containing the other ("dukenukem" is inside "dukenukem3d"). Every test covered sequels spelled
+with a separate number ("Turrican 2", "Doom II"); none had a number fused into a word (`3D`,
+`C64`), and none had an article that merely _ends_ with the query ("Conan the Barbarian").
+
+**The rule:** when adding a fuzzy matching shortcut, write the negative cases first, drawn
+from real sibling titles in the same series (Wolfenstein / Wolfenstein 3D, Duke Nukem /
+Duke Nukem 3D / Duke Nukem Forever, Barbarian / Barbarian II). Before calling it done, run
+the live example on the user's actual library folder names, including ALL-CAPS disk names.
+
+## Scripted multi-line edits: assert every replacement
+
+A Python `s.replace(old, new)` whose `old` no longer matches (rustfmt had re-wrapped it)
+changes nothing and reports nothing; a batch of test additions was silently lost that way.
+
+**The rule:** every scripted replacement asserts `s.count(old) == 1` before replacing, and a
+batch edit is written as a script file rather than a heredoc (heredocs here have also been
+mangled by the shell).

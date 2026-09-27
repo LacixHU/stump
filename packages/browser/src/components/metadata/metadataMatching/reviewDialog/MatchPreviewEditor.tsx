@@ -31,10 +31,12 @@ export function MatchPreviewEditor() {
 	const fieldComparisons: FieldComparison[] = useMemo(() => {
 		if (!candidate) return []
 		const meta = candidate.metadata as Record<string, unknown>
+		// A row neither side has a value for is noise: a game match offers no ISBN or
+		// colorists, a book match no platforms
 		if (isMedia && isMediaCandidate(candidate.metadata)) {
-			return getMediaFieldComparisons(currentMetadata, meta)
+			return getMediaFieldComparisons(currentMetadata, meta).filter(hasAnyValue)
 		} else if (!isMedia && !isMediaCandidate(candidate.metadata)) {
-			return getSeriesFieldComparisons(currentMetadata, meta)
+			return getSeriesFieldComparisons(currentMetadata, meta).filter(hasAnyValue)
 		}
 		return []
 	}, [candidate, currentMetadata, isMedia])
@@ -105,3 +107,9 @@ export function MatchPreviewEditor() {
 
 const LOCALE_KEY = 'metadataMatching.reviewDialog.previewEditor'
 const getKey = (key: string) => `${LOCALE_KEY}.${key}`
+
+const isEmptyValue = (value: unknown) =>
+	value == null || value === '' || (Array.isArray(value) && value.length === 0)
+
+const hasAnyValue = ({ currentValue, candidateValue }: FieldComparison) =>
+	!isEmptyValue(currentValue) || !isEmptyValue(candidateValue)

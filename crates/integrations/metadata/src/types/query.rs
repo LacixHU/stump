@@ -14,6 +14,9 @@ pub struct SearchQuery {
 	// spread across multiple (currently unimplemented) providers, it just felt easier to use a map here.
 	// it could be good for consistency and less error-prone usage to make it an actual struct at some point
 	pub provider_hints: HashMap<String, String>,
+	/// A person is going to choose among the results rather than have the best one applied,
+	/// so a provider should offer several, loosely related ones included, best first
+	pub interactive: bool,
 }
 
 impl Default for SearchQuery {
@@ -26,6 +29,7 @@ impl Default for SearchQuery {
 			limit: Some(10),
 			number: None,
 			provider_hints: HashMap::new(),
+			interactive: false,
 		}
 	}
 }

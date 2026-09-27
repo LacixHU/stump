@@ -105,6 +105,8 @@ pub struct MediaMetadataInput {
 	pub identifier_mobi_asin: Option<String>,
 	pub identifier_uuid: Option<String>,
 	pub language: Option<String>,
+	pub developers: Option<Vec<String>>,
+	pub platforms: Option<Vec<String>>,
 }
 
 impl IntoActiveModel<media_metadata::ActiveModel> for MediaMetadataInput {
@@ -145,6 +147,8 @@ impl IntoActiveModel<media_metadata::ActiveModel> for MediaMetadataInput {
 			identifier_mobi_asin: Set(self.identifier_mobi_asin),
 			identifier_uuid: Set(self.identifier_uuid),
 			language: Set(self.language),
+			developers: Set(into_array_string(self.developers)),
+			platforms: Set(into_array_string(self.platforms)),
 			..Default::default()
 		}
 	}

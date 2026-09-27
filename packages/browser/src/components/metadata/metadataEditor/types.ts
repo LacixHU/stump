@@ -15,12 +15,14 @@ export type MediaMetadataArrayField = Extract<
 	| 'characters'
 	| 'colorists'
 	| 'coverArtists'
+	| 'developers'
 	| 'editors'
 	| 'genres'
 	| 'inkers'
 	| 'letterers'
 	| 'links'
 	| 'pencillers'
+	| 'platforms'
 	| 'teams'
 	| 'writers'
 >
@@ -42,6 +44,8 @@ export const MediaMetadataKeys: MediaMetadataField[] = [
 	'storyArc',
 	'storyArcNumber',
 	'publisher',
+	'developers',
+	'platforms',
 	'ageRating',
 	'editors',
 	'writers',

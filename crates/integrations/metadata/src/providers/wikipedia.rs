@@ -1,12 +1,20 @@
-//! Wikipedia / Wikimedia cover lookup for video games.
+//! Wikipedia / Wikimedia lookup for video games: box art, and the game's details.
 //!
 //! Uses the MediaWiki API (not HTML scrape) against
 //! [Category:Video game covers](https://en.wikipedia.org/wiki/Category:Video_game_covers)
 //! and platform subcategories (e.g. Commodore 64, ZX Spectrum, Amiga).
+//!
+//! Once a game's own article is matched, its summary supplies the description and its
+//! Wikidata item the developer, publisher, platforms, release date and genres (see
+//! [`super::wikidata`]).
 
 use async_trait::async_trait;
 use serde::Deserialize;
 
+use super::{
+	wikidata::{self, GameFacts},
+	wikimedia,
+};
 use crate::{
 	error::{MetadataProviderError, MetadataResult},
 	provider::{MetadataProvider, ProviderCredentialVerification},
@@ -17,21 +25,13 @@ use crate::{
 };
 
 const API_URL: &str = "https://en.wikipedia.org/w/api.php";
-const USER_AGENT: &str =
-	"Stump/0.1 (https://github.com/stumpapp/stump; retro-cover-lookup)";
-
-pub struct WikipediaCoverClient {
-	http: reqwest::Client,
-}
+/// Every request goes through [`wikimedia::get`], which paces them for the whole server,
+/// so a client holds no state of its own.
+pub struct WikipediaCoverClient;
 
 impl WikipediaCoverClient {
 	pub fn new() -> Self {
-		Self {
-			http: reqwest::Client::builder()
-				.user_agent(USER_AGENT)
-				.build()
-				.unwrap_or_default(),
-		}
+		Self
 	}
 
 	/// Find a cover image URL for a game title (filename stem is fine).
@@ -59,8 +59,8 @@ impl WikipediaCoverClient {
 		let resolved = resolve_cover_platform(platform);
 		let category = resolved.map_or(GENERIC_COVER_CATEGORY, |p| p.category);
 
-		if let Some(url) = self.lookup_article_cover(&cleaned, resolved).await? {
-			return Ok(Some(url));
+		if let Some(article) = self.find_game_article(&cleaned, resolved, true).await? {
+			return Ok(cover_url_from_summary(&article.summary));
 		}
 
 		let mut file_title = self.search_cover_file(&cleaned, Some(category)).await?;
@@ -76,6 +76,112 @@ impl WikipediaCoverClient {
 		self.fetch_thumb_url(&file_title).await
 	}
 
+	/// Look up a game's article and turn it into metadata: its name, description and
+	/// box art from the article, and the rest from the article's Wikidata item.
+	///
+	/// Only an article match counts. A file in a cover category says nothing about the game
+	/// beyond its box art, which the thumbnail job already takes care of.
+	pub async fn lookup_game(
+		&self,
+		title: &str,
+		platform: Option<&str>,
+	) -> MetadataResult<Option<(ExternalMediaMetadata, f32)>> {
+		let cleaned = sanitize_game_title(title);
+		if cleaned.len() < 2 {
+			return Ok(None);
+		}
+
+		let resolved = resolve_cover_platform(platform);
+		let Some(article) = self.find_game_article(&cleaned, resolved, false).await?
+		else {
+			return Ok(None);
+		};
+
+		Ok(Some(self.article_candidate(article, resolved).await?))
+	}
+
+	/// Every game article the searches for `title` turn up, up to `max`, best first -- for a
+	/// person to choose from. Articles whose titles are nothing like `title` are offered
+	/// too, at a low confidence: whoever typed "Duke Nukem" may well be after Duke Nukem 3D.
+	pub async fn lookup_games(
+		&self,
+		title: &str,
+		platform: Option<&str>,
+		max: usize,
+	) -> MetadataResult<Vec<(ExternalMediaMetadata, f32)>> {
+		let cleaned = sanitize_game_title(title);
+		if cleaned.len() < 2 {
+			return Ok(vec![]);
+		}
+
+		let resolved = resolve_cover_platform(platform);
+		let mut candidates = Vec::new();
+		for article in self.find_game_articles(&cleaned, resolved, max).await? {
+			candidates.push(self.article_candidate(article, resolved).await?);
+		}
+		// Stable, so equally good matches keep Wikipedia's search order
+		candidates.sort_by(|a, b| b.1.total_cmp(&a.1));
+		Ok(candidates)
+	}
+
+	/// An accepted article's metadata, and how sure the match is.
+	///
+	/// The first paragraph of an arcade game's article seldom names the home computers it
+	/// was ported to (Bomb Jack's says only "arcades"), but its Wikidata item lists them.
+	/// That settles a title match; it cannot settle a dropped-prefix one, since Montezuma's
+	/// Revenge came out on the C64 too.
+	async fn article_candidate(
+		&self,
+		article: GameArticle,
+		platform: Option<CoverPlatform>,
+	) -> MetadataResult<(ExternalMediaMetadata, f32)> {
+		let GameArticle {
+			summary,
+			confidence,
+			title_matched,
+			..
+		} = article;
+		let (metadata, on_platform) = self.game_metadata(summary, platform).await?;
+		let confidence = if title_matched && on_platform {
+			TITLE_MATCH_CONFIDENCE
+		} else {
+			confidence
+		};
+		Ok((metadata, confidence))
+	}
+
+	/// Build the metadata for an article already known to be about a game. A Wikidata
+	/// failure costs only the structured fields: the description and cover still come
+	/// from the article itself.
+	///
+	/// Being rate limited is the exception. The half-filled match it would leave behind
+	/// is applied like any other and never looked at again, whereas an error marks the
+	/// fetch as rate limited, which is what gets it retried.
+	async fn game_metadata(
+		&self,
+		summary: PageSummary,
+		platform: Option<CoverPlatform>,
+	) -> MetadataResult<(ExternalMediaMetadata, bool)> {
+		let platform_items = platform.map_or(&[][..], |p| p.wikidata_items);
+		let facts = match summary.wikibase_item.as_deref() {
+			Some(item) => match wikidata::fetch_game_facts(item, platform_items).await {
+				Ok(facts) => facts,
+				Err(e) if e.is_rate_limited() => return Err(e),
+				Err(e) => {
+					tracing::warn!(
+						item,
+						error = %e,
+						"Wikidata lookup failed; keeping the article details only"
+					);
+					GameFacts::default()
+				},
+			},
+			None => GameFacts::default(),
+		};
+		let on_platform = facts.on_platform;
+		Ok((metadata_from_article(summary, facts), on_platform))
+	}
+
 	/// Infobox / lead images live on the article, not in Category:Video game covers.
 	///
 	/// Three searches are tried in order of how well they pin down *this* game: the bare
@@ -84,13 +190,31 @@ impl WikipediaCoverClient {
 	/// with the wrong subject (Piracy, Pittsburgh Pirates) without ever coming back empty,
 	/// so a fallback that fires only on zero hits never fires when it is needed most.
 	/// Adding the platform is what lifts "Sid Meier's Pirates!" to the top of the list.
-	async fn lookup_article_cover(
+	///
+	/// With `require_image`, an article with no lead image is passed over for the next
+	/// candidate, which is what a cover lookup wants and a details lookup does not.
+	async fn find_game_article(
 		&self,
 		title: &str,
 		platform: Option<CoverPlatform>,
-	) -> MetadataResult<Option<String>> {
-		if let Some(url) = self.cover_from_article_title(title, platform).await? {
-			return Ok(Some(url));
+		require_image: bool,
+	) -> MetadataResult<Option<GameArticle>> {
+		// A matching title that never mentions the machine is kept only as a fallback
+		// while the search goes on for one that does. "Barbarian" is both a 2002 PS2 game
+		// and, as "Barbarian: The Ultimate Warrior", the 1987 C64 one; only the second
+		// article says Commodore 64.
+		let mut fallback: Option<GameArticle> = None;
+		let is_settled =
+			|article: &GameArticle| platform.is_none() || article.names_platform;
+
+		if let Some(article) = self
+			.accept_article(title, title, platform, require_image, false)
+			.await?
+		{
+			if is_settled(&article) {
+				return Ok(Some(article));
+			}
+			fallback = Some(article);
 		}
 
 		let mut queries = vec![title.to_string()];
@@ -102,56 +226,148 @@ impl WikipediaCoverClient {
 		// Each accepted candidate costs a summary request, and the same article turns up
 		// in more than one search, so titles already tried are not tried again and the
 		// whole lookup is capped -- this runs once per book in a library-wide job.
-		let mut seen = Vec::new();
+		let mut seen = vec![title.to_string()];
 		for query in queries {
 			for hit in self.search_articles(&query).await?.into_iter().take(5) {
-				if seen.len() >= MAX_ARTICLE_SUMMARY_FETCHES {
-					return Ok(None);
+				if seen.len() > MAX_ARTICLE_SUMMARY_FETCHES {
+					return Ok(fallback);
 				}
 				if !could_be_same_game(title, &hit.title) {
 					continue;
 				}
+				// Exact, not case-insensitive: the summary endpoint is case-sensitive, so
+				// `DUKE NUKEM 3D` having no page says nothing about `Duke Nukem 3D`
 				if seen.iter().any(|t: &String| t == &hit.title) {
 					continue;
 				}
 				seen.push(hit.title.clone());
 
-				if let Some(url) =
-					self.cover_from_article_title(&hit.title, platform).await?
+				if let Some(article) = self
+					.accept_article(title, &hit.title, platform, require_image, false)
+					.await?
 				{
-					return Ok(Some(url));
+					if is_settled(&article) {
+						return Ok(Some(article));
+					}
+					fallback.get_or_insert(article);
 				}
 			}
 		}
 
-		Ok(None)
+		Ok(fallback)
 	}
 
-	async fn cover_from_article_title(
+	/// Every game article that `title` itself, or a search for it, turns up, up to `max`,
+	/// in the order found. Unlike [`Self::find_game_article`] no hit is filtered by title
+	/// before its summary is fetched, so the fetches are capped instead.
+	async fn find_game_articles(
 		&self,
 		title: &str,
 		platform: Option<CoverPlatform>,
-	) -> MetadataResult<Option<String>> {
-		let Some(summary) = self.fetch_page_summary(title).await? else {
+		max: usize,
+	) -> MetadataResult<Vec<GameArticle>> {
+		let mut queries = vec![title.to_string()];
+		if let Some(p) = platform {
+			queries.push(format!("{title} {}", p.search_term));
+		}
+		queries.push(format!("{title} video game"));
+		let mut queries = queries.into_iter();
+
+		let mut found: Vec<GameArticle> = Vec::new();
+		let mut tried: Vec<String> = Vec::new();
+		// The title as an article name comes first, then each search's hits in turn
+		let mut names = vec![title.to_string()];
+
+		while found.len() < max && tried.len() < MAX_INTERACTIVE_SUMMARY_FETCHES {
+			let Some(name) = names.pop() else {
+				let Some(query) = queries.next() else {
+					break;
+				};
+				let hits = self.search_articles(&query).await?;
+				// Taken from the back, so reversed to keep Wikipedia's ranking
+				names.extend(hits.into_iter().take(5).map(|h| h.title).rev());
+				continue;
+			};
+			// Exact, for the same reason as in `find_game_article`
+			if tried.iter().any(|t| t == &name) {
+				continue;
+			}
+			tried.push(name.clone());
+
+			let Some(article) = self
+				.accept_article(title, &name, platform, false, true)
+				.await?
+			else {
+				continue;
+			};
+			// A redirect and its target are the same article
+			let canonical = article.summary.title.clone();
+			if found.iter().any(|f| f.summary.title == canonical) {
+				continue;
+			}
+			if let Some(canonical) = canonical {
+				tried.push(canonical);
+			}
+			found.push(article);
+		}
+
+		Ok(found)
+	}
+
+	/// Fetch `article` and decide whether it is the game called `title`.
+	///
+	/// With `loose`, any game article is accepted, at [`LOOSE_MATCH_CONFIDENCE`] when its
+	/// title does not match.
+	async fn accept_article(
+		&self,
+		title: &str,
+		article: &str,
+		platform: Option<CoverPlatform>,
+		require_image: bool,
+		loose: bool,
+	) -> MetadataResult<Option<GameArticle>> {
+		let Some(summary) = self.fetch_page_summary(article).await? else {
 			return Ok(None);
 		};
 		if !is_video_game_page(&summary, platform) {
 			return Ok(None);
 		}
-		let article = summary.title.as_deref().unwrap_or(title);
+		let article = summary.title.as_deref().unwrap_or(article);
 
 		// A title that matches outright stands on its own. A title the article merely ends
 		// with -- the disk is "Pirates", the game is "Sid Meier's Pirates!" -- is only
 		// trusted when the page also names the machine we are looking for. That second
 		// signal is what separates the 1987 Commodore 64 original, whose article says so,
 		// from the 2004 remake of the same name, whose article does not.
-		let accepted = titles_similar(title, article)
-			|| (article_ends_with_title(article, title)
-				&& summary_mentions_platform(&summary, platform));
-		if !accepted {
+		let names_platform = summary_mentions_platform(&summary, platform);
+		let title_matched = titles_similar(title, article);
+		let confidence = if title_matched {
+			if platform.is_none() || names_platform {
+				TITLE_MATCH_CONFIDENCE
+			} else {
+				UNCONFIRMED_MATCH_CONFIDENCE
+			}
+		} else if article_ends_with_title(article, title)
+			&& names_platform
+			// "Conan the Barbarian" ends with "Barbarian" and names the C64 too; being
+			// a game by its own description is what the character's page cannot claim
+			&& description_names_a_game(&summary)
+		{
+			UNCONFIRMED_MATCH_CONFIDENCE
+		} else if loose && description_names_a_game(&summary) {
+			LOOSE_MATCH_CONFIDENCE
+		} else {
+			return Ok(None);
+		};
+		if require_image && cover_url_from_summary(&summary).is_none() {
 			return Ok(None);
 		}
-		Ok(cover_url_from_summary(&summary))
+		Ok(Some(GameArticle {
+			summary,
+			confidence,
+			names_platform,
+			title_matched,
+		}))
 	}
 
 	async fn fetch_page_summary(
@@ -159,23 +375,13 @@ impl WikipediaCoverClient {
 		title: &str,
 	) -> MetadataResult<Option<PageSummary>> {
 		let url = summary_url(title)?;
-		let response = self
-			.http
-			.get(url)
-			.header(reqwest::header::ACCEPT, "application/json")
-			.send()
-			.await?;
+		// A 429 never reaches here: `wikimedia::get` turns it into an error
+		let response = wikimedia::get(url).await?;
 
 		let status = response.status();
 		// Wikipedia rejects titles it considers malformed with 400/403 rather than 404
 		// (e.g. a stem that still carries a `[Sir 13]` release tag). None of those mean
-		// "retry" -- they mean this candidate simply has no page. 429 is the exception:
-		// it is a client error we *do* want to surface as a failure.
-		if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-			return Err(MetadataProviderError::Other(
-				"Wikipedia summary HTTP 429 (rate limited)".to_string(),
-			));
-		}
+		// "retry" -- they mean this candidate simply has no page.
 		if status.is_client_error() {
 			return Ok(None);
 		}
@@ -197,7 +403,7 @@ impl WikipediaCoverClient {
 			("format", "json"),
 			("srsearch", title),
 		])?;
-		let response = self.http.get(url).send().await?;
+		let response = wikimedia::get(url).await?;
 
 		if !response.status().is_success() {
 			return Err(MetadataProviderError::Other(format!(
@@ -228,7 +434,7 @@ impl WikipediaCoverClient {
 			("format", "json"),
 			("srsearch", &srsearch),
 		])?;
-		let response = self.http.get(url).send().await?;
+		let response = wikimedia::get(url).await?;
 
 		if !response.status().is_success() {
 			return Err(MetadataProviderError::Other(format!(
@@ -251,7 +457,7 @@ impl WikipediaCoverClient {
 			("format", "json"),
 			("titles", file_title),
 		])?;
-		let response = self.http.get(url).send().await?;
+		let response = wikimedia::get(url).await?;
 
 		if !response.status().is_success() {
 			return Err(MetadataProviderError::Other(format!(
@@ -334,9 +540,8 @@ fn is_video_game_page(summary: &PageSummary, platform: Option<CoverPlatform>) ->
 	{
 		return false;
 	}
-
-	if summary_mentions_platform(summary, platform) {
-		return true;
+	if describes_more_than_one_game(summary) {
+		return false;
 	}
 
 	let haystack = format!(
@@ -346,9 +551,48 @@ fn is_video_game_page(summary: &PageSummary, platform: Option<CoverPlatform>) ->
 	)
 	.to_lowercase();
 
+	// Naming the machine is only half the proof: Aladdin4D is 3D software "running on
+	// AmigaOS", not a game. The page has to call itself a game somewhere as well.
+	if summary_mentions_platform(summary, platform) && haystack.contains("game") {
+		return true;
+	}
+
 	GAME_GENRE_PHRASES
 		.iter()
 		.any(|phrase| haystack.contains(phrase))
+}
+
+/// Whether the article is about a series, a franchise or a character rather than one game.
+/// Their prose is full of "video game" and names every machine, but their Wikipedia short
+/// description gives them away: "Video game franchise" for Duke Nukem, "Video game
+/// series" for Wolfenstein and Gobliiins, "Video game character" -- where a game's reads
+/// "1996 first-person shooter video game".
+fn describes_more_than_one_game(summary: &PageSummary) -> bool {
+	let description = summary
+		.description
+		.as_deref()
+		.unwrap_or("")
+		.trim()
+		.to_lowercase();
+	let is_list = summary
+		.title
+		.as_deref()
+		.is_some_and(|t| t.to_lowercase().starts_with("list of"));
+	is_list
+		|| ["series", "franchise", "character"]
+			.iter()
+			.any(|word| description.ends_with(word))
+}
+
+/// Whether the article's short description says it is one game: "1986 video game",
+/// "Platform game". A title match can stand without it, but a loosely related article in an
+/// interactive search cannot -- the search for "Gobliins 2", which has no article of its
+/// own, otherwise offers its composer and ScummVM, whose prose is all about games.
+fn description_names_a_game(summary: &PageSummary) -> bool {
+	summary
+		.description
+		.as_deref()
+		.is_some_and(|d| d.trim().to_lowercase().ends_with("game"))
 }
 
 fn cover_url_from_summary(summary: &PageSummary) -> Option<String> {
@@ -358,6 +602,65 @@ fn cover_url_from_summary(summary: &PageSummary) -> Option<String> {
 		.or(summary.thumbnail.as_ref())
 		.and_then(|img| img.source.clone())
 		.filter(|u| !u.is_empty())
+}
+
+/// How sure a match is when the article's title is the game's title and, when the machine
+/// is known, the article names it. Enough to apply without review.
+const TITLE_MATCH_CONFIDENCE: f32 = 0.9;
+/// How sure a match is when one of those signals is missing: the title matches but the
+/// article never mentions the machine, or the article only ends with the title (a dropped
+/// publisher prefix, `Sid Meier's Pirates!` for `Pirates`) and does. Usually right, but
+/// "Revenge" ends "Montezuma's Revenge" as well, so it waits for a person to accept it.
+const UNCONFIRMED_MATCH_CONFIDENCE: f32 = 0.7;
+
+/// How sure a match is when a person searched and the article is a game whose title is
+/// nothing like the search: offered, never applied on its own.
+const LOOSE_MATCH_CONFIDENCE: f32 = 0.4;
+
+/// The most candidates an interactive search offers.
+const MAX_INTERACTIVE_CANDIDATES: usize = 5;
+
+/// The most article summaries an interactive search requests. A person is waiting on one
+/// game rather than a job working through a library, so this is looser than
+/// [`MAX_ARTICLE_SUMMARY_FETCHES`].
+const MAX_INTERACTIVE_SUMMARY_FETCHES: usize = 12;
+
+/// An article accepted as being about the game asked for.
+struct GameArticle {
+	summary: PageSummary,
+	confidence: f32,
+	/// Whether the article mentions the machine the game file is for
+	names_platform: bool,
+	/// Whether the article's title is the game's, rather than merely ending with it
+	title_matched: bool,
+}
+
+fn metadata_from_article(
+	summary: PageSummary,
+	facts: GameFacts,
+) -> ExternalMediaMetadata {
+	let article = summary.title.clone().unwrap_or_default();
+	let non_empty = |v: Vec<String>| (!v.is_empty()).then_some(v);
+
+	ExternalMediaMetadata {
+		provider: "wikipedia".to_string(),
+		title: Some(strip_title_qualifier(&article).to_string()),
+		summary: summary.extract.clone().filter(|e| !e.trim().is_empty()),
+		year: facts.released.map(|d| d.year),
+		month: facts.released.and_then(|d| d.month),
+		day: facts.released.and_then(|d| d.day),
+		genres: non_empty(facts.genres),
+		publisher: non_empty(facts.publishers).map(|p| p.join(", ")),
+		developers: non_empty(facts.developers),
+		platforms: non_empty(facts.platforms),
+		cover_url: cover_url_from_summary(&summary),
+		provider_url: summary
+			.content_urls
+			.and_then(|u| u.desktop)
+			.and_then(|d| d.page),
+		external_id: article,
+		..Default::default()
+	}
 }
 
 fn normalize_title(s: &str) -> String {
@@ -379,33 +682,64 @@ fn strip_title_qualifier(article: &str) -> &str {
 	}
 }
 
-/// Whether `article` names a different entry in a series than the one asked for, e.g.
-/// "Shadow of the Beast II" for a disk called "Shadow of the Beast".
+/// Whether `article` names a different game in a series than the one asked for, e.g.
+/// "Shadow of the Beast II" for a disk called "Shadow of the Beast", or "Duke Nukem" for
+/// "Duke Nukem 3D".
 ///
-/// This has to be checked before anything else, because the sequel's title *contains* the
-/// original's and so sails through both the substring shortcut and the edit-distance score
+/// This has to be checked before anything else, because the one title *contains* the
+/// other's and so sails through both the substring shortcut and the edit-distance score
 /// -- and its box art is a different game's box art.
 ///
-/// Only small numbers and unambiguous roman numerals count. A four-digit year is a
-/// disambiguating date, not an entry number, and a bare `v` or `x` is as likely to be a
-/// letter as a numeral.
+/// It works both ways: a disk called "Barbarian 2" is not the article "Barbarian" either,
+/// however close the two names are.
 fn introduces_sequel(query: &str, article: &str) -> bool {
-	let in_query = sequel_markers(query);
-	sequel_markers(strip_title_qualifier(article))
-		.iter()
-		.any(|marker| !in_query.contains(marker))
+	title_numbers(query) != title_numbers(strip_title_qualifier(article))
 }
 
-fn sequel_markers(s: &str) -> Vec<String> {
-	title_words(s)
-		.into_iter()
-		.filter(|word| {
-			matches!(
-				word.as_str(),
-				"ii" | "iii" | "iv" | "vi" | "vii" | "viii" | "ix"
-			) || word.parse::<u32>().is_ok_and(|n| (2..=9).contains(&n))
+/// The numbers in a title that tell one game from another: entry numbers (`2` and `II`
+/// compare equal), and numbers inside words, split at the letter/digit boundary (the `3`
+/// of `3D`, the `64` of `C64`).
+///
+/// A `1` does not count -- a first game is seldom called "1", and a stem like `barbarian1`
+/// is still Barbarian. Neither does a year, which disambiguates rather than numbers, and a
+/// bare `v` or `x` is as likely to be a letter as a numeral.
+fn title_numbers(s: &str) -> Vec<u32> {
+	let mut numbers: Vec<u32> = title_words(s)
+		.iter()
+		.flat_map(|word| split_letters_and_digits(word))
+		.filter_map(|part| match part.as_str() {
+			"ii" => Some(2),
+			"iii" => Some(3),
+			"iv" => Some(4),
+			"vi" => Some(6),
+			"vii" => Some(7),
+			"viii" => Some(8),
+			"ix" => Some(9),
+			_ => part
+				.parse::<u32>()
+				.ok()
+				.filter(|n| *n != 1 && !(1900..=2099).contains(n)),
 		})
-		.collect()
+		.collect();
+	numbers.sort_unstable();
+	numbers.dedup();
+	numbers
+}
+
+/// `3d` -> `3`, `d`; `c64` -> `c`, `64`; a word without digits comes back whole.
+fn split_letters_and_digits(word: &str) -> Vec<String> {
+	let mut parts: Vec<String> = Vec::new();
+	for c in word.chars() {
+		let same_kind = parts
+			.last()
+			.and_then(|last| last.chars().last())
+			.is_some_and(|l| l.is_ascii_digit() == c.is_ascii_digit());
+		match parts.last_mut() {
+			Some(last) if same_kind => last.push(c),
+			_ => parts.push(c.to_string()),
+		}
+	}
+	parts
 }
 
 fn titles_similar(query: &str, article: &str) -> bool {
@@ -425,7 +759,10 @@ fn titles_similar_exact(query: &str, article: &str) -> bool {
 	if a == q {
 		return true;
 	}
-	if q.len() >= 8 && (a.contains(&q) || q.contains(&a)) {
+	// One title running on past the other (`Zak McKracken` and the full title) is the same
+	// game; one that merely *ends* with it is the dropped-prefix case, which needs the
+	// machine confirmed first -- "Conan the Barbarian" is not "Barbarian"
+	if q.len() >= 8 && (a.starts_with(&q) || q.starts_with(&a)) {
 		return true;
 	}
 	strsim::normalized_levenshtein(&q, &a) >= 0.72
@@ -486,15 +823,11 @@ pub async fn lookup_wikipedia_game_cover(
 		.await
 }
 
-/// Download image bytes with the Wikipedia-compliant User-Agent.
+/// Download a cover image, at the same shared pace as every other Wikimedia request.
 pub async fn download_cover_bytes(url: &str) -> MetadataResult<Vec<u8>> {
-	let response = reqwest::Client::builder()
-		.user_agent(USER_AGENT)
-		.build()
-		.unwrap_or_default()
-		.get(url)
-		.send()
-		.await?;
+	let url = reqwest::Url::parse(url)
+		.map_err(|e| MetadataProviderError::Other(format!("Invalid cover URL: {e}")))?;
+	let response = wikimedia::get(url).await?;
 
 	if !response.status().is_success() {
 		return Err(MetadataProviderError::Other(format!(
@@ -573,6 +906,9 @@ pub struct CoverPlatform {
 	pub category: &'static str,
 	pub search_term: &'static str,
 	pub aliases: &'static [&'static str],
+	/// The Wikidata items for the machine, as a statement's "platform" qualifier names it.
+	/// A developer or publisher qualified with some other machine made a port, not this game.
+	pub wikidata_items: &'static [&'static str],
 }
 
 /// Map a platform hint (`c64`, `spectrum`, `amiga`, `dos`, or a looser spelling) onto the
@@ -586,24 +922,28 @@ pub fn resolve_cover_platform(platform: Option<&str>) -> Option<CoverPlatform> {
 			category: "Commodore 64 game covers",
 			search_term: "Commodore 64",
 			aliases: &["commodore 64", "c64"],
+			wikidata_items: &["Q99775"],
 		}
 	} else if p == "spectrum" || p.contains("zx") || p.contains("sinclair") {
 		CoverPlatform {
 			category: "ZX Spectrum game covers",
 			search_term: "ZX Spectrum",
 			aliases: &["zx spectrum", "sinclair spectrum"],
+			wikidata_items: &["Q23882"],
 		}
 	} else if p.contains("amiga") {
 		CoverPlatform {
 			category: "Amiga game covers",
 			search_term: "Amiga",
 			aliases: &["amiga"],
+			wikidata_items: &["Q100047"],
 		}
 	} else if p == "dos" || p == "pc" || p.contains("msdos") || p.contains("ms-dos") {
 		CoverPlatform {
 			category: "MS-DOS game covers",
 			search_term: "MS-DOS",
 			aliases: &["ms-dos", "msdos"],
+			wikidata_items: &["Q47604", "Q170434"],
 		}
 	} else {
 		return None;
@@ -690,7 +1030,7 @@ impl MetadataProvider for WikipediaCoverClient {
 	}
 
 	fn name(&self) -> &'static str {
-		"Wikipedia (video game covers)"
+		"Wikipedia (video games)"
 	}
 
 	fn supported_media_types(&self) -> Vec<MediaType> {
@@ -703,33 +1043,29 @@ impl MetadataProvider for WikipediaCoverClient {
 
 	async fn search_media(&self, query: &SearchQuery) -> MetadataResult<SearchOutcome> {
 		let platform = query.provider_hints.get("platform").map(String::as_str);
-		let url = self.lookup_cover_url(&query.title, platform).await?;
-		let Some(cover_url) = url else {
-			return Ok(SearchOutcome {
-				candidates: vec![],
-				requested: 1,
-			});
+		let found = if query.interactive {
+			self.lookup_games(&query.title, platform, MAX_INTERACTIVE_CANDIDATES)
+				.await?
+		} else {
+			self.lookup_game(&query.title, platform)
+				.await?
+				.into_iter()
+				.collect()
 		};
+		let candidates = found
+			.into_iter()
+			.map(|(metadata, confidence)| MatchCandidate {
+				provider: self.id().to_string(),
+				external_id: metadata.external_id.clone(),
+				metadata: ExternalMetadata::Media(metadata),
+				confidence,
+				confidence_factors: vec![],
+			})
+			.collect();
 
 		Ok(SearchOutcome {
 			requested: 1,
-			candidates: vec![MatchCandidate {
-				provider: self.id().to_string(),
-				external_id: cover_url.clone(),
-				metadata: ExternalMetadata::Media(ExternalMediaMetadata {
-					provider: self.id().to_string(),
-					external_id: cover_url.clone(),
-					title: Some(sanitize_game_title(&query.title)),
-					cover_url: Some(cover_url),
-					provider_url: Some(
-						"https://en.wikipedia.org/wiki/Category:Video_game_covers"
-							.to_string(),
-					),
-					..Default::default()
-				}),
-				confidence: 0.7,
-				confidence_factors: vec![],
-			}],
+			candidates,
 		})
 	}
 
@@ -740,16 +1076,17 @@ impl MetadataProvider for WikipediaCoverClient {
 		Err(MetadataProviderError::NotFound(external_id.to_string()))
 	}
 
+	/// `external_id` is the article title a search matched. The machine is not known here, so
+	/// a port's developer or publisher is not filtered out as it is in a search.
 	async fn fetch_media_metadata(
 		&self,
 		external_id: &str,
 	) -> MetadataResult<ExternalMediaMetadata> {
-		Ok(ExternalMediaMetadata {
-			provider: self.id().to_string(),
-			external_id: external_id.to_string(),
-			cover_url: Some(external_id.to_string()),
-			..Default::default()
-		})
+		let summary = self
+			.fetch_page_summary(external_id)
+			.await?
+			.ok_or_else(|| MetadataProviderError::NotFound(external_id.to_string()))?;
+		Ok(self.game_metadata(summary, None).await?.0)
 	}
 
 	async fn verify_credentials(&self) -> MetadataResult<ProviderCredentialVerification> {
@@ -777,7 +1114,7 @@ struct SearchHit {
 	title: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 struct PageSummary {
 	#[serde(rename = "type")]
 	page_type: Option<String>,
@@ -786,6 +1123,19 @@ struct PageSummary {
 	extract: Option<String>,
 	thumbnail: Option<SummaryImage>,
 	originalimage: Option<SummaryImage>,
+	/// The Wikidata item the article describes, e.g. `Q1665169`
+	wikibase_item: Option<String>,
+	content_urls: Option<ContentUrls>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ContentUrls {
+	desktop: Option<ContentUrl>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ContentUrl {
+	page: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -908,6 +1258,50 @@ mod tests {
 		// A year is a date, not an entry number
 		assert!(!introduces_sequel("Pirates", "Sid Meier's Pirates! (1987)"));
 		assert!(introduces_sequel("Pirates", "Pirates 2"));
+
+		// And the other way round: the disk is the sequel, the article the original
+		assert!(!titles_similar(
+			"Barbarian 2",
+			"Barbarian (2002 video game)"
+		));
+		assert!(!titles_similar("Gobliins 2", "Gobliiins"));
+		assert!(titles_similar(
+			"Gobliins 2",
+			"Gobliins 2: The Prince Buffoon"
+		));
+
+		// A numeral and a digit are the same entry
+		assert!(!introduces_sequel(
+			"Barbarian 2",
+			"Barbarian II: The Dungeon of Drax"
+		));
+		assert!(introduces_sequel("Barbarian 2", "Barbarian III"));
+
+		// A number inside a word tells two games apart just the same
+		assert!(!titles_similar("DUKE NUKEM 3D", "Duke Nukem (video game)"));
+		assert!(!titles_similar("Wolfenstein 3D", "Wolfenstein"));
+		assert!(titles_similar("DUKE NUKEM 3D", "Duke Nukem 3D"));
+
+		// A first entry is seldom numbered, and a year is not an entry number
+		assert!(!introduces_sequel("barbarian1 TTF", "Barbarian"));
+		assert!(!introduces_sequel("Turrican 1990", "Turrican"));
+	}
+
+	#[test]
+	fn a_loose_match_has_to_describe_itself_as_a_game() {
+		let described = |d: &str| PageSummary {
+			description: Some(d.into()),
+			..Default::default()
+		};
+		assert!(description_names_a_game(&described(
+			"1996 first-person shooter video game"
+		)));
+		assert!(description_names_a_game(&described("Platform game")));
+		assert!(!description_names_a_game(&described("American composer")));
+		assert!(!description_names_a_game(&described(
+			"Game engine recreation software"
+		)));
+		assert!(!description_names_a_game(&PageSummary::default()));
 	}
 
 	#[test]
@@ -977,6 +1371,7 @@ mod tests {
 			page_type: None,
 			thumbnail: None,
 			originalimage: None,
+			..Default::default()
 		};
 		let remake = PageSummary {
 			title: Some("Sid Meier's Pirates! (2004 video game)".into()),
@@ -988,6 +1383,7 @@ mod tests {
 			page_type: None,
 			thumbnail: None,
 			originalimage: None,
+			..Default::default()
 		};
 
 		assert!(summary_mentions_platform(&original, c64));
@@ -1051,6 +1447,13 @@ mod tests {
 			"Zak McKracken and the Alien Mindbenders"
 		));
 		assert!(!titles_similar("Zack", "Zack Snyder"));
+		// Running on is the same game, ending with it is not
+		assert!(titles_similar(
+			"Zak McKracken",
+			"Zak McKracken and the Alien Mindbenders"
+		));
+		assert!(!titles_similar("Barbarian", "Conan the Barbarian"));
+		assert!(titles_similar("Last Ninja", "The Last Ninja"));
 	}
 
 	#[test]
@@ -1063,6 +1466,7 @@ mod tests {
 				extract: None,
 				thumbnail: None,
 				originalimage: None,
+				..Default::default()
 			},
 			None
 		));
@@ -1074,6 +1478,7 @@ mod tests {
 				extract: Some("Wor may refer to".into()),
 				thumbnail: None,
 				originalimage: None,
+				..Default::default()
 			},
 			None
 		));
@@ -1090,6 +1495,7 @@ mod tests {
 			),
 			thumbnail: None,
 			originalimage: None,
+			..Default::default()
 		};
 		assert!(is_video_game_page(
 			&beast,
@@ -1105,10 +1511,65 @@ mod tests {
 			extract: Some("Piracy is an act of robbery committed at sea.".into()),
 			thumbnail: None,
 			originalimage: None,
+			..Default::default()
 		};
 		assert!(!is_video_game_page(
 			&piracy,
 			resolve_cover_platform(Some("c64"))
+		));
+
+		// Software for the right machine is still not a game
+		let aladdin4d = PageSummary {
+			page_type: Some("standard".into()),
+			title: Some("Aladdin4D".into()),
+			description: Some("3D computer graphics software".into()),
+			extract: Some(
+				"Aladdin4D is a computer program for modeling and rendering three-dimensional 				 graphics and animations, currently running on AmigaOS."
+					.into(),
+			),
+			..Default::default()
+		};
+		assert!(!is_video_game_page(
+			&aladdin4d,
+			resolve_cover_platform(Some("amiga"))
+		));
+
+		// A list of games is not a game either
+		let list = PageSummary {
+			page_type: Some("standard".into()),
+			title: Some("List of 3D Realms games".into()),
+			description: Some("Video games by developer/publisher".into()),
+			extract: Some("3D Realms is an American video game publisher.".into()),
+			..Default::default()
+		};
+		assert!(!is_video_game_page(&list, None));
+
+		// A franchise, series or character page talks about games all the time
+		for description in [
+			"Video game franchise",
+			"Puzzle adventure video game series",
+			"Video game character",
+		] {
+			let page = PageSummary {
+				page_type: Some("standard".into()),
+				title: Some("Duke Nukem".into()),
+				description: Some(description.into()),
+				extract: Some("Duke Nukem is a video game series for MS-DOS.".into()),
+				..Default::default()
+			};
+			assert!(
+				!is_video_game_page(&page, resolve_cover_platform(Some("dos"))),
+				"{description}"
+			);
+		}
+		assert!(is_video_game_page(
+			&PageSummary {
+				page_type: Some("standard".into()),
+				title: Some("Duke Nukem 3D".into()),
+				description: Some("1996 first-person shooter video game".into()),
+				..Default::default()
+			},
+			None
 		));
 	}
 }

@@ -1,3 +1,5 @@
+// The GraphQL schema's futures outgrow the default limit; see crates/graphql/src/lib.rs
+#![recursion_limit = "256"]
 #![warn(clippy::dbg_macro)]
 
 pub mod config;

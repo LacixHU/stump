@@ -1,3 +1,8 @@
+// Proving the async-graphql resolvers `Send` walks every future they await, down through
+// reqwest and h2 for the metadata providers, and that outgrows the default limit (core
+// raises it for the same reason)
+#![recursion_limit = "256"]
+
 pub mod data;
 pub mod error_message;
 pub mod filter;

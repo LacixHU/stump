@@ -13,7 +13,16 @@ export type MatchReviewState = {
 	fieldOverrides: Map<MetadataField, FieldOverride>
 	lockedFields: Map<MetadataField, boolean>
 
-	open: (records: MatchRecord[], startIndex?: number, strategy?: MergeStrategy) => void
+	/**
+	 * Open the review. `candidateIndex` picks which of the first record's candidates is shown
+	 * first; the candidates stay in their order, since a match is accepted by its index.
+	 */
+	open: (
+		records: MatchRecord[],
+		startIndex?: number,
+		strategy?: MergeStrategy,
+		candidateIndex?: number,
+	) => void
 	close: () => void
 	nextRecord: () => void
 	prevRecord: () => void
@@ -39,17 +48,20 @@ export const useMatchReviewStore = create<MatchReviewState>((set, get) => ({
 	fieldOverrides: new Map(),
 	lockedFields: new Map(),
 
-	open: (records, startIndex = 0, strategy = MergeStrategy.FillGaps) =>
+	open: (records, startIndex = 0, strategy = MergeStrategy.FillGaps, candidateIndex = 0) => {
+		const currentRecordIndex = Math.min(startIndex, records.length - 1)
+		const candidates = records[currentRecordIndex]?.matchCandidates.length ?? 0
 		set({
 			isOpen: true,
 			records,
-			currentRecordIndex: Math.min(startIndex, records.length - 1),
-			currentCandidateIndex: 0,
+			currentRecordIndex,
+			currentCandidateIndex: Math.max(0, Math.min(candidateIndex, candidates - 1)),
 			excludedFields: new Set(),
 			strategy,
 			fieldOverrides: new Map(),
 			lockedFields: new Map(),
-		}),
+		})
+	},
 
 	close: () =>
 		set({

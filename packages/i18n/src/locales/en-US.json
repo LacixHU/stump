@@ -915,6 +915,7 @@
 			"characters": "Characters",
 			"colorists": "Colorists",
 			"coverArtists": "Cover artists",
+			"developers": "Developers",
 			"day": "Day",
 			"editors": "Editors",
 			"format": "Format",
@@ -934,6 +935,7 @@
 			"number": "Number",
 			"pageCount": "Pages",
 			"pencillers": "Pencillers",
+			"platforms": "Platforms",
 			"publisher": "Publisher",
 			"series": "Series",
 			"seriesGroup": "Series group",
@@ -3004,6 +3006,7 @@
 		"clearProgress": "Clear progress",
 		"deleteHistory": "Delete history",
 		"manage": "Manage",
+		"fetchGameInfo": "Fetch game info",
 		"email": "Email",
 		"download": "Download",
 		"read": "Read",
@@ -3023,6 +3026,17 @@
 			"title": "Mark series completed",
 			"description": "Are you sure you want to mark every book in this series completed?"
 		}
+	},
+	"gameInfoSearch": {
+		"heading": "Fetch game info",
+		"description": "Search Wikipedia and pick the article about this game. You can review its details before anything is saved.",
+		"term": "Search for",
+		"search": "Search",
+		"searching": "Searching Wikipedia…",
+		"noResults": "No Wikipedia article found. Try the name on the box, or a shorter one.",
+		"pick": "Review this match",
+		"openArticle": "Open the article on Wikipedia",
+		"failed": "Failed to search Wikipedia"
 	},
 	"directoryPicker": {
 		"title": "Select a Directory",

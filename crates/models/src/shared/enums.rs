@@ -479,11 +479,16 @@ pub enum MetadataProvider {
 	WorldOfSpectrum,
 	/// Lemon Amiga (or similar); may be stubbed if scrape is fragile
 	LemonAmiga,
-	/// Wikipedia Category:Video game covers (MediaWiki API; no token)
+	/// Wikipedia video game articles and their Wikidata items (MediaWiki API; no token)
 	Wikipedia,
 }
 
 impl MetadataProvider {
+	/// Whether the provider's API needs a key. The retro sources are public.
+	pub fn requires_api_token(&self) -> bool {
+		matches!(self, Self::Hardcover | Self::ComicVine)
+	}
+
 	/// Returns the library types that this provider has meaningful coverage for
 	pub fn supported_library_types(&self) -> &'static [LibraryType] {
 		match self {
