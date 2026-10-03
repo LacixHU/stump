@@ -781,6 +781,8 @@ type ExternalMediaMetadata {
 	developers: [String!]
 	"The machines a game was released on"
 	platforms: [String!]
+	"Who wrote a game's music"
+	composers: [String!]
 	coverUrl: String
 	providerUrl: String
 }
@@ -1502,6 +1504,7 @@ type MediaMetadata {
 	teams: [String!]!
 	developers: [String!]!
 	platforms: [String!]!
+	composers: [String!]!
 	lockedFields: [MetadataField!]!
 }
 
@@ -1568,6 +1571,7 @@ input MediaMetadataInput {
 	language: String
 	developers: [String!]
 	platforms: [String!]
+	composers: [String!]
 }
 
 enum MediaMetadataModelOrdering {
@@ -1610,6 +1614,7 @@ enum MediaMetadataModelOrdering {
 	YEAR
 	DEVELOPERS
 	PLATFORMS
+	COMPOSERS
 	METADATA_SOURCE
 	METADATA_EXTERNAL_ID
 	LOCKED_FIELDS
@@ -1721,6 +1726,8 @@ type MetadataFetchJobOutput {
 	autoApplied: Int!
 	"Number of entities that were rate-limited"
 	rateLimited: Int!
+	"Number of entities whose applied match was read again to fill empty fields"
+	refreshed: Int!
 }
 
 type MetadataFetchRecord {
@@ -1816,6 +1823,7 @@ enum MetadataField {
 	DESCRIPTION_FORMATTED
 	DEVELOPERS
 	PLATFORMS
+	COMPOSERS
 }
 
 "A user-provided override value for a specific metadata field"

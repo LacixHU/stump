@@ -34,6 +34,7 @@ export default function BookOverviewSceneHeader({ media, book, completedAt }: Pr
 	const hasWriters = metadata?.writers && metadata.writers.length > 0
 	const developers = metadata?.developers ?? []
 	const platforms = metadata?.platforms ?? []
+	const composers = metadata?.composers ?? []
 	const hasTags = tags && tags.length > 0
 	const hasLinks = metadata?.links && metadata.links.filter((l) => !!l).length > 0
 
@@ -163,6 +164,8 @@ export default function BookOverviewSceneHeader({ media, book, completedAt }: Pr
 			{developers.length > 0 && <PlainBadgeList label="Developers" values={developers} />}
 
 			{platforms.length > 0 && <PlainBadgeList label="Platforms" values={platforms} />}
+
+			{composers.length > 0 && <PlainBadgeList label="Composers" values={composers} />}
 
 			{hasTags && (
 				<div className="gap-1 flex flex-col">

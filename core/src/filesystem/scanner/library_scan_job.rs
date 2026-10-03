@@ -87,6 +87,8 @@ pub struct LibraryScanJob {
 	pending_dir_mtimes: Arc<Mutex<Vec<(String, u64)>>>,
 	/// A map of series paths to their ids, loaded during init and used to avoid db trips
 	series_id_by_path: Arc<Mutex<HashMap<String, String>>>,
+	/// The ids of the media created during the scan, whose metadata is looked up afterwards
+	created_media_ids: Arc<Mutex<Vec<String>>>,
 }
 
 impl LibraryScanJob {
@@ -99,6 +101,7 @@ impl LibraryScanJob {
 			dir_mtimes: Arc::new(HashMap::new()),
 			pending_dir_mtimes: Arc::new(Mutex::new(vec![])),
 			series_id_by_path: Arc::new(Mutex::new(HashMap::new())),
+			created_media_ids: Arc::new(Mutex::new(vec![])),
 		}
 	}
 }
@@ -297,7 +300,6 @@ impl JobLifecycle for LibraryScanJob {
 			output: CoreJobOutput::LibraryScan(output.clone()),
 		}));
 
-		let did_create_media = output.created_media > 0;
 		let did_create = output.created_series > 0 || output.created_media > 0;
 		let did_update = output.updated_series > 0 || output.updated_media > 0;
 		let image_options = self
@@ -374,18 +376,24 @@ impl JobLifecycle for LibraryScanJob {
 			.into_iter()
 			.any(|config| library_type.has_provider_overlap(&config.provider_type));
 
-		// Note: I figure we only care about new entities
-		if has_relevant_provider && did_create_media {
+		// The media this scan added are looked up, and nothing else: an upload of one
+		// game runs a whole library scan, and must not re-search every other game. A scan
+		// a person asked for also looks up what has never been looked up (media from
+		// before a provider was enabled); media with a settled lookup are left alone
+		// either way, see `MetadataFetchJob`.
+		let created_media_ids = self
+			.created_media_ids
+			.lock()
+			.map(|mut ids| std::mem::take(&mut *ids))
+			.unwrap_or_default();
+		let fetch_params =
+			post_scan_metadata_fetch(&self.id, &self.options, created_media_ids);
+		if let Some(params) = fetch_params.filter(|_| has_relevant_provider) {
 			tracing::trace!(
 				?library_type,
 				"Metadata fetch job should be enqueued after library scan"
 			);
-			if let Err(e) = ctx
-				.enqueue(StumpJob::metadata_fetch(
-					MetadataFetchJobParams::media_in_library(self.id.clone()),
-				))
-				.await
-			{
+			if let Err(e) = ctx.enqueue(StumpJob::metadata_fetch(params)).await {
 				tracing::error!(?e, "Failed to enqueue metadata fetch follow-up");
 			}
 		}
@@ -898,6 +906,7 @@ impl JobLifecycle for LibraryScanJob {
 					));
 					let MediaOperationOutput {
 						created_media,
+						created_media_ids,
 						logs: new_logs,
 						..
 					} = safely_build_and_insert_media(
@@ -922,6 +931,9 @@ impl JobLifecycle for LibraryScanJob {
 						},
 					));
 					output.created_media += created_media;
+					if let Ok(mut ids) = self.created_media_ids.lock() {
+						ids.extend(created_media_ids);
+					}
 					logs.extend(new_logs);
 				},
 				SeriesScanTask::VisitMedia(params) => {
@@ -1072,4 +1084,74 @@ async fn handle_scan_complete(
 	}
 
 	Ok(())
+}
+
+/// The metadata lookup a library scan ends with: the media it created, or -- when a person
+/// asked for the scan -- every media item in the library that was never looked up. `None`
+/// when there is nothing to look up.
+fn post_scan_metadata_fetch(
+	library_id: &str,
+	options: &ScanOptions,
+	created_media_ids: Vec<String>,
+) -> Option<MetadataFetchJobParams> {
+	if options.fetch_unsearched_metadata {
+		Some(MetadataFetchJobParams::media_in_library(
+			library_id.to_string(),
+		))
+	} else if !created_media_ids.is_empty() {
+		Some(MetadataFetchJobParams::media(created_media_ids))
+	} else {
+		None
+	}
+}
+
+#[cfg(test)]
+mod post_scan_fetch_tests {
+	use super::*;
+	use crate::filesystem::metadata::MetadataFetchScope;
+
+	fn scope(params: Option<MetadataFetchJobParams>) -> Option<String> {
+		params.map(|p| match p.scope {
+			MetadataFetchScope::Media(ids) => format!("media {ids:?}"),
+			MetadataFetchScope::MediaInLibrary(id) => format!("library {id}"),
+			other => format!("{other:?}"),
+		})
+	}
+
+	#[test]
+	fn an_upload_looks_up_only_what_it_added() {
+		let after_upload = post_scan_metadata_fetch(
+			"lib",
+			&ScanOptions::default(),
+			vec!["new-game".to_string()],
+		);
+		assert_eq!(
+			scope(after_upload),
+			Some(r#"media ["new-game"]"#.to_string())
+		);
+	}
+
+	#[test]
+	fn a_scan_that_added_nothing_looks_up_nothing() {
+		assert_eq!(
+			scope(post_scan_metadata_fetch(
+				"lib",
+				&ScanOptions::default(),
+				vec![]
+			)),
+			None
+		);
+	}
+
+	#[test]
+	fn a_scan_someone_asked_for_covers_the_library() {
+		let requested = ScanOptions {
+			fetch_unsearched_metadata: true,
+			..Default::default()
+		};
+		assert_eq!(
+			scope(post_scan_metadata_fetch("lib", &requested, vec![])),
+			Some("library lib".to_string())
+		);
+	}
 }

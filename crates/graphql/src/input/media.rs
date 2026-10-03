@@ -107,6 +107,7 @@ pub struct MediaMetadataInput {
 	pub language: Option<String>,
 	pub developers: Option<Vec<String>>,
 	pub platforms: Option<Vec<String>>,
+	pub composers: Option<Vec<String>>,
 }
 
 impl IntoActiveModel<media_metadata::ActiveModel> for MediaMetadataInput {
@@ -149,6 +150,7 @@ impl IntoActiveModel<media_metadata::ActiveModel> for MediaMetadataInput {
 			language: Set(self.language),
 			developers: Set(into_array_string(self.developers)),
 			platforms: Set(into_array_string(self.platforms)),
+			composers: Set(into_array_string(self.composers)),
 			..Default::default()
 		}
 	}

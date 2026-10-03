@@ -792,7 +792,7 @@
 			"sections": {
 				"fetchMetadata": {
 					"heading": "Fetch metadata",
-					"description": "Fetch metadata for the media in this library",
+					"description": "Look up media that have never been looked up, and fill empty fields of media already matched from the same match, such as details added in a newer version. Matches you chose or rejected are kept.",
 					"noProviders": {
 						"title": "There are no metadata providers available",
 						"description": "You can configure metadata providers in the metadata integration settings"
@@ -914,6 +914,7 @@
 			"ageRating": "Age rating",
 			"characters": "Characters",
 			"colorists": "Colorists",
+			"composers": "Composers",
 			"coverArtists": "Cover artists",
 			"developers": "Developers",
 			"day": "Day",

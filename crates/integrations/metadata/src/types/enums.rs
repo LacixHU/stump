@@ -53,6 +53,7 @@ pub enum MetadataField {
 	DescriptionFormatted,
 	Developers,
 	Platforms,
+	Composers,
 }
 
 /// Types of media that can be handled by metadata providers

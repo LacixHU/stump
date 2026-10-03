@@ -64,6 +64,13 @@ impl BookVisitResult {
 pub struct ScanOptions {
 	#[serde(default)]
 	pub config: ScanConfig,
+	/// Whether a person asked for this scan of the whole library, rather than an upload,
+	/// the folder watcher or a schedule starting it. Every scan looks up metadata for the
+	/// media it adds; only this one also looks up media in the library never looked up
+	/// before (see [`crate::filesystem::metadata::MetadataFetchJobParams`]). Uploading one
+	/// game must not touch the metadata of every other game in the library.
+	#[serde(default, skip_serializing_if = "std::ops::Not::not")]
+	pub fetch_unsearched_metadata: bool,
 }
 
 #[derive(Default, Debug, Clone, Copy, Deserialize, Serialize)]
@@ -127,6 +134,7 @@ mod tests {
 
 		let options = ScanOptions {
 			config: ScanConfig::BuildChanged,
+			..Default::default()
 		};
 		assert_eq!(options.book_operation(), None);
 
@@ -134,6 +142,7 @@ mod tests {
 			config: ScanConfig::ForceRebuild {
 				force_rebuild: true,
 			},
+			..Default::default()
 		};
 		assert_eq!(options.book_operation(), Some(BookVisitOperation::Rebuild));
 
@@ -142,6 +151,7 @@ mod tests {
 				regen_meta: true,
 				regen_hashes: false,
 			}),
+			..Default::default()
 		};
 		assert_eq!(
 			options.book_operation(),
@@ -188,7 +198,8 @@ mod tests {
 			serde_json::to_string(&ScanOptions {
 				config: ScanConfig::ForceRebuild {
 					force_rebuild: true
-				}
+				},
+				..Default::default()
 			})
 			.unwrap(),
 			r#"{"config":{"forceRebuild":true}}"#
@@ -198,7 +209,8 @@ mod tests {
 			serde_json::to_string(&ScanOptions {
 				config: ScanConfig::ForceRebuild {
 					force_rebuild: false
-				}
+				},
+				..Default::default()
 			})
 			.unwrap(),
 			r#"{"config":{"forceRebuild":false}}"#
@@ -209,7 +221,8 @@ mod tests {
 				config: ScanConfig::Custom(CustomVisit {
 					regen_meta: true,
 					regen_hashes: false
-				})
+				}),
+				..Default::default()
 			})
 			.unwrap(),
 			r#"{"config":{"regenMeta":true,"regenHashes":false}}"#
@@ -220,7 +233,8 @@ mod tests {
 				config: ScanConfig::Custom(CustomVisit {
 					regen_meta: false,
 					regen_hashes: true
-				})
+				}),
+				..Default::default()
 			})
 			.unwrap(),
 			r#"{"config":{"regenMeta":false,"regenHashes":true}}"#
@@ -231,7 +245,8 @@ mod tests {
 				config: ScanConfig::Custom(CustomVisit {
 					regen_meta: true,
 					regen_hashes: true
-				})
+				}),
+				..Default::default()
 			})
 			.unwrap(),
 			r#"{"config":{"regenMeta":true,"regenHashes":true}}"#
@@ -301,6 +316,7 @@ mod tests {
 			config: ScanConfig::ForceRebuild {
 				force_rebuild: false,
 			},
+			..Default::default()
 		};
 		assert!(options.is_default());
 		assert!(options.book_operation().is_none());
@@ -310,6 +326,7 @@ mod tests {
 				regen_meta: false,
 				regen_hashes: false,
 			}),
+			..Default::default()
 		};
 		assert!(options.config.is_useless());
 		assert!(options.book_operation().is_none());
@@ -319,6 +336,7 @@ mod tests {
 				regen_meta: true,
 				regen_hashes: false,
 			}),
+			..Default::default()
 		};
 		assert!(!options.config.is_useless());
 
@@ -327,11 +345,13 @@ mod tests {
 				regen_meta: false,
 				regen_hashes: true,
 			}),
+			..Default::default()
 		};
 		assert!(!options.config.is_useless());
 
 		let options = ScanOptions {
 			config: ScanConfig::BuildChanged,
+			..Default::default()
 		};
 		assert!(options.book_operation().is_none());
 		assert!(options.is_default());

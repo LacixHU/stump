@@ -64,6 +64,18 @@ pub trait MetadataProvider: Send + Sync {
 		external_id: &str,
 	) -> Result<ExternalMediaMetadata, MetadataProviderError>;
 
+	/// Fetch full metadata for a known external ID, with the same provider hints a search
+	/// for it would carry (the retro `platform`, say). This is how a match applied earlier
+	/// is refreshed without searching again. A provider whose records do not depend on the
+	/// hints need not implement it.
+	async fn fetch_media_metadata_with_hints(
+		&self,
+		external_id: &str,
+		_query: &SearchQuery,
+	) -> Result<ExternalMediaMetadata, MetadataProviderError> {
+		self.fetch_media_metadata(external_id).await
+	}
+
 	//// Fetch cover image URL
 	// async fn fetch_cover_url(
 	// 	&self,

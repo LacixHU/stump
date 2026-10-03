@@ -219,21 +219,34 @@ Sidecar files always win over Wikipedia. Many Wikipedia covers are fair-use; onl
 
 ## Game info
 
-After a scan, Stump looks each new game up on Wikipedia and fills in its details from the
-game's article and the article's [Wikidata](https://www.wikidata.org) item:
+After a scan or an upload, Stump looks each new game up on Wikipedia and fills in its
+details from the game's article and the article's [Wikidata](https://www.wikidata.org) item:
 
-| Field       | Source                                                         |
-| ----------- | -------------------------------------------------------------- |
-| Title       | The article's title (`Sid Meier's Pirates!` for `Pirates.d64`) |
-| Description | The article's opening paragraph                                |
-| Released    | Wikidata publication date, this machine's release when known   |
-| Developers  | Wikidata developers, leaving out the studios behind ports      |
-| Publisher   | Wikidata publishers, leaving out the publishers of ports       |
-| Platforms   | Every machine Wikidata lists the game for                      |
-| Genres      | Wikidata genres                                                |
+| Field       | Source                                                                                                      |
+| ----------- | ----------------------------------------------------------------------------------------------------------- |
+| Title       | The article's title (`Sid Meier's Pirates!` for `Pirates.d64`)                                              |
+| Description | The article's opening paragraph                                                                             |
+| Released    | Wikidata publication date, this machine's release when known                                                |
+| Developers  | Wikidata developers, leaving out the studios behind ports                                                   |
+| Publisher   | Wikidata publishers, leaving out the publishers of ports                                                    |
+| Platforms   | Every machine Wikidata lists the game for                                                                   |
+| Genres      | Wikidata genres                                                                                             |
+| Composers   | Wikidata composers, else the article's infobox; for this machine's version when noted (`Chris Grigg (C64)`) |
 
 No account or API key is needed; the **Wikipedia** provider is switched on by default under
 **Settings → Metadata integrations**, where it can be turned off.
+
+Which games are looked up:
+
+- **A scan or an upload** looks up only the games it adds. Uploading one game does not touch
+  any other game's details.
+- **Scan library**, run by you, also looks up games that have never been looked up, such as
+  games added before the Wikipedia provider was enabled.
+- **Fetch metadata** in the library's settings does that too, and re-reads the article each
+  matched game came from to fill fields that are still empty — this is how games matched
+  earlier pick up details added later, like composers. The match itself is not searched again.
+- A game whose lookup has an outcome — matched, waiting for review, rejected, or no article
+  found — is never searched again automatically. Use **Fetch game info** for that.
 
 A game is searched by its folder's name as well as its file name, so `ZAK-1.d64` in a
 `Zack McKracken and the Alien Mindbenders` folder is found. A match is applied on its own

@@ -544,6 +544,14 @@ fn apply_media_fields(
 		active.platforms = Set(v);
 	}
 
+	if let Some(v) = merger.merge_comma_list(
+		MetadataField::Composers,
+		&model.composers,
+		&ext.composers,
+	) {
+		active.composers = Set(v);
+	}
+
 	if let Some(v) = merger.apply_scalar_override::<String>(MetadataField::Title) {
 		active.title = Set(v);
 	}
@@ -595,6 +603,9 @@ fn apply_media_fields(
 	}
 	if let Some(v) = merger.apply_comma_list_override(MetadataField::Platforms) {
 		active.platforms = Set(v);
+	}
+	if let Some(v) = merger.apply_comma_list_override(MetadataField::Composers) {
+		active.composers = Set(v);
 	}
 }
 
@@ -652,6 +663,7 @@ fn build_media_metadata_insert(
 		publisher: Set(ext.publisher.clone()),
 		developers: Set(ext.developers.as_ref().map(|d| d.join(", "))),
 		platforms: Set(ext.platforms.as_ref().map(|p| p.join(", "))),
+		composers: Set(ext.composers.as_ref().map(|c| c.join(", "))),
 		metadata_source: Set(Some(provider.to_string())),
 		metadata_external_id: Set(Some(external_id.to_string())),
 		..Default::default()
@@ -721,6 +733,7 @@ mod tests {
 			publisher: Some("Hewson Consultants".to_string()),
 			developers: Some(vec!["Andrew Braybrook".to_string()]),
 			platforms: Some(vec!["Commodore 64".to_string(), "ZX Spectrum".to_string()]),
+			composers: Some(vec!["Steve Turner".to_string()]),
 			..Default::default()
 		}
 	}
@@ -741,6 +754,7 @@ mod tests {
 			active.platforms,
 			Set(Some("Commodore 64, ZX Spectrum".to_string()))
 		);
+		assert_eq!(active.composers, Set(Some("Steve Turner".to_string())));
 		// A value already there is kept
 		assert_eq!(
 			active.publisher,

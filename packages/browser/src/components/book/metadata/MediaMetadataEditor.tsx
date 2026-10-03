@@ -35,6 +35,7 @@ const fragment = graphql(`
 		ageRating
 		characters
 		colorists
+		composers
 		coverArtists
 		day
 		developers
@@ -183,7 +184,7 @@ export default function MediaMetadataEditor({ mediaId, data }: Props) {
 							},
 						)
 						// The book search has no filter for these, so their badges link nowhere
-						.with(P.union('developers', 'platforms'), (field) => (
+						.with(P.union('developers', 'platforms', 'composers'), (field) => (
 							<BadgeListCell binding={field} values={getProperty(metadata, field) ?? []} />
 						))
 						.with('links', () => {

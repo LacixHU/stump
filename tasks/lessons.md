@@ -126,3 +126,28 @@ changes nothing and reports nothing; a batch of test additions was silently lost
 **The rule:** every scripted replacement asserts `s.count(old) == 1` before replacing, and a
 batch edit is written as a script file rather than a heredoc (heredocs here have also been
 mangled by the shell).
+
+## Follow-up jobs: scope them to what the triggering job changed
+
+An upload of one game re-searched and re-matched other games because the scan's metadata
+follow-up was scoped to the whole library (`media_in_library`), and the skip list let
+no-match and rejected lookups through. Nobody noticed while matching rarely changed; once
+it improved, every upload quietly rewrote unrelated games.
+
+**The rule:** a job enqueued after another job works on the entities that job created or
+changed (collect the ids), unless a person explicitly asked for the wider pass. And an
+automatic pass never repeats a lookup that already has an outcome a person could have
+decided on.
+
+## String parsing in Rust: never slice `&str` at a computed offset
+
+The infobox reader looked ahead with `&text[i..i + 2]`. On "Jean-François Freitas" (Another
+World's composer) `i + 2` fell inside the two-byte `ç`, the slice panicked, and because job
+futures are polled inside the server's main task (`tokio::join!(monitor, http)`), the panic
+ended the whole server mid-scan. No test had a non-ASCII name; every fixture was English.
+
+**The rule:** scan with `as_bytes()` and byte literals (`b"{{"`), or with `char_indices`;
+slice a `&str` only at offsets that `find`/`char_indices` returned. Apply a lowercased
+string's offsets only after `to_ascii_lowercase`, which keeps byte positions. Every text
+parser gets a test with accented and multi-byte names at several offsets. When a crash
+report comes in, reproduce it with the user's own binary against their real data first.

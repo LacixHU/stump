@@ -308,6 +308,8 @@ pub(crate) async fn handle_missing_series(
 #[derive(Default)]
 pub(crate) struct MediaOperationOutput {
 	pub created_media: u64,
+	/// The ids of the media created, so the scan can look up metadata for those alone
+	pub created_media_ids: Vec<String>,
 	pub updated_media: u64,
 	pub logs: Vec<JobExecuteLog>,
 }
@@ -896,9 +898,9 @@ pub(crate) async fn safely_build_and_insert_media(
 
 		txn.commit().await?;
 
-		// TODO(metadata-fetching): Track inserted_ids as needing fetching (assuming enabled)
 		for media_id in inserted_ids {
 			output.created_media += 1;
+			output.created_media_ids.push(media_id.clone());
 			insert_cursor += 1;
 			worker_ctx.report_progress(JobProgress::subtask_position(
 				insert_cursor,

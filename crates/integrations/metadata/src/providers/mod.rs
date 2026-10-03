@@ -1,5 +1,6 @@
 mod comic_vine;
 mod hardcover;
+mod infobox;
 mod lemon64;
 mod lemon_amiga;
 mod wikidata;

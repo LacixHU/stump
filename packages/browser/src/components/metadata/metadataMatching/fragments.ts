@@ -36,6 +36,7 @@ export const pendingMatchRecordFragment = graphql(`
 					publisher
 					developers
 					platforms
+					composers
 				}
 				... on ExternalSeriesMetadata {
 					seriesTitle: title
@@ -78,6 +79,7 @@ export const pendingMatchRecordFragment = graphql(`
 				publisher
 				developers
 				platforms
+				composers
 				year
 				month
 				day

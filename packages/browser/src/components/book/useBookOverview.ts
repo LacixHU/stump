@@ -23,6 +23,7 @@ const query = graphql(`
 				writers
 				developers
 				platforms
+				composers
 				year
 				...MediaMetadataEditor
 			}

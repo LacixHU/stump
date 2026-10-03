@@ -66,6 +66,12 @@ export const MEDIA_FIELD_DEFS: MetadataFieldDef[] = [
 		editorType: 'badgeList',
 	},
 	{
+		field: MetadataField.Composers,
+		binding: 'composers',
+		candidateKey: 'composers',
+		editorType: 'badgeList',
+	},
+	{
 		field: MetadataField.Publisher,
 		binding: 'publisher',
 		candidateKey: 'publisher',

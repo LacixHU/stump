@@ -12,6 +12,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 
 use super::{
+	infobox::infobox_names,
 	wikidata::{self, GameFacts},
 	wikimedia,
 };
@@ -124,6 +125,19 @@ impl WikipediaCoverClient {
 		Ok(candidates)
 	}
 
+	/// The metadata of a known article, read afresh.
+	async fn article_metadata(
+		&self,
+		article: &str,
+		platform: Option<CoverPlatform>,
+	) -> MetadataResult<ExternalMediaMetadata> {
+		let summary = self
+			.fetch_page_summary(article)
+			.await?
+			.ok_or_else(|| MetadataProviderError::NotFound(article.to_string()))?;
+		Ok(self.game_metadata(summary, platform).await?.0)
+	}
+
 	/// An accepted article's metadata, and how sure the match is.
 	///
 	/// The first paragraph of an arcade game's article seldom names the home computers it
@@ -179,7 +193,67 @@ impl WikipediaCoverClient {
 			None => GameFacts::default(),
 		};
 		let on_platform = facts.on_platform;
-		Ok((metadata_from_article(summary, facts), on_platform))
+		let mut metadata = metadata_from_article(summary, facts);
+
+		// Wikidata seldom knows who wrote a home-computer game's music; the article's
+		// infobox usually does
+		if metadata.composers.is_none() {
+			let names = platform.map_or(&[][..], |p| p.note_names);
+			match self
+				.infobox_names(&metadata.external_id, "composer", names)
+				.await
+			{
+				Ok(composers) => {
+					metadata.composers = (!composers.is_empty()).then_some(composers)
+				},
+				Err(e) if e.is_rate_limited() => return Err(e),
+				Err(e) => tracing::warn!(
+					article = metadata.external_id,
+					error = %e,
+					"Infobox lookup failed; leaving the composers out"
+				),
+			}
+		}
+		Ok((metadata, on_platform))
+	}
+
+	/// The names in one parameter of the article's infobox, for the machine `platform_names`
+	/// describes (see [`infobox_names`]). Only the lead section is fetched: that is where
+	/// the infobox is.
+	async fn infobox_names(
+		&self,
+		article: &str,
+		param: &str,
+		platform_names: &[&str],
+	) -> MetadataResult<Vec<String>> {
+		if article.is_empty() {
+			return Ok(vec![]);
+		}
+		let url = api_url(&[
+			("action", "query"),
+			("prop", "revisions"),
+			("rvprop", "content"),
+			("rvslots", "main"),
+			("rvsection", "0"),
+			("format", "json"),
+			("formatversion", "2"),
+			("titles", article),
+		])?;
+		let response = wikimedia::get(url).await?;
+		if !response.status().is_success() {
+			return Err(MetadataProviderError::Other(format!(
+				"Wikipedia wikitext HTTP {}",
+				response.status()
+			)));
+		}
+		let body: WikitextResponse = response.json().await?;
+		let wikitext = body
+			.query
+			.and_then(|q| q.pages.into_iter().next())
+			.and_then(|p| p.revisions.into_iter().next())
+			.and_then(|r| r.slots.main.content)
+			.unwrap_or_default();
+		Ok(infobox_names(&wikitext, param, platform_names))
 	}
 
 	/// Infobox / lead images live on the article, not in Category:Video game covers.
@@ -203,9 +277,21 @@ impl WikipediaCoverClient {
 		// while the search goes on for one that does. "Barbarian" is both a 2002 PS2 game
 		// and, as "Barbarian: The Ultimate Warrior", the 1987 C64 one; only the second
 		// article says Commodore 64.
+		//
+		// Only a title match settles the search. An article that merely ends with the title
+		// is a fallback even when it names the machine, and a weaker one than a title
+		// match: "Mega Turrican" mentions the Amiga where "Turrican" never does, and is
+		// still the wrong game.
 		let mut fallback: Option<GameArticle> = None;
-		let is_settled =
-			|article: &GameArticle| platform.is_none() || article.names_platform;
+		let is_settled = |article: &GameArticle| {
+			article.title_matched && (platform.is_none() || article.names_platform)
+		};
+		let keep_better = |fallback: &mut Option<GameArticle>, article: GameArticle| {
+			let rank = |a: &GameArticle| (a.title_matched, a.names_platform);
+			if fallback.as_ref().is_none_or(|f| rank(&article) > rank(f)) {
+				*fallback = Some(article);
+			}
+		};
 
 		if let Some(article) = self
 			.accept_article(title, title, platform, require_image, false)
@@ -214,7 +300,7 @@ impl WikipediaCoverClient {
 			if is_settled(&article) {
 				return Ok(Some(article));
 			}
-			fallback = Some(article);
+			keep_better(&mut fallback, article);
 		}
 
 		let mut queries = vec![title.to_string()];
@@ -249,7 +335,7 @@ impl WikipediaCoverClient {
 					if is_settled(&article) {
 						return Ok(Some(article));
 					}
-					fallback.get_or_insert(article);
+					keep_better(&mut fallback, article);
 				}
 			}
 		}
@@ -653,6 +739,7 @@ fn metadata_from_article(
 		publisher: non_empty(facts.publishers).map(|p| p.join(", ")),
 		developers: non_empty(facts.developers),
 		platforms: non_empty(facts.platforms),
+		composers: non_empty(facts.composers),
 		cover_url: cover_url_from_summary(&summary),
 		provider_url: summary
 			.content_urls
@@ -750,6 +837,10 @@ fn titles_similar(query: &str, article: &str) -> bool {
 		|| titles_similar_exact(query, strip_title_qualifier(article))
 }
 
+/// The longest tail a file name may add to a game's title and still be that game: a release
+/// group's tag such as `TCF` or `FLT`, not a word of a title.
+const MAX_TAG_LEN: usize = 4;
+
 fn titles_similar_exact(query: &str, article: &str) -> bool {
 	let q = normalize_title(query);
 	let a = normalize_title(article);
@@ -759,10 +850,14 @@ fn titles_similar_exact(query: &str, article: &str) -> bool {
 	if a == q {
 		return true;
 	}
-	// One title running on past the other (`Zak McKracken` and the full title) is the same
-	// game; one that merely *ends* with it is the dropped-prefix case, which needs the
-	// machine confirmed first -- "Conan the Barbarian" is not "Barbarian"
-	if q.len() >= 8 && (a.starts_with(&q) || q.starts_with(&a)) {
+	// An article running on past the query (`Zak McKracken` and the full title) is the
+	// same game; one that merely *ends* with it is the dropped-prefix case, which needs the
+	// machine confirmed first -- "Conan the Barbarian" is not "Barbarian". A query running
+	// on past the article by a few letters carries a release tag (`Zamzara TCF`); by a
+	// word, it names another game -- "Elite Frontier" is not Elite.
+	if q.len() >= 8
+		&& (a.starts_with(&q) || (q.starts_with(&a) && q.len() - a.len() <= MAX_TAG_LEN))
+	{
 		return true;
 	}
 	strsim::normalized_levenshtein(&q, &a) >= 0.72
@@ -883,7 +978,10 @@ pub fn sanitize_game_title(raw: &str) -> String {
 		" side a", " side b", " side 1", " side 2", " disk 1", " disk 2", " disk 3",
 		" disc 1", " disc 2", " tape 1", " tape 2",
 	] {
-		if let Some(idx) = s.to_lowercase().find(suffix) {
+		// ASCII lowercasing keeps every byte where it was, so the index found is an index
+		// into `s`; full lowercasing can change a character's length (`İ` grows a byte) and
+		// would truncate mid-character, which panics
+		if let Some(idx) = s.to_ascii_lowercase().find(suffix) {
 			s.truncate(idx);
 		}
 	}
@@ -909,6 +1007,9 @@ pub struct CoverPlatform {
 	/// The Wikidata items for the machine, as a statement's "platform" qualifier names it.
 	/// A developer or publisher qualified with some other machine made a port, not this game.
 	pub wikidata_items: &'static [&'static str],
+	/// How an infobox notes which version a name is for: `Chris Grigg (C64)`. A one-word
+	/// name has to match a whole word of the note.
+	pub note_names: &'static [&'static str],
 }
 
 /// Map a platform hint (`c64`, `spectrum`, `amiga`, `dos`, or a looser spelling) onto the
@@ -922,6 +1023,7 @@ pub fn resolve_cover_platform(platform: Option<&str>) -> Option<CoverPlatform> {
 			category: "Commodore 64 game covers",
 			search_term: "Commodore 64",
 			aliases: &["commodore 64", "c64"],
+			note_names: &["c64", "commodore 64"],
 			wikidata_items: &["Q99775"],
 		}
 	} else if p == "spectrum" || p.contains("zx") || p.contains("sinclair") {
@@ -929,6 +1031,7 @@ pub fn resolve_cover_platform(platform: Option<&str>) -> Option<CoverPlatform> {
 			category: "ZX Spectrum game covers",
 			search_term: "ZX Spectrum",
 			aliases: &["zx spectrum", "sinclair spectrum"],
+			note_names: &["spectrum", "zx"],
 			wikidata_items: &["Q23882"],
 		}
 	} else if p.contains("amiga") {
@@ -936,6 +1039,7 @@ pub fn resolve_cover_platform(platform: Option<&str>) -> Option<CoverPlatform> {
 			category: "Amiga game covers",
 			search_term: "Amiga",
 			aliases: &["amiga"],
+			note_names: &["amiga"],
 			wikidata_items: &["Q100047"],
 		}
 	} else if p == "dos" || p == "pc" || p.contains("msdos") || p.contains("ms-dos") {
@@ -943,6 +1047,7 @@ pub fn resolve_cover_platform(platform: Option<&str>) -> Option<CoverPlatform> {
 			category: "MS-DOS game covers",
 			search_term: "MS-DOS",
 			aliases: &["ms-dos", "msdos"],
+			note_names: &["dos", "ms-dos", "msdos"],
 			wikidata_items: &["Q47604", "Q170434"],
 		}
 	} else {
@@ -1077,16 +1182,23 @@ impl MetadataProvider for WikipediaCoverClient {
 	}
 
 	/// `external_id` is the article title a search matched. The machine is not known here, so
-	/// a port's developer or publisher is not filtered out as it is in a search.
+	/// a port's developer, publisher or composer is not filtered out as it is in a search;
+	/// [`Self::fetch_media_metadata_with_hints`] does that.
 	async fn fetch_media_metadata(
 		&self,
 		external_id: &str,
 	) -> MetadataResult<ExternalMediaMetadata> {
-		let summary = self
-			.fetch_page_summary(external_id)
-			.await?
-			.ok_or_else(|| MetadataProviderError::NotFound(external_id.to_string()))?;
-		Ok(self.game_metadata(summary, None).await?.0)
+		self.article_metadata(external_id, None).await
+	}
+
+	async fn fetch_media_metadata_with_hints(
+		&self,
+		external_id: &str,
+		query: &SearchQuery,
+	) -> MetadataResult<ExternalMediaMetadata> {
+		let platform = query.provider_hints.get("platform").map(String::as_str);
+		self.article_metadata(external_id, resolve_cover_platform(platform))
+			.await
 	}
 
 	async fn verify_credentials(&self) -> MetadataResult<ProviderCredentialVerification> {
@@ -1144,6 +1256,38 @@ struct SummaryImage {
 }
 
 #[derive(Debug, Deserialize)]
+struct WikitextResponse {
+	query: Option<WikitextQuery>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WikitextQuery {
+	#[serde(default)]
+	pages: Vec<WikitextPage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WikitextPage {
+	#[serde(default)]
+	revisions: Vec<WikitextRevision>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WikitextRevision {
+	slots: WikitextSlots,
+}
+
+#[derive(Debug, Deserialize)]
+struct WikitextSlots {
+	main: WikitextSlot,
+}
+
+#[derive(Debug, Deserialize)]
+struct WikitextSlot {
+	content: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 struct ImageInfoResponse {
 	query: Option<ImageInfoQuery>,
 }
@@ -1174,6 +1318,11 @@ mod tests {
 		assert_eq!(sanitize_game_title("Uridium_Side_A"), "Uridium");
 		assert_eq!(sanitize_game_title("Elite disk 1"), "Elite");
 		assert_eq!(sanitize_game_title("Last Ninja"), "Last Ninja");
+		// A character that grows when lowercased must not shift where the cut lands
+		assert_eq!(
+			sanitize_game_title("\u{130}stanbul Side A"),
+			"\u{130}stanbul"
+		);
 	}
 
 	#[test]
@@ -1453,6 +1602,9 @@ mod tests {
 			"Zak McKracken and the Alien Mindbenders"
 		));
 		assert!(!titles_similar("Barbarian", "Conan the Barbarian"));
+		// A release tag on the file name is still the game; a further word is another one
+		assert!(titles_similar("Zamzara TCF", "Zamzara"));
+		assert!(!titles_similar("Elite Frontier", "Elite (video game)"));
 		assert!(titles_similar("Last Ninja", "The Last Ninja"));
 	}
 

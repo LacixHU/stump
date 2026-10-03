@@ -108,6 +108,10 @@ pub struct Model {
 	#[sea_orm(column_type = "Text", nullable)]
 	#[graphql(skip)]
 	pub platforms: Option<String>,
+	/// Who wrote a game's music, comma separated
+	#[sea_orm(column_type = "Text", nullable)]
+	#[graphql(skip)]
+	pub composers: Option<String>,
 	/// The external metadata provider that supplied this metadata (e.g., "HARDCOVER")
 	#[sea_orm(column_type = "Text", nullable)]
 	pub metadata_source: Option<String>,

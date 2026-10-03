@@ -822,6 +822,8 @@ export type ExternalMediaMetadata = {
   __typename?: 'ExternalMediaMetadata';
   artists?: Maybe<Array<Scalars['String']['output']>>;
   colorists?: Maybe<Array<Scalars['String']['output']>>;
+  /** Who wrote a game's music */
+  composers?: Maybe<Array<Scalars['String']['output']>>;
   coverArtists?: Maybe<Array<Scalars['String']['output']>>;
   coverUrl?: Maybe<Scalars['String']['output']>;
   day?: Maybe<Scalars['Int']['output']>;
@@ -1578,6 +1580,7 @@ export type MediaMetadata = {
   ageRating?: Maybe<Scalars['Int']['output']>;
   characters: Array<Scalars['String']['output']>;
   colorists: Array<Scalars['String']['output']>;
+  composers: Array<Scalars['String']['output']>;
   coverArtists: Array<Scalars['String']['output']>;
   day?: Maybe<Scalars['Int']['output']>;
   developers: Array<Scalars['String']['output']>;
@@ -1650,6 +1653,7 @@ export type MediaMetadataInput = {
   ageRating?: InputMaybe<Scalars['Int']['input']>;
   characters?: InputMaybe<Array<Scalars['String']['input']>>;
   colorists?: InputMaybe<Array<Scalars['String']['input']>>;
+  composers?: InputMaybe<Array<Scalars['String']['input']>>;
   coverArtists?: InputMaybe<Array<Scalars['String']['input']>>;
   day?: InputMaybe<Scalars['Int']['input']>;
   developers?: InputMaybe<Array<Scalars['String']['input']>>;
@@ -1690,6 +1694,7 @@ export enum MediaMetadataModelOrdering {
   AgeRating = 'AGE_RATING',
   Characters = 'CHARACTERS',
   Colorists = 'COLORISTS',
+  Composers = 'COMPOSERS',
   CoverArtists = 'COVER_ARTISTS',
   Day = 'DAY',
   Developers = 'DEVELOPERS',
@@ -1833,6 +1838,8 @@ export type MetadataFetchJobOutput = {
   noMatches: Scalars['Int']['output'];
   /** Number of entities that were rate-limited */
   rateLimited: Scalars['Int']['output'];
+  /** Number of entities whose applied match was read again to fill empty fields */
+  refreshed: Scalars['Int']['output'];
   /** Number of entities that were skipped (already have matches) */
   skipped: Scalars['Int']['output'];
   /** Total number of entities processed */
@@ -1892,6 +1899,7 @@ export enum MetadataField {
   Colorists = 'COLORISTS',
   ComicId = 'COMIC_ID',
   ComicImage = 'COMIC_IMAGE',
+  Composers = 'COMPOSERS',
   Cover = 'COVER',
   CoverArtists = 'COVER_ARTISTS',
   DescriptionFormatted = 'DESCRIPTION_FORMATTED',
@@ -5806,7 +5814,7 @@ export type BookSearchOverlayQuery = { __typename?: 'Query', media: { __typename
 
 export type SimpleBookCardFragment = { __typename?: 'Media', id: string, resolvedName: string, createdAt: any, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } } & { ' $fragmentName'?: 'SimpleBookCardFragment' };
 
-export type MediaMetadataEditorFragment = { __typename?: 'MediaMetadata', ageRating?: number | null, characters: Array<string>, colorists: Array<string>, coverArtists: Array<string>, day?: number | null, developers: Array<string>, editors: Array<string>, format?: string | null, identifierAmazon?: string | null, identifierCalibre?: string | null, identifierGoogle?: string | null, identifierIsbn?: string | null, identifierMobiAsin?: string | null, identifierUuid?: string | null, genres: Array<string>, inkers: Array<string>, language?: string | null, letterers: Array<string>, links: Array<string>, month?: number | null, notes?: string | null, number?: any | null, pageCount?: number | null, pencillers: Array<string>, platforms: Array<string>, publisher?: string | null, series?: string | null, seriesGroup?: string | null, storyArc?: string | null, storyArcNumber?: any | null, summary?: string | null, teams: Array<string>, title?: string | null, titleSort?: string | null, volume?: number | null, writers: Array<string>, year?: number | null, lockedFields: Array<MetadataField> } & { ' $fragmentName'?: 'MediaMetadataEditorFragment' };
+export type MediaMetadataEditorFragment = { __typename?: 'MediaMetadata', ageRating?: number | null, characters: Array<string>, colorists: Array<string>, composers: Array<string>, coverArtists: Array<string>, day?: number | null, developers: Array<string>, editors: Array<string>, format?: string | null, identifierAmazon?: string | null, identifierCalibre?: string | null, identifierGoogle?: string | null, identifierIsbn?: string | null, identifierMobiAsin?: string | null, identifierUuid?: string | null, genres: Array<string>, inkers: Array<string>, language?: string | null, letterers: Array<string>, links: Array<string>, month?: number | null, notes?: string | null, number?: any | null, pageCount?: number | null, pencillers: Array<string>, platforms: Array<string>, publisher?: string | null, series?: string | null, seriesGroup?: string | null, storyArc?: string | null, storyArcNumber?: any | null, summary?: string | null, teams: Array<string>, title?: string | null, titleSort?: string | null, volume?: number | null, writers: Array<string>, year?: number | null, lockedFields: Array<MetadataField> } & { ' $fragmentName'?: 'MediaMetadataEditorFragment' };
 
 export type UpdateMediaMetadataMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -5834,7 +5842,7 @@ export type BookOverviewSceneQueryVariables = Exact<{
 
 export type BookOverviewSceneQuery = { __typename?: 'Query', mediaById?: (
     { __typename?: 'Media', id: string, resolvedName: string, extension: string, seriesId?: string | null, pages: number, size: number, metadata?: (
-      { __typename?: 'MediaMetadata', links: Array<string>, summary?: string | null, ageRating?: number | null, genres: Array<string>, language?: string | null, publisher?: string | null, writers: Array<string>, developers: Array<string>, platforms: Array<string>, year?: number | null }
+      { __typename?: 'MediaMetadata', links: Array<string>, summary?: string | null, ageRating?: number | null, genres: Array<string>, language?: string | null, publisher?: string | null, writers: Array<string>, developers: Array<string>, platforms: Array<string>, composers: Array<string>, year?: number | null }
       & { ' $fragmentRefs'?: { 'MediaMetadataEditorFragment': MediaMetadataEditorFragment } }
     ) | null, tags: Array<{ __typename?: 'Tag', id: number, name: string }>, readHistory: Array<{ __typename?: 'ReadthroughRecord', completedAt: any }> }
     & { ' $fragmentRefs'?: { 'BookCardFragment': BookCardFragment;'BookFileInformationFragment': BookFileInformationFragment } }
@@ -5962,7 +5970,7 @@ export type RejectAllPendingMatchesMutationVariables = Exact<{ [key: string]: ne
 
 export type RejectAllPendingMatchesMutation = { __typename?: 'Mutation', rejectAllPendingMatches: number };
 
-export type PendingMatchRecordFragment = { __typename?: 'MetadataFetchRecord', id: number, status: MetadataFetchStatus, mediaId?: string | null, seriesId?: string | null, rawHits: number, addedAt: any, updatedAt?: any | null, matchCandidates: Array<{ __typename?: 'MatchCandidate', provider: string, externalId: string, confidence: number, metadata: { __typename: 'ExternalMediaMetadata', title?: string | null, seriesName?: string | null, seriesExternalId?: string | null, summary?: string | null, pageCount?: number | null, number?: number | null, day?: number | null, month?: number | null, year?: number | null, genres?: Array<string> | null, tags?: Array<string> | null, isbn?: string | null, isbn13?: string | null, writers?: Array<string> | null, artists?: Array<string> | null, colorists?: Array<string> | null, letterers?: Array<string> | null, coverArtists?: Array<string> | null, publisher?: string | null, developers?: Array<string> | null, platforms?: Array<string> | null } | { __typename: 'ExternalSeriesMetadata', alternativeTitles: Array<string>, summary?: string | null, volumeCount?: number | null, coverUrl?: string | null, status?: PublicationStatus | null, year?: number | null, endYear?: number | null, genres?: Array<string> | null, tags?: Array<string> | null, authors?: Array<string> | null, ageRating?: string | null, publisher?: string | null, seriesTitle: string }, confidenceFactors: Array<{ __typename?: 'ConfidenceFactor', factor: string, weight: number, matched: boolean }> }>, media?: { __typename?: 'Media', id: string, resolvedName: string, metadata?: { __typename?: 'MediaMetadata', title?: string | null, summary?: string | null, series?: string | null, number?: any | null, genres: Array<string>, writers: Array<string>, colorists: Array<string>, letterers: Array<string>, coverArtists: Array<string>, publisher?: string | null, developers: Array<string>, platforms: Array<string>, year?: number | null, month?: number | null, day?: number | null, pageCount?: number | null, identifierIsbn?: string | null, lockedFields: Array<MetadataField> } | null } | null, series?: { __typename?: 'Series', id: string, resolvedName: string, metadata?: { __typename?: 'SeriesMetadata', title?: string | null, summary?: string | null, genres: Array<string>, writers: Array<string>, publisher?: string | null, year?: number | null, status?: string | null, ageRating?: number | null, volume?: number | null, lockedFields: Array<MetadataField> } | null } | null } & { ' $fragmentName'?: 'PendingMatchRecordFragment' };
+export type PendingMatchRecordFragment = { __typename?: 'MetadataFetchRecord', id: number, status: MetadataFetchStatus, mediaId?: string | null, seriesId?: string | null, rawHits: number, addedAt: any, updatedAt?: any | null, matchCandidates: Array<{ __typename?: 'MatchCandidate', provider: string, externalId: string, confidence: number, metadata: { __typename: 'ExternalMediaMetadata', title?: string | null, seriesName?: string | null, seriesExternalId?: string | null, summary?: string | null, pageCount?: number | null, number?: number | null, day?: number | null, month?: number | null, year?: number | null, genres?: Array<string> | null, tags?: Array<string> | null, isbn?: string | null, isbn13?: string | null, writers?: Array<string> | null, artists?: Array<string> | null, colorists?: Array<string> | null, letterers?: Array<string> | null, coverArtists?: Array<string> | null, publisher?: string | null, developers?: Array<string> | null, platforms?: Array<string> | null, composers?: Array<string> | null } | { __typename: 'ExternalSeriesMetadata', alternativeTitles: Array<string>, summary?: string | null, volumeCount?: number | null, coverUrl?: string | null, status?: PublicationStatus | null, year?: number | null, endYear?: number | null, genres?: Array<string> | null, tags?: Array<string> | null, authors?: Array<string> | null, ageRating?: string | null, publisher?: string | null, seriesTitle: string }, confidenceFactors: Array<{ __typename?: 'ConfidenceFactor', factor: string, weight: number, matched: boolean }> }>, media?: { __typename?: 'Media', id: string, resolvedName: string, metadata?: { __typename?: 'MediaMetadata', title?: string | null, summary?: string | null, series?: string | null, number?: any | null, genres: Array<string>, writers: Array<string>, colorists: Array<string>, letterers: Array<string>, coverArtists: Array<string>, publisher?: string | null, developers: Array<string>, platforms: Array<string>, composers: Array<string>, year?: number | null, month?: number | null, day?: number | null, pageCount?: number | null, identifierIsbn?: string | null, lockedFields: Array<MetadataField> } | null } | null, series?: { __typename?: 'Series', id: string, resolvedName: string, metadata?: { __typename?: 'SeriesMetadata', title?: string | null, summary?: string | null, genres: Array<string>, writers: Array<string>, publisher?: string | null, year?: number | null, status?: string | null, ageRating?: number | null, volume?: number | null, lockedFields: Array<MetadataField> } | null } | null } & { ' $fragmentName'?: 'PendingMatchRecordFragment' };
 
 export type AcceptMediaMatchMutationVariables = Exact<{
   mediaId: Scalars['ID']['input'];
@@ -7878,6 +7886,7 @@ export const MediaMetadataEditorFragmentDoc = new TypedDocumentString(`
   ageRating
   characters
   colorists
+  composers
   coverArtists
   day
   developers
@@ -7971,6 +7980,7 @@ export const PendingMatchRecordFragmentDoc = new TypedDocumentString(`
         publisher
         developers
         platforms
+        composers
       }
       ... on ExternalSeriesMetadata {
         seriesTitle: title
@@ -8013,6 +8023,7 @@ export const PendingMatchRecordFragmentDoc = new TypedDocumentString(`
       publisher
       developers
       platforms
+      composers
       year
       month
       day
@@ -10466,6 +10477,7 @@ export const UpdateMediaMetadataDocument = new TypedDocumentString(`
   ageRating
   characters
   colorists
+  composers
   coverArtists
   day
   developers
@@ -10530,6 +10542,7 @@ export const BookOverviewSceneDocument = new TypedDocumentString(`
       writers
       developers
       platforms
+      composers
       year
       ...MediaMetadataEditor
     }
@@ -10581,6 +10594,7 @@ fragment MediaMetadataEditor on MediaMetadata {
   ageRating
   characters
   colorists
+  composers
   coverArtists
   day
   developers
@@ -10788,6 +10802,7 @@ export const PendingMetadataMatchesDocument = new TypedDocumentString(`
         publisher
         developers
         platforms
+        composers
       }
       ... on ExternalSeriesMetadata {
         seriesTitle: title
@@ -10830,6 +10845,7 @@ export const PendingMetadataMatchesDocument = new TypedDocumentString(`
       publisher
       developers
       platforms
+      composers
       year
       month
       day
@@ -10910,6 +10926,7 @@ export const AcceptMediaMatchDocument = new TypedDocumentString(`
         publisher
         developers
         platforms
+        composers
       }
       ... on ExternalSeriesMetadata {
         seriesTitle: title
@@ -10952,6 +10969,7 @@ export const AcceptMediaMatchDocument = new TypedDocumentString(`
       publisher
       developers
       platforms
+      composers
       year
       month
       day
@@ -11022,6 +11040,7 @@ export const AcceptSeriesMatchDocument = new TypedDocumentString(`
         publisher
         developers
         platforms
+        composers
       }
       ... on ExternalSeriesMetadata {
         seriesTitle: title
@@ -11064,6 +11083,7 @@ export const AcceptSeriesMatchDocument = new TypedDocumentString(`
       publisher
       developers
       platforms
+      composers
       year
       month
       day
@@ -11128,6 +11148,7 @@ export const RejectMediaMatchDocument = new TypedDocumentString(`
         publisher
         developers
         platforms
+        composers
       }
       ... on ExternalSeriesMetadata {
         seriesTitle: title
@@ -11170,6 +11191,7 @@ export const RejectMediaMatchDocument = new TypedDocumentString(`
       publisher
       developers
       platforms
+      composers
       year
       month
       day
@@ -11234,6 +11256,7 @@ export const RejectSeriesMatchDocument = new TypedDocumentString(`
         publisher
         developers
         platforms
+        composers
       }
       ... on ExternalSeriesMetadata {
         seriesTitle: title
@@ -11276,6 +11299,7 @@ export const RejectSeriesMatchDocument = new TypedDocumentString(`
       publisher
       developers
       platforms
+      composers
       year
       month
       day
@@ -11766,6 +11790,7 @@ export const GameInfoSearchDocument = new TypedDocumentString(`
         publisher
         developers
         platforms
+        composers
       }
       ... on ExternalSeriesMetadata {
         seriesTitle: title
@@ -11808,6 +11833,7 @@ export const GameInfoSearchDocument = new TypedDocumentString(`
       publisher
       developers
       platforms
+      composers
       year
       month
       day
@@ -11974,6 +12000,7 @@ export const SearchMediaMetadataDocument = new TypedDocumentString(`
         publisher
         developers
         platforms
+        composers
       }
       ... on ExternalSeriesMetadata {
         seriesTitle: title
@@ -12016,6 +12043,7 @@ export const SearchMediaMetadataDocument = new TypedDocumentString(`
       publisher
       developers
       platforms
+      composers
       year
       month
       day

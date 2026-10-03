@@ -19,6 +19,7 @@ const PUBLISHER: &str = "P123";
 const PLATFORM: &str = "P400";
 const PUBLICATION_DATE: &str = "P577";
 const GENRE: &str = "P136";
+const COMPOSER: &str = "P86";
 
 /// `wbgetentities` accepts at most this many ids per request.
 const MAX_IDS_PER_REQUEST: usize = 50;
@@ -37,6 +38,7 @@ pub struct GameFacts {
 	pub publishers: Vec<String>,
 	pub platforms: Vec<String>,
 	pub genres: Vec<String>,
+	pub composers: Vec<String>,
 	pub released: Option<ReleaseDate>,
 	/// Whether the item lists the machine the game file is for among its platforms
 	pub on_platform: bool,
@@ -49,6 +51,7 @@ struct GameClaims {
 	publishers: Vec<String>,
 	platforms: Vec<String>,
 	genres: Vec<String>,
+	composers: Vec<String>,
 	released: Option<ReleaseDate>,
 	on_platform: bool,
 }
@@ -62,6 +65,7 @@ impl GameClaims {
 			.chain(&self.publishers)
 			.chain(&self.platforms)
 			.chain(&self.genres)
+			.chain(&self.composers)
 		{
 			if !ids.contains(id) {
 				ids.push(id.clone());
@@ -83,6 +87,7 @@ impl GameClaims {
 			publishers: named(self.publishers),
 			platforms: named(self.platforms),
 			genres: named(self.genres),
+			composers: named(self.composers),
 			released: self.released,
 			on_platform: self.on_platform,
 		}
@@ -172,6 +177,8 @@ fn parse_claims(claims: &Value, platform_items: &[&str]) -> GameClaims {
 			.any(|id| platform_items.contains(&id.as_str())),
 		platforms,
 		genres: item_ids(statements(claims, GENRE)),
+		// Like a port's developer, a port's composer did not write this version's music
+		composers: item_ids(statements(claims, COMPOSER).filter(for_platform)),
 		// The date of this machine's own release when one is recorded, otherwise the
 		// earliest of any. Unqualified dates are no better than that: Bomb Jack's is a
 		// 2015 re-release, and the 1984 original is only there qualified as arcade
@@ -299,6 +306,7 @@ mod tests {
 			"P123": [item("Q634677")],
 			"P400": [item("Q99775"), item("Q48493"), item("Q99775")],
 			"P136": [item("Q1044478")],
+			"P86": [item("Q7614173")],
 			"P577": [time("+1986-01-01T00:00:00Z", 9)],
 		});
 
@@ -312,6 +320,7 @@ mod tests {
 		assert!(parse_claims(&claims, &["Q99775"]).on_platform);
 		assert!(!parse_claims(&claims, &["Q23882"]).on_platform);
 		assert_eq!(parsed.genres, vec!["Q1044478"]);
+		assert_eq!(parsed.composers, vec!["Q7614173"]);
 		assert_eq!(
 			parsed.released,
 			Some(ReleaseDate {

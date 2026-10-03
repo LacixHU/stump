@@ -1,3 +1,36 @@
+# Game info: uploads stay local, composers
+
+## Problem
+
+Uploading one game changed other games' details: an upload runs a whole library scan, and
+the scan's metadata follow-up searched every game without a settled lookup (no-match and
+rejected ones included), auto-applying whatever the improved matching now found. Also
+wanted: who wrote each game's music.
+
+## Plan
+
+- [x] Scans collect the ids they create; the follow-up looks up exactly those
+- [x] `ScanOptions.fetch_unsearched_metadata`, set only by the Scan library button: also
+      looks up games never looked up
+- [x] Settled lookups (awaiting review, applied, no match/rejected) are never repeated
+      unless forced; rate-limited ones are retried (fixes the scheduler's retry no-op too)
+- [x] Composers: Wikidata P86 (port-filtered like developers), else the infobox
+      `composer`, keeping the names noted for this machine; new `composers` column
+      (own migration: the previous one is already applied on the live server)
+- [x] Library-settings Fetch metadata re-reads each applied match's article
+      (`fetch_media_metadata_with_hints`) and fills empty fields, so existing games get
+      composers without their match being searched again
+
+## Review
+
+Verified on the scratch server with real games: an upload through `uploadFiles` ran a
+fetch that processed 1 game (before: 25, with 7 no-match games re-searched); Scan library
+then looked up the 2 never-looked-up games and skipped 24; Fetch metadata refreshed 12
+applied matches (Zak McKracken -> Chris Grigg, the C64 composer; Wolfenstein 3D -> Robert
+Prince) without changing any match. Matching fixes found on the way: a dropped-prefix
+match no longer outranks a title match (Turrican -> Mega Turrican), and a file name may
+run past the title only by a release tag (Elite Frontier is not Elite).
+
 # Game info: pick the match yourself
 
 ## Problem

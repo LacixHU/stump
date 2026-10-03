@@ -997,6 +997,9 @@ impl LibraryMutation {
 
 		core.enqueue(StumpJob::metadata_fetch(MetadataFetchJobParams {
 			force_refetch,
+			// Asked for by hand for the whole library, so matches applied earlier also
+			// pick up fields added since (a game's composers)
+			refresh_applied: true,
 			scope: MetadataFetchScope::MediaInLibrary(library.id),
 		}))
 		.await?;
@@ -1134,10 +1137,16 @@ impl LibraryMutation {
 			.await?
 			.ok_or("Library not found")?;
 
+		// Someone asked to scan the whole library, so games never looked up are looked up
+		// too -- unlike the scan an upload or the folder watcher starts
+		let options = ScanOptions {
+			fetch_unsearched_metadata: true,
+			..options.map(|o| o.0).unwrap_or_default()
+		};
 		core.enqueue(StumpJob::library_scan(
 			library.id,
 			library.path,
-			options.map(|o| o.0),
+			Some(options),
 		))
 		.await?;
 		tracing::debug!("Enqueued library scan job");

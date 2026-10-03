@@ -14,6 +14,7 @@ export type MediaMetadataArrayField = Extract<
 	MediaMetadataField,
 	| 'characters'
 	| 'colorists'
+	| 'composers'
 	| 'coverArtists'
 	| 'developers'
 	| 'editors'
@@ -46,6 +47,7 @@ export const MediaMetadataKeys: MediaMetadataField[] = [
 	'publisher',
 	'developers',
 	'platforms',
+	'composers',
 	'ageRating',
 	'editors',
 	'writers',

@@ -58,6 +58,7 @@ async fn main() {
 	println!("  publisher  {:?}", m.publisher);
 	println!("  platforms  {:?}", m.platforms);
 	println!("  genres     {:?}", m.genres);
+	println!("  composers  {:?}", m.composers);
 	println!("  cover      {:?}", m.cover_url);
 	println!("  url        {:?}", m.provider_url);
 	println!(

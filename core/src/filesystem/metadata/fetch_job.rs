@@ -2,7 +2,10 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 use async_graphql::SimpleObject;
-use metadata_integrations::{MatchCandidate, SearchQuery};
+use metadata_integrations::{
+	AutoApplyConfig, ExternalMetadata, MatchCandidate, MergeStrategy,
+	MetadataProviderError, SearchQuery,
+};
 use models::{
 	entity::{
 		library_config, media, metadata_fetch_record, metadata_provider_config, series,
@@ -30,6 +33,18 @@ use super::{
 
 type Id = String;
 
+/// The lookups that have an answer: a match waiting for review, one applied (by hand or
+/// automatically), or none to be had -- including every candidate rejected. Unless forced,
+/// these are not looked up again, so a scan never brings back a match someone turned down
+/// or re-searches a whole library for nothing. A lookup that was rate limited, or never
+/// finished, has no answer yet and is tried again.
+const SETTLED_STATUSES: [MetadataFetchStatus; 4] = [
+	MetadataFetchStatus::AwaitingReview,
+	MetadataFetchStatus::Fetched,
+	MetadataFetchStatus::Matched,
+	MetadataFetchStatus::NoMatch,
+];
+
 /// The scope of entities to fetch metadata for
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -51,6 +66,12 @@ pub struct MetadataFetchJobParams {
 	pub scope: MetadataFetchScope,
 	/// If true, will re-fetch metadata even if matches already exist
 	pub force_refetch: bool,
+	/// If true, media whose match was applied earlier have that match's record read again
+	/// and whatever is still empty filled from it, without searching again. This is how a
+	/// field added later (a game's composers) reaches media matched before it existed, and
+	/// the match stays the one that was chosen.
+	#[serde(default)]
+	pub refresh_applied: bool,
 }
 
 impl MetadataFetchJobParams {
@@ -58,6 +79,7 @@ impl MetadataFetchJobParams {
 		Self {
 			scope,
 			force_refetch,
+			refresh_applied: false,
 		}
 	}
 
@@ -117,6 +139,8 @@ pub struct MetadataFetchJobOutput {
 	pub auto_applied: u64,
 	/// Number of entities that were rate-limited
 	pub rate_limited: u64,
+	/// Number of entities whose applied match was read again to fill empty fields
+	pub refreshed: u64,
 }
 
 impl JobOutputExt for MetadataFetchJobOutput {
@@ -128,6 +152,7 @@ impl JobOutputExt for MetadataFetchJobOutput {
 		self.failed += updated.failed;
 		self.auto_applied += updated.auto_applied;
 		self.rate_limited += updated.rate_limited;
+		self.refreshed += updated.refreshed;
 	}
 }
 
@@ -444,11 +469,9 @@ impl JobLifecycle for MetadataFetchJob {
 				if !self.params.force_refetch {
 					let existing = metadata_fetch_record::Entity::find()
 						.filter(metadata_fetch_record::Column::SeriesId.eq(&series_id))
-						.filter(metadata_fetch_record::Column::Status.is_in([
-							MetadataFetchStatus::AwaitingReview,
-							MetadataFetchStatus::Fetched,
-							MetadataFetchStatus::RateLimited,
-						]))
+						.filter(
+							metadata_fetch_record::Column::Status.is_in(SETTLED_STATUSES),
+						)
 						.one(conn)
 						.await?;
 
@@ -631,19 +654,51 @@ impl JobLifecycle for MetadataFetchJob {
 				if !self.params.force_refetch {
 					let existing = metadata_fetch_record::Entity::find()
 						.filter(metadata_fetch_record::Column::MediaId.eq(&media_id))
-						.filter(metadata_fetch_record::Column::Status.is_in([
-							MetadataFetchStatus::AwaitingReview,
-							MetadataFetchStatus::Fetched,
-							MetadataFetchStatus::RateLimited,
-						]))
+						.filter(
+							metadata_fetch_record::Column::Status.is_in(SETTLED_STATUSES),
+						)
 						.one(conn)
 						.await?;
 
-					if existing.is_some() {
-						output.skipped = 1;
+					if let Some(record) = existing {
+						let applied = record
+							.accepted_match_candidate
+							.filter(|_| record.status == MetadataFetchStatus::Fetched)
+							.filter(|_| self.params.refresh_applied)
+							.and_then(|c| {
+								serde_json::from_value::<MatchCandidate>(c).ok()
+							});
+						let refreshed = match applied {
+							Some(applied) => {
+								refresh_applied_match(
+									conn,
+									provider_cache.as_ref(),
+									&provider_configs,
+									&media_id,
+									target,
+									applied,
+								)
+								.await
+							},
+							None => Ok(false),
+						};
+						match refreshed {
+							Ok(true) => output.refreshed = 1,
+							Ok(false) => output.skipped = 1,
+							Err(e) if e.is_rate_limited() => output.rate_limited = 1,
+							Err(e) => {
+								output.failed = 1;
+								logs.push(
+									JobExecuteLog::error(format!(
+										"Failed to refresh media metadata: {e}"
+									))
+									.with_ctx(format!("For {media_name}")),
+								);
+							},
+						}
 						return Ok(JobTaskOutput {
 							output,
-							logs: vec![],
+							logs,
 							subtasks: vec![],
 						});
 					}
@@ -825,4 +880,68 @@ async fn resolve_library_type(
 		})?;
 
 	Ok(config.library_type)
+}
+
+/// Read the record an applied match came from again, and fill what is still empty from it.
+///
+/// The record is fetched by its id rather than searched for, so the match stays the one that
+/// was applied: a game whose article was picked by hand is not swapped for whatever a search
+/// would rank first. Only empty fields are filled, and locked ones never. Returns whether
+/// anything was read; a record the provider no longer has is left as it is.
+async fn refresh_applied_match(
+	conn: &DatabaseConnection,
+	provider_cache: &ProviderClientCache,
+	provider_configs: &[metadata_provider_config::Model],
+	media_id: &str,
+	target: RetroTarget,
+	applied: MatchCandidate,
+) -> Result<bool, MetadataProviderError> {
+	let Some(config) = provider_configs.iter().find(|c| {
+		c.provider_type
+			.to_string()
+			.eq_ignore_ascii_case(&applied.provider)
+	}) else {
+		return Ok(false);
+	};
+	let provider = provider_cache
+		.get_or_create(config)
+		.await
+		.map_err(|e| MetadataProviderError::Other(e.to_string()))?;
+
+	let mut query = SearchQuery::default();
+	if let Some(platform) = target.platform() {
+		query
+			.provider_hints
+			.insert("platform".to_string(), platform.as_str().to_string());
+	}
+	let metadata = match provider
+		.fetch_media_metadata_with_hints(&applied.external_id, &query)
+		.await
+	{
+		Ok(metadata) => metadata,
+		Err(MetadataProviderError::NotFound(_)) => return Ok(false),
+		Err(e) => return Err(e),
+	};
+
+	let exclude_fields = config
+		.auto_apply_config
+		.as_ref()
+		.and_then(|v| serde_json::from_value::<AutoApplyConfig>(v.clone()).ok())
+		.map(|c| c.exclude_fields)
+		.unwrap_or_default();
+	let candidate = MatchCandidate {
+		metadata: ExternalMetadata::Media(metadata),
+		..applied
+	};
+	apply::apply_media_match(
+		conn,
+		media_id,
+		&candidate,
+		MergeStrategy::FillGaps,
+		exclude_fields,
+		vec![],
+	)
+	.await
+	.map_err(|e| MetadataProviderError::Other(e.to_string()))?;
+	Ok(true)
 }
