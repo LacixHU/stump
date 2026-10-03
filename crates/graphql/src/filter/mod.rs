@@ -47,6 +47,19 @@ where
 	EndsWith(T),
 }
 
+/// Lowercases `value` for use in a `LIKE` pattern against `LOWER(column)`.
+///
+/// SQLite's `LOWER()` and `LIKE` fold ASCII only, so `LOWER('KÖNYV')` is `kÖnyv` and a pattern
+/// containing `ö` never matches it. Non-ASCII characters become `_` (any one character), which
+/// matches them in either case. ASCII is lowercased as before.
+fn fold_case(value: &str) -> String {
+	value
+		.chars()
+		.flat_map(|c| c.to_lowercase())
+		.map(|c| if c.is_ascii() { c } else { '_' })
+		.collect()
+}
+
 pub(crate) fn apply_string_filter<C, T>(
 	column: C,
 	filter: StringLikeFilter<T>,
@@ -70,35 +83,35 @@ where
 			let v: String = value.into();
 			Condition::all().add(
 				QExpr::expr(Func::lower(QExpr::col(column.as_column_ref())))
-					.like(format!("%{}%", v.to_lowercase())),
+					.like(format!("%{}%", fold_case(&v))),
 			)
 		},
 		StringLikeFilter::Contains(value) => {
 			let v: String = value.into();
 			Condition::all().add(
 				QExpr::expr(Func::lower(QExpr::col(column.as_column_ref())))
-					.like(format!("%{}%", v.to_lowercase())),
+					.like(format!("%{}%", fold_case(&v))),
 			)
 		},
 		StringLikeFilter::Excludes(value) => {
 			let v: String = value.into();
 			Condition::all().add(
 				QExpr::expr(Func::lower(QExpr::col(column.as_column_ref())))
-					.not_like(format!("%{}%", v.to_lowercase())),
+					.not_like(format!("%{}%", fold_case(&v))),
 			)
 		},
 		StringLikeFilter::StartsWith(value) => {
 			let v: String = value.into();
 			Condition::all().add(
 				QExpr::expr(Func::lower(QExpr::col(column.as_column_ref())))
-					.like(format!("{}%", v.to_lowercase())),
+					.like(format!("{}%", fold_case(&v))),
 			)
 		},
 		StringLikeFilter::EndsWith(value) => {
 			let v: String = value.into();
 			Condition::all().add(
 				QExpr::expr(Func::lower(QExpr::col(column.as_column_ref())))
-					.like(format!("%{}", v.to_lowercase())),
+					.like(format!("%{}", fold_case(&v))),
 			)
 		},
 		StringLikeFilter::LikeAnyOf(values) => {
@@ -106,7 +119,7 @@ where
 				let v: String = value.into();
 				acc.add(
 					QExpr::expr(Func::lower(QExpr::col(column.as_column_ref())))
-						.like(format!("%{}%", v.to_lowercase())),
+						.like(format!("%{}%", fold_case(&v))),
 				)
 			})
 		},
@@ -116,7 +129,7 @@ where
 				let v: String = value.into();
 				acc.add(
 					QExpr::expr(Func::lower(QExpr::col(column.as_column_ref())))
-						.like(format!("%{}%", v.to_lowercase())),
+						.like(format!("%{}%", fold_case(&v))),
 				)
 			})
 			.not(),
@@ -228,6 +241,13 @@ mod tests {
 			sql,
 			r#"SELECT  FROM "media" WHERE LOWER("media"."name") LIKE '%test%' OR LOWER("media"."name") LIKE '%example%'"#
 		);
+	}
+
+	#[test]
+	fn test_fold_case_matches_accented_capitals() {
+		assert_eq!(fold_case("Robert Prince"), "robert prince");
+		assert_eq!(fold_case("phoenix könyvkiadó"), "phoenix k_nyvkiad_");
+		assert_eq!(fold_case("ÁDÁM"), "_d_m");
 	}
 
 	#[test]

@@ -161,11 +161,19 @@ export default function BookOverviewSceneHeader({ media, book, completedAt }: Pr
 				</div>
 			)}
 
-			{developers.length > 0 && <PlainBadgeList label="Developers" values={developers} />}
+			{developers.length > 0 && <LabelledBadgeList label="Developers" values={developers} />}
 
-			{platforms.length > 0 && <PlainBadgeList label="Platforms" values={platforms} />}
+			{platforms.length > 0 && <LabelledBadgeList label="Platforms" values={platforms} />}
 
-			{composers.length > 0 && <PlainBadgeList label="Composers" values={composers} />}
+			{composers.length > 0 && (
+				<LabelledBadgeList
+					label="Composers"
+					values={composers}
+					buildHref={(composer) =>
+						paths.bookSearchWithFilter({ metadata: { composers: { likeAnyOf: [composer] } } })
+					}
+				/>
+			)}
 
 			{hasTags && (
 				<div className="gap-1 flex flex-col">
@@ -210,27 +218,36 @@ export default function BookOverviewSceneHeader({ media, book, completedAt }: Pr
 	)
 }
 
-type PlainBadgeListProps = {
+type LabelledBadgeListProps = {
 	label: string
 	values: string[]
+	buildHref?: (value: string) => string
 }
 
 /**
- * A labelled list of badges that link nowhere. Genres and writers link to a filtered search,
- * but the book search has no filter for a game's developers or platforms.
+ * A labelled list of badges, each linking to `buildHref(value)` when given. Without it the
+ * badges link nowhere: the book search has no filter for a game's developers or platforms.
  */
-function PlainBadgeList({ label, values }: PlainBadgeListProps) {
+function LabelledBadgeList({ label, values, buildHref }: LabelledBadgeListProps) {
 	return (
 		<div className="gap-1 flex flex-col">
 			<Text size="xs" variant="muted">
 				{label}
 			</Text>
 			<BadgeList>
-				{values.map((value) => (
-					<Badge key={value} variant="secondary" rounded="full">
-						{value}
-					</Badge>
-				))}
+				{values.map((value) =>
+					buildHref ? (
+						<Link key={value} to={buildHref(value)} underline={false}>
+							<Badge variant="secondary" rounded="full" className="cursor-pointer">
+								{value}
+							</Badge>
+						</Link>
+					) : (
+						<Badge key={value} variant="secondary" rounded="full">
+							{value}
+						</Badge>
+					),
+				)}
 			</BadgeList>
 		</div>
 	)

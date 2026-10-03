@@ -1,3 +1,39 @@
+# Filter books by composer
+
+## Problem
+
+Composers are fetched and shown, but nothing can filter on them the way Publisher can.
+
+## Plan
+
+- [x] `MediaMetadataFilterInput.composers` (string filter on the `composers` column) and
+      `MediaMetadataOverview.composers` (distinct names, split on commas)
+- [x] Schema dump + client codegen
+- [x] Books filter sheet: **Composers** multiselect next to Publisher
+- [x] Smart lists: **Book Meta → Composers** field
+- [x] Game page: composer badges link to the filtered book search, like genres and writers
+- [x] Docs line in retro-libraries
+
+## Review
+
+Rust: new `test_composers_filter_matches_composers_column` (JSON in the shape smart lists and
+the books filter send -> `LOWER("media_metadata"."composers") LIKE ...`); graphql filter and
+overview tests 6/6. Jest smartList/filters/book scenes 177/177. `tsc` via the scratch tsconfig:
+no errors in touched files.
+
+Scratch server (snapshot of `~/.stump`, three composers seeded) through the real API: the
+overview splits the list into names; `chris grigg (c64)` -> 1 book, `robert prince` -> 2,
+both -> 3, `nobody` -> 0. Scratch web build in headless Chrome: the game page's composer
+badges link to `?filters={"metadata":{"composers":{"likeAnyOf":[...]}}}`, clicking Robert
+Prince shows exactly his 2 books; the filter sheet has **Composers** after Publisher listing
+all three. Submitting the sheet did not apply in the harness for Publisher either, so that
+click path is unproven headless.
+
+Found, not fixed (older than this change, affects every string filter): SQLite `LOWER()`
+folds ASCII only, so a name with an accented capital never matches. `Ádám Kovács` -> 0, and
+on the real library the Publisher filter finds 0 books for `PHOENIX KÖNYVKIADÓ` and
+`VÉGA Magyar Sci-Fi Egyesület`.
+
 # Game info: uploads stay local, composers
 
 ## Problem

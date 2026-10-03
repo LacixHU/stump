@@ -1631,6 +1631,7 @@ export type MediaMetadataFilterInput = {
   ageRating?: InputMaybe<NumericFilterI32>;
   characters?: InputMaybe<FieldFilterString>;
   colorists?: InputMaybe<FieldFilterString>;
+  composers?: InputMaybe<FieldFilterString>;
   coverArtists?: InputMaybe<FieldFilterString>;
   day?: InputMaybe<NumericFilterI32>;
   editors?: InputMaybe<FieldFilterString>;
@@ -1745,6 +1746,7 @@ export type MediaMetadataOverview = {
   __typename?: 'MediaMetadataOverview';
   characters: Array<Scalars['String']['output']>;
   colorists: Array<Scalars['String']['output']>;
+  composers: Array<Scalars['String']['output']>;
   coverArtists: Array<Scalars['String']['output']>;
   editors: Array<Scalars['String']['output']>;
   genres: Array<Scalars['String']['output']>;
@@ -5921,7 +5923,7 @@ export type MediaFilterFormQueryVariables = Exact<{
 }>;
 
 
-export type MediaFilterFormQuery = { __typename?: 'Query', mediaMetadataOverview: { __typename?: 'MediaMetadataOverview', genres: Array<string>, writers: Array<string>, pencillers: Array<string>, colorists: Array<string>, letterers: Array<string>, inkers: Array<string>, publishers: Array<string>, editors: Array<string>, characters: Array<string> } };
+export type MediaFilterFormQuery = { __typename?: 'Query', mediaMetadataOverview: { __typename?: 'MediaMetadataOverview', genres: Array<string>, writers: Array<string>, pencillers: Array<string>, colorists: Array<string>, letterers: Array<string>, inkers: Array<string>, publishers: Array<string>, composers: Array<string>, editors: Array<string>, characters: Array<string> } };
 
 export type DeleteLibraryMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -10726,6 +10728,7 @@ export const MediaFilterFormDocument = new TypedDocumentString(`
     letterers
     inkers
     publishers
+    composers
     editors
     characters
   }

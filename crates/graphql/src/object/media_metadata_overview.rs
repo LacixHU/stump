@@ -102,6 +102,12 @@ impl MediaMetadataOverview {
 		get_unique_values_inner!(Editors, conn, series_id)
 	}
 
+	async fn composers(&self, ctx: &Context<'_>) -> Result<Vec<String>> {
+		let conn: &DatabaseConnection = ctx.data::<CoreContext>()?.conn.as_ref();
+		let series_id = self.series_id.clone();
+		get_unique_values_inner!(Composers, conn, series_id)
+	}
+
 	async fn publishers(&self, ctx: &Context<'_>) -> Result<Vec<String>> {
 		let conn: &DatabaseConnection = ctx.data::<CoreContext>()?.conn.as_ref();
 		let series_id = self.series_id.clone();

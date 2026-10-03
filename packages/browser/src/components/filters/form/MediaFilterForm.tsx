@@ -31,6 +31,7 @@ const query = graphql(`
 			letterers
 			inkers
 			publishers
+			composers
 			editors
 			characters
 		}
@@ -48,6 +49,7 @@ const schema = z.object({
 				.refine((val) => val == null || (val >= 0 && val <= 18)),
 			character: z.array(z.string()).optional(),
 			colorist: z.array(z.string()).optional(),
+			composer: z.array(z.string()).optional(),
 			editor: z.array(z.string()).optional(),
 			genre: z.array(z.string()).optional(),
 			inker: z.array(z.string()).optional(),
@@ -88,6 +90,7 @@ export default function MediaFilterForm() {
 			age_rating: (filters?.metadata as MediaMetadataFilterInput)?.ageRating?.eq ?? null,
 			character: (filters?.metadata as MediaMetadataFilterInput)?.characters?.likeAnyOf ?? [],
 			colorist: (filters?.metadata as MediaMetadataFilterInput)?.colorists?.likeAnyOf ?? [],
+			composer: (filters?.metadata as MediaMetadataFilterInput)?.composers?.likeAnyOf ?? [],
 			editor: (filters?.metadata as MediaMetadataFilterInput)?.editors?.likeAnyOf ?? [],
 			genre: (filters?.metadata as MediaMetadataFilterInput)?.genres?.likeAnyOf ?? [],
 			inker: (filters?.metadata as MediaMetadataFilterInput)?.inkers?.likeAnyOf ?? [],
@@ -195,6 +198,13 @@ export default function MediaFilterForm() {
 				}
 			}
 
+			if (values.metadata.composer?.length) {
+				newFilters.metadata = {
+					...newFilters.metadata,
+					composers: { likeAnyOf: values.metadata.composer },
+				}
+			}
+
 			if (values.metadata.writer?.length) {
 				newFilters.metadata = {
 					...newFilters.metadata,
@@ -298,6 +308,17 @@ export default function MediaFilterForm() {
 					/>
 
 					<GenericFilterMultiselect
+						name="metadata.composer"
+						label={t('metadataEditor.labels.composers')}
+						options={
+							data?.composers.map((composer) => ({
+								label: composer,
+								value: composer.toLowerCase(),
+							})) || []
+						}
+					/>
+
+					<GenericFilterMultiselect
 						name="metadata.editor"
 						label={t('metadataEditor.labels.editors')}
 						options={
@@ -330,6 +351,7 @@ const isEmptyResult = (result?: MediaFilterFormQuery['mediaMetadataOverview']) =
 		result?.letterers?.length ||
 		result?.inkers?.length ||
 		result?.publishers?.length ||
+		result?.composers?.length ||
 		result?.editors?.length ||
 		result?.characters?.length
 	) || result == null

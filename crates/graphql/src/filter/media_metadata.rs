@@ -35,6 +35,8 @@ pub struct MediaMetadataFilterInput {
 	#[graphql(default)]
 	pub editors: Option<StringLikeFilter<String>>,
 	#[graphql(default)]
+	pub composers: Option<StringLikeFilter<String>>,
+	#[graphql(default)]
 	pub age_rating: Option<NumericFilter<i32>>,
 	#[graphql(default)]
 	pub year: Option<NumericFilter<i32>>,
@@ -129,6 +131,10 @@ impl IntoFilter for MediaMetadataFilterInput {
 					.map(|f| apply_string_filter(media_metadata::Column::Editors, f)),
 			)
 			.add_option(
+				self.composers
+					.map(|f| apply_string_filter(media_metadata::Column::Composers, f)),
+			)
+			.add_option(
 				self.age_rating
 					.map(|f| apply_numeric_filter(media_metadata::Column::AgeRating, f)),
 			)
@@ -184,6 +190,7 @@ mod tests {
 			cover_artists: None,
 			inkers: None,
 			editors: None,
+			composers: None,
 			age_rating: None,
 			year: None,
 			month: None,
@@ -200,5 +207,28 @@ mod tests {
 		let serialized = serde_json::to_string(&filter).unwrap();
 		let expected = r#"{"title":{"eq":"Test Title"}}"#;
 		assert_eq!(serialized, expected);
+	}
+
+	#[test]
+	fn test_composers_filter_matches_composers_column() {
+		use sea_orm::{
+			prelude::*, sea_query::SqliteQueryBuilder, QuerySelect, QueryTrait,
+		};
+
+		// The shape smart lists and the books filter send
+		let filter: MediaMetadataFilterInput = serde_json::from_str(
+			r#"{"composers":{"likeAnyOf":["Chris Grigg (C64)","Jean-François Freitas"]}}"#,
+		)
+		.unwrap();
+		let sql = media_metadata::Entity::find()
+			.select_only()
+			.filter(filter.into_filter())
+			.into_query()
+			.to_string(SqliteQueryBuilder);
+
+		assert_eq!(
+			sql,
+			r#"SELECT  FROM "media_metadata" WHERE LOWER("media_metadata"."composers") LIKE '%chris grigg (c64)%' OR LOWER("media_metadata"."composers") LIKE '%jean-fran_ois freitas%'"#
+		);
 	}
 }

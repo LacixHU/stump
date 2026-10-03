@@ -1520,6 +1520,7 @@ input MediaMetadataFilterInput {
 	coverArtists: FieldFilterString = null
 	inkers: FieldFilterString = null
 	editors: FieldFilterString = null
+	composers: FieldFilterString = null
 	ageRating: NumericFilterI32 = null
 	year: NumericFilterI32 = null
 	month: NumericFilterI32 = null
@@ -1634,6 +1635,7 @@ type MediaMetadataOverview {
 	letterers: [String!]!
 	coverArtists: [String!]!
 	editors: [String!]!
+	composers: [String!]!
 	publishers: [String!]!
 	characters: [String!]!
 	teams: [String!]!
