@@ -1012,7 +1012,7 @@ pub struct CoverPlatform {
 	pub note_names: &'static [&'static str],
 }
 
-/// Map a platform hint (`c64`, `spectrum`, `amiga`, `dos`, or a looser spelling) onto the
+/// Map a platform hint (`c64`, `spectrum`, `amiga`, `dos`, `n64`, or a looser spelling) onto the
 /// one machine Wikipedia knows it by. `None` means there is nothing to narrow the search
 /// with, which is what puts the lookup back on its cross-platform path.
 pub fn resolve_cover_platform(platform: Option<&str>) -> Option<CoverPlatform> {
@@ -1041,6 +1041,27 @@ pub fn resolve_cover_platform(platform: Option<&str>) -> Option<CoverPlatform> {
 			aliases: &["amiga"],
 			note_names: &["amiga"],
 			wikidata_items: &["Q100047"],
+		}
+	} else if p == "snes"
+		|| p == "sfc"
+		|| p.contains("super nintendo")
+		|| p.contains("super famicom")
+		|| p.contains("super nes")
+	{
+		CoverPlatform {
+			category: "Super Nintendo Entertainment System game covers",
+			search_term: "Super Nintendo Entertainment System",
+			aliases: &["super nintendo", "snes", "super nes", "super famicom"],
+			note_names: &["snes", "super nintendo", "super nes"],
+			wikidata_items: &["Q183259"],
+		}
+	} else if p == "n64" || p.contains("nintendo 64") || p.contains("nintendo64") {
+		CoverPlatform {
+			category: "Nintendo 64 game covers",
+			search_term: "Nintendo 64",
+			aliases: &["nintendo 64", "n64"],
+			note_names: &["n64", "nintendo 64"],
+			wikidata_items: &["Q184839"],
 		}
 	} else if p == "dos" || p == "pc" || p.contains("msdos") || p.contains("ms-dos") {
 		CoverPlatform {
@@ -1361,6 +1382,18 @@ mod tests {
 		assert_eq!(category("spectrum"), "ZX Spectrum game covers");
 		assert_eq!(category("amiga"), "Amiga game covers");
 		assert_eq!(category("dos"), "MS-DOS game covers");
+		assert_eq!(category("n64"), "Nintendo 64 game covers");
+		assert_eq!(category("Nintendo 64"), "Nintendo 64 game covers");
+		assert_eq!(
+			category("snes"),
+			"Super Nintendo Entertainment System game covers"
+		);
+		assert_eq!(
+			category("Super Nintendo"),
+			"Super Nintendo Entertainment System game covers"
+		);
+		// Neither Nintendo console may resolve to the other
+		assert_ne!(category("snes"), category("n64"));
 		assert_eq!(resolve_cover_platform(None), None);
 	}
 
@@ -1369,7 +1402,7 @@ mod tests {
 	/// silently widens to every system again.
 	#[test]
 	fn every_supported_platform_resolves() {
-		for platform in ["c64", "spectrum", "amiga", "dos"] {
+		for platform in ["c64", "spectrum", "amiga", "dos", "n64", "snes"] {
 			let resolved = resolve_cover_platform(Some(platform));
 			assert!(
 				resolved.is_some(),

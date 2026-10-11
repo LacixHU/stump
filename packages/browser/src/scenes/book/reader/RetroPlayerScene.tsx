@@ -247,7 +247,9 @@ function RetroPlayerScene({ id }: { id: string }) {
 
 	const isPlaying = status === 'playing'
 	useGamepadJoystick({
-		enabled: isPlaying && inputMode !== 'keyboard',
+		// The N64 and SNES modules read pads themselves: this hook carries one stick and one
+		// fire button, and they have a full set of face and shoulder buttons
+		enabled: isPlaying && inputMode !== 'keyboard' && platform !== 'n64' && platform !== 'snes',
 		sendKey,
 	})
 
@@ -750,7 +752,9 @@ function RetroPlayerScene({ id }: { id: string }) {
 							<canvas
 								ref={canvasRef}
 								className={cn(
-									'inset-0 bg-black absolute h-full w-full touch-none object-contain [image-rendering:pixelated]',
+									'inset-0 bg-black absolute h-full w-full touch-none object-contain',
+									// Pixel art stays crisp; the N64's filtered 3D does not want it
+									platform !== 'n64' && '[image-rendering:pixelated]',
 									(status === 'loading' || status === 'error') && 'opacity-50',
 								)}
 							/>

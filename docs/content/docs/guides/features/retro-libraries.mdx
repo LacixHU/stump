@@ -1,6 +1,6 @@
 ---
 title: Retro computer libraries
-description: Catalog and play C64, ZX Spectrum, Amiga, and DOS disk/tape/program images in the browser
+description: Catalog and play C64, ZX Spectrum, Amiga, DOS, Nintendo 64, and Super Nintendo disk/tape/program images and ROMs in the browser
 ---
 
 # Retro computer libraries
@@ -9,12 +9,18 @@ Stump can catalog single-file disk and tape images for classic computers and pla
 
 ## Supported formats (MVP)
 
-| Platform     | Extensions                                         |
-| ------------ | -------------------------------------------------- |
-| Commodore 64 | `d64`, `t64`, `prg`, `g64`, `tap` (with path hint) |
-| ZX Spectrum  | `tzx`, `z80`, `sna`, `tap` (with path hint)        |
-| Amiga        | `adf`, `adz`                                       |
-| DOS          | `img`, `ima`, `exe`, `com`, `dosz`                 |
+| Platform       | Extensions                                                |
+| -------------- | --------------------------------------------------------- |
+| Commodore 64   | `d64`, `t64`, `prg`, `g64`, `crt`, `tap` (with path hint) |
+| ZX Spectrum    | `tzx`, `z80`, `sna`, `tap` (with path hint)               |
+| Amiga          | `adf`, `adz`                                              |
+| DOS            | `img`, `ima`, `exe`, `com`, `dosz`                        |
+| Nintendo 64    | `z64`, `n64`, `v64`                                       |
+| Super Nintendo | `sfc`, `smc`                                              |
+
+`sfc` and `smc` are the usual SNES / Super Famicom ROM extensions (`smc` images that carry a 512-byte copier header work too). `.fig`, `.swc` and `.bin` are not catalogued: the first two are rare and `.bin` is far too generic.
+
+`z64`, `n64` and `v64` are the three byte orders an N64 ROM dump comes in; the player accepts all of them. `.rom` and `.bin` are deliberately **not** catalogued: they are far too generic (Amiga Kickstart images, CD images), so rename a ROM to `.z64`.
 
 These extensions are registered globally (like PDF). Create a library with type **Retro** so auto-metadata (when enabled) targets the right providers.
 
@@ -29,6 +35,8 @@ Prefer nested folders (library pattern **Nested** is the default when you pick R
   Spectrum/Manic Miner/manic.tap
   Amiga/Lemmings/Lemmings.adf
   DOS/Doom/DOOM.EXE
+  N64/Super Mario 64/Super Mario 64.z64
+  SNES/Super Metroid/Super Metroid.sfc
 ```
 
 Each game folder becomes a **series**; each disk/tape file becomes **media**. Multi-disk games share one series.
@@ -191,7 +199,7 @@ Supported load types:
 
 Do **not** use `.zip` — that extension is already comic/CBZ. Rename a game folder zip to `.dosz`.
 
-Path segments `dos`, `msdos`, or `pc` tag a folder as DOS.
+Path segments `dos`, `msdos`, or `pc` tag a folder as DOS. (N64 and SNES ROMs need no folder name: their extensions are unique. If you do name one, `N64` / `Nintendo 64` and `SNES` / `Super Nintendo` / `Super Famicom` are kept apart; a bare `Nintendo` folder names neither.)
 
 ### Controls
 
@@ -199,6 +207,65 @@ Path segments `dos`, `msdos`, or `pc` tag a folder as DOS.
 - The mouse on the canvas is the DOS mouse. On a phone, drag a finger to move the pointer (it is **not** under the finger); tap is left click; a still long-press is right click.
 - On-screen stick and fire send arrow keys and Ctrl. Many DOS games accept that; mouse-only titles use the trackpad.
 - Save states snapshot the running DOSBox memory (and any files that changed on `C:` / `A:`). Load rewinds you to that point.
+
+## Nintendo 64 emulator
+
+In-browser N64 play uses **[N64Wasm](https://github.com/nbarkhina/N64Wasm)** by Neil Barkhina (MIT), a WebAssembly build of the [ParaLLEl N64](https://github.com/libretro/parallel-n64) core (GPL-2.0). Assets are served from `/retro/n64/v1/` (`player.html`, `player.js`, `n64wasm.js`, `n64wasm.wasm`, `assets.zip`). No console BIOS or boot ROM is needed. The directory is versioned because `/retro/*` is cached as immutable: a new build of the core goes in a new directory.
+
+Supported load types: **`.z64`**, **`.n64`** and **`.v64`**. Files are loaded whole, so a 64 MB ROM is held in memory next to the emulator.
+
+The core is not threaded, so it works without the cross-origin isolation headers some WebAssembly cores need. It does need:
+
+- **WebGL2** in the browser (a clear error is shown when it is missing)
+- about **512 MB** of memory for the session, which the core reserves up front; a low-memory phone may refuse it
+
+The emulator runs in an iframe of its own, which is how it stops: closing the player removes the frame and frees the heap, the GL context and the audio. The scene's canvas is not used.
+
+### Controls
+
+- A physical keyboard: **arrow keys** are the analog stick, **D** is A, **S** is B, **A** is Z, **Q** / **E** are L / R, **Enter** is Start, **I J K L** are the C buttons and **T F G H** are the D-pad. Browser shortcuts such as F5 are left alone.
+- A USB or Bluetooth **gamepad** in the standard layout: the left stick is the analog stick, the bottom face button is A and the left one is B, the bumpers are L and R, either trigger is Z, Start is Start, the D-pad is the D-pad, and the **right stick** is the four C buttons. Stick drift inside a 15% dead zone is ignored, and the rest of the travel is rescaled so full tilt is still reachable.
+- On-screen controls (touch / narrow screens) are the stick, **A**, **B**, **Z**, **L**, **R**, **Start** and the four **C** buttons. The overlay stick is digital in this version: it holds a direction, not a partial tilt, with a diagonal scaled to a unit-length push. It has no D-pad. Users with **Manage library** can rearrange the layout with **Edit overlay**, as for the other platforms.
+- The N64 has no keyboard, so the virtual keyboard button does not appear.
+- **Reset** restarts the console.
+- Audio starts on the first key press, click, or gamepad button, as browsers require.
+
+### Saving
+
+- **Save state** and **Load state** store the core's own snapshot on the server, one per user per game, like the other platforms. The state is gzipped by the core, so it stays well under the 64 MiB limit.
+- **Cartridge saves** (EEPROM, SRAM, FlashRAM and Controller Pak, written when a game saves in its own menu) are kept **in the browser** (IndexedDB database `stump-n64`, keyed by file name). They do not follow you between devices; use a save state for that. Clearing site data removes them.
+
+Not in this version: more than one controller, rumble, cheats, and an analog touch stick.
+
+## Super Nintendo emulator
+
+In-browser SNES play uses **[Snes9x](https://github.com/snes9xgit/snes9x)**, built to WebAssembly by the [`@wasm-gaming/snes9x-wasm`](https://github.com/wasm-gaming/snes9x-wasm) package (MIT wrapper). Assets are served from `/retro/snes/v1/` (`snes9x.js`, `snes9x.wasm`). No BIOS is needed.
+
+<Callout type="warn">
+	**Snes9x is licensed for non-commercial use only.** Unlike the other cores here it is not an
+	open-source licence (see `packages/browser/public/retro/snes/v1/COPYING`: "for non-commercial
+	purposes", "freeware for PERSONAL USE only"). That is fine for a personal or home server, but you
+	must remove `public/retro/snes/` and the `snes` platform before selling, or commercially
+	redistributing, a build of Stump.
+</Callout>
+
+Supported load types: **`.sfc`** and **`.smc`**. The Super Nintendo's enhancement chips are emulated inside the core, so games that use them need no extra files: Super FX (Star Fox, Yoshi's Island), SA-1 (Super Mario RPG, Kirby Super Star), DSP-1 to 4, S-DD1, SPC7110, C4, OBC1, S-RTC, the SETA chips and MSU-1. The video standard (NTSC 60.1 Hz or PAL 50 Hz) follows the cartridge header.
+
+The player runs the core directly in the page, one instance per play session, and draws into the player canvas at the shape a CRT showed it (a 256×224 picture on a 4:3 screen, so pixels are slightly wide), cropped to the 224 visible lines.
+
+### Controls
+
+- A physical keyboard: **arrow keys** are the D-pad, **S** is A, **X** is B, **A** is X, **Z** is Y, **Q** / **W** are L / R, **Enter** is Start and **Shift** is Select. Browser shortcuts such as F5 are left alone.
+- A USB or Bluetooth **gamepad** in the standard layout, with the face buttons rotated the way a real pad has them: the bottom button is B, the right one is A, the left one is Y and the top one is X. The bumpers are L and R, Select and Start are Select and Start, and the D-pad or the left stick is the D-pad.
+- On-screen controls (touch / narrow screens): the D-pad, **A**, **B**, **X**, **Y**, **L**, **R**, **Start** and **Select**. The D-pad is the overlay joystick, which holds two directions at once for a diagonal, as a real D-pad does. Users with **Manage library** can rearrange the layout with **Edit overlay**.
+- The SNES has no keyboard, so the virtual keyboard button does not appear.
+- **Reset** restarts the console. Audio starts on the first key press, click, or gamepad button, as browsers require.
+- Player one only: the second controller and the Multitap are not exposed in this version.
+
+### Saving
+
+- **Save state** and **Load state** store the core's own snapshot on the server, one per user per game, like the other platforms (about 0.8 MB).
+- **Cartridge saves** (battery RAM, written when a game saves in its own menu) are kept **in the browser** (IndexedDB database `stump-snes`, keyed by file name) and written every 15 seconds and when you leave. They do not follow you between devices; use a save state for that. Clearing site data removes them.
 
 ## Covers / thumbnails
 
@@ -213,7 +280,7 @@ Retro files have no internal pages, so Stump **cannot** generate a cover from th
 
 Then run a library **scan** (or thumbnail generation). Stump copies/resizes the sidecar into the thumbnail store.
 
-If no sidecar is found, Stump searches Wikipedia via the MediaWiki API in [Category:Video game covers](https://en.wikipedia.org/wiki/Category:Video_game_covers) (and platform subcategories such as Commodore 64 / ZX Spectrum / Amiga / MS-DOS). A matching cover is downloaded and stored as the thumbnail.
+If no sidecar is found, Stump searches Wikipedia via the MediaWiki API in [Category:Video game covers](https://en.wikipedia.org/wiki/Category:Video_game_covers) (and platform subcategories such as Commodore 64 / ZX Spectrum / Amiga / MS-DOS / Nintendo 64 / Super Nintendo). A matching cover is downloaded and stored as the thumbnail.
 
 Sidecar files always win over Wikipedia. Many Wikipedia covers are fair-use; only use this for your own library. Manual upload on the book manage page still works.
 
@@ -288,11 +355,12 @@ behind a different disk.
 Snapshots are written to `save_states/{media_id}/{user_id}.savestate` under the Stump
 config directory, with a small metadata row in the database. Deleting a library removes
 the snapshots belonging to its books. The server accepts snapshots up to **64 MiB**,
-which covers a C64 snapshot (a few hundred KiB), an Amiga one (a few MiB), and a gzipped
-DOSBox memory dump.
+which covers a C64 snapshot (a few hundred KiB), an Amiga one (a few MiB), a gzipped
+DOSBox memory dump, a gzipped N64 snapshot, and a SNES one (under 1 MB).
 
 Save states depend on the emulator core being able to write a snapshot. The C64 and Amiga
-cores write a native machine image; DOS snapshots the js-dos WASM heap. JSSpeccy cannot
+cores write a native machine image; DOS snapshots the js-dos WASM heap; the N64 core writes
+its own gzipped snapshot; Snes9x writes a native machine image. JSSpeccy cannot
 write a snapshot, so the save and load buttons stay hidden for Spectrum games rather than
 offered and then refused.
 
@@ -303,8 +371,11 @@ images.
 
 Machine ROMs differ by platform. The Spectrum ROMs ship with the JSSpeccy bundle, which
 Amstrad permits for emulators; the Amiga's Kickstart does not allow that, so you supply it
-yourself (see above). DOSBox does not need an IBM BIOS. The Spectrum and Amiga cores are
-GPL-3.0; the DOS core is GPL-2.0 — see those sections.
+yourself (see above). DOSBox does not need an IBM BIOS, and the N64 core needs no boot ROM.
+The SNES core needs no BIOS either, but **Snes9x is licensed for non-commercial use only**
+(see the SNES section): do not ship it in anything you sell or commercially redistribute.
+The Spectrum and Amiga cores are GPL-3.0; the DOS and N64 cores are GPL-2.0 (the N64 host
+code around the core is MIT) — see those sections.
 
 ## OPDS
 

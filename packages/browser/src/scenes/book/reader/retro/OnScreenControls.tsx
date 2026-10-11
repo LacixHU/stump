@@ -214,7 +214,30 @@ const DOS_EDITOR_ROWS: OverlayControlId[][] = [
 	],
 ]
 
+/**
+ * The pad has no keys at all: the stick, A/B, the Z trigger and the two shoulders, Start,
+ * and the four yellow C buttons. The D-pad is left to the keyboard and a real pad; the
+ * joystick's four directions are the analog stick here.
+ */
+const N64_EDITOR_ROWS: OverlayControlId[][] = [
+	[JOYSTICK_ID],
+	['a', 'b', 'z', 'l', 'r', 'start'],
+	['cup', 'cdown', 'cleft', 'cright'],
+]
+
+/**
+ * The SNES pad: a D-pad (the overlay joystick, which holds up to two directions at once as a
+ * real D-pad does), the A/B/X/Y diamond, two shoulders, Start and Select.
+ */
+const SNES_EDITOR_ROWS: OverlayControlId[][] = [
+	[JOYSTICK_ID],
+	['a', 'b', 'x', 'y'],
+	['l', 'r', 'start', 'select'],
+]
+
 const EDITOR_ROWS: Partial<Record<RetroPlatform, OverlayControlId[][]>> = {
+	snes: SNES_EDITOR_ROWS,
+	n64: N64_EDITOR_ROWS,
 	c64: C64_EDITOR_ROWS,
 	spectrum: SPECTRUM_EDITOR_ROWS,
 	amiga: AMIGA_EDITOR_ROWS,
@@ -263,7 +286,37 @@ const DOS_OVERLAY_KEYS: OverlayKeyPlacement[] = [
 	{ id: 'runstop', x: 0.7, y: 0.92 },
 ]
 
+/** Stick on the left, A and B and the C cluster on the right, Z under the thumb. */
+const N64_OVERLAY_KEYS: OverlayKeyPlacement[] = [
+	{ id: JOYSTICK_ID, x: 0.15, y: 0.74 },
+	{ id: 'a', x: 0.88, y: 0.8 },
+	{ id: 'b', x: 0.78, y: 0.88 },
+	{ id: 'z', x: 0.08, y: 0.42 },
+	{ id: 'l', x: 0.08, y: 0.1 },
+	{ id: 'r', x: 0.92, y: 0.1 },
+	{ id: 'start', x: 0.5, y: 0.92 },
+	{ id: 'cup', x: 0.72, y: 0.62 },
+	{ id: 'cdown', x: 0.72, y: 0.78 },
+	{ id: 'cleft', x: 0.64, y: 0.7 },
+	{ id: 'cright', x: 0.8, y: 0.7 },
+]
+
+/** D-pad on the left, the diamond on the right (A right, B bottom, X top, Y left), shoulders on top. */
+const SNES_OVERLAY_KEYS: OverlayKeyPlacement[] = [
+	{ id: JOYSTICK_ID, x: 0.15, y: 0.74 },
+	{ id: 'a', x: 0.9, y: 0.74 },
+	{ id: 'b', x: 0.82, y: 0.86 },
+	{ id: 'x', x: 0.82, y: 0.62 },
+	{ id: 'y', x: 0.74, y: 0.74 },
+	{ id: 'l', x: 0.08, y: 0.1 },
+	{ id: 'r', x: 0.92, y: 0.1 },
+	{ id: 'select', x: 0.42, y: 0.92 },
+	{ id: 'start', x: 0.58, y: 0.92 },
+]
+
 const PLATFORM_OVERLAY_KEYS: Partial<Record<RetroPlatform, OverlayKeyPlacement[]>> = {
+	snes: SNES_OVERLAY_KEYS,
+	n64: N64_OVERLAY_KEYS,
 	spectrum: SPECTRUM_OVERLAY_KEYS,
 	amiga: AMIGA_OVERLAY_KEYS,
 	dos: DOS_OVERLAY_KEYS,
@@ -615,6 +668,8 @@ function PadButton({
 		'help',
 		'capslock',
 		'delete',
+		'start',
+		'select',
 	].includes(placement.id)
 
 	return (

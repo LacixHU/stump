@@ -1,3 +1,130 @@
+# Super Nintendo (SNES) support
+
+## Problem
+
+SNES ROMs (`.sfc`, `.smc`) are not scanned or playable. Core: the prebuilt Snes9x wasm from
+`@wasm-gaming/snes9x-wasm@0.1.1` (Snes9x is **non-commercial** licensed). No iframe needed: a
+per-session module instance drawing into the scene canvas. Plan:
+`~/.claude/plans/dapper-nibbling-whisper.md`.
+
+## Plan
+
+- [x] Rust: `RetroPlatform::Snes`, extensions, hints (+ narrow the N64 `nintendo` hint), tag, `select` overlay id, tests
+- [x] Rust: `content_type.rs`, OPDS link, Wikipedia cover platform
+- [x] TS: `patterns.ts` mirror (+ N64 hint fix), `emulators/index.ts`, `keys.ts`, `OnScreenControls.tsx`, scene pad exception
+- [x] Vendor `snes9x.js`/`snes9x.wasm` to `public/retro/snes/v1/` + COPYING + README
+- [x] `snes.ts`, `snes-keys.ts`, `snes-saves.ts`, `snes-video.ts`, `snes-timing.ts`, `snes-audio.ts` with Jest tests
+- [x] Docs, README, Fork features
+- [x] Verify: cargo test, jest, tsc, cover probe, headless Chrome with public test ROMs, scratch scan, format
+
+## Review
+
+Rust: retro 27/27 (new: SNES extensions, hints, tag, `select`, the two-Nintendo-consoles
+cross-checks), content_type, OPDS and Wikipedia tests pass; `cargo fmt --check` clean. `core`
+has 7 failing `kobo::entity` tests (`entity.rs:449`), untouched and pre-existing. Jest `retro`
+251/251 (62 new, including `platform-resolve.test.ts`, which pins the TS resolver to the Rust
+cases). `tsc` via the scratch config: no errors in any SNES file.
+
+**Real core, real ROMs** (headless Chrome, public-domain `PeterLemon/SNES` demos, scratch dir
+only, repo has no licence file so nothing was committed). All pass:
+
+- renders: `HelloWorld.sfc` draws "Hello, World!" and `RotZoom.sfc` a Mode 7 race track
+  (screenshots read), canvas 1195x896 (4:3), no errors logged
+- pacing: 121 frames in 2 s with audio (60.1 Hz), 120 frames in 2 s on the wall clock with the
+  audio context held suspended
+- input, using `ControllerLatency.sfc` (white while ANY button is down): all 12 buttons on the
+  keyboard (Shift left and right), via the overlay `sendKey`, and via a fake gamepad (face
+  buttons, shoulders, Start/Select, D-pad, left stick; stick drift ignored); ids not on a SNES
+  pad do nothing; blur releases held keys; F5 is not swallowed
+- Mode 7: still without input, rotates on R, zooms on A
+- audio: `Twinkle.sfc` puts real samples through the ring (peak 0.12, 99.9% non-zero, 48 kHz)
+- save states: 823 KB, `STUMPSNS` header; after rotating the other way, load restores the
+  exact saved picture (hash equal); a save from another platform is refused
+- cartridge RAM: a ROM with its header patched to 8 KB battery RAM keeps a written pattern
+  across destroy/create via IndexedDB, and a different file name does not see it
+- destroy: frames stop, keyboard unhooked, audio context closed
+
+Real scan on a scratch server: `.sfc`/`.smc` (under `Super Nintendo/` and `SNES/`) and a `.z64`
+under `N64/` catalogued side by side; `.rom`, `.bin`, `.fig` ignored; `play-file` serves the
+bytes; `controls.json` keeps `joystick, a, select, start, x`; a SNES save state is accepted.
+Live Wikipedia probe: Super Mario World, Chrono Trigger, Super Metroid find covers via
+`Category:Super Nintendo Entertainment System game covers`; a made-up title finds none.
+
+Fixed while here: the N64 path hint matched any folder containing `nintendo`, so a
+`Super Nintendo` folder would have resolved to N64. Now `n64` / `nintendo 64` / `nintendo64`.
+
+**Real games** (the user put them in `F:\Retro`; read-only, copied to scratch, nothing committed):
+
+- _Super Mario World (Europe)_, headless Chrome: PAL cart runs at 49.3 fps; real music (peak
+  0.23); intro, title, file select, the "Welcome! This is Dinosaur Land" box, running and jumping
+  through Yoshi's Island 1 to the overworld map (screenshots read); save state 823 KB restores
+  the exact picture; battery RAM present (2 KB); no errors. (Start is Pause in a level: an early
+  run of mine froze the game by pressing it six times, which was the harness, not the player.)
+- _Zelda: Ocarina of Time (U) V1.2_ in the N64 player (GPU via ANGLE/D3D11): boots and runs at
+  61-63 fps for 50 s, 3D title and file select render correctly; Start advances, the analog stick
+  moves the menu cursor, every one of A/B/Z/L/R/C-up reaches the core, a half-tilted gamepad stick
+  arrives as 0.41; save state 1.35 MB in 214 ms (well under the 64 MiB limit) and loading puts the
+  cursor back where it was saved (checked by eye: the animated background defeats a pixel hash);
+  reset and destroy are clean; no errors. The core prints its own "Saving SRAM..." toast on boot.
+
+NOT verified: enhancement-chip games (Super FX, SA-1), sound heard on real speakers, the touch
+overlay on a real phone, and the N64 on a machine without a GPU (software GL was only tried on the
+bare-metal demos). Licence: Snes9x is non-commercial; stated in COPYING, the vendor README, the
+docs, README and Fork features.
+
+# Nintendo 64 support
+
+## Problem
+
+Retro libraries cover C64, Spectrum, Amiga and DOS; N64 ROMs (`.z64`, `.n64`, `.v64`) are not
+scanned and cannot be played. Core: N64Wasm (MIT glue, parallel-n64 core), run inside a
+same-origin iframe because it is a page-level singleton. Plan: `~/.claude/plans/dapper-nibbling-whisper.md`.
+
+## Plan
+
+- [x] Rust: `RetroPlatform::N64`, extensions in both resolvers, path hints, series tag, overlay ids, tests
+- [x] Rust: `content_type.rs`, OPDS link, Wikipedia cover platform (probed live first)
+- [x] TS: `patterns.ts` mirror, `emulators/index.ts`, `keys.ts`, `OnScreenControls.tsx`
+- [x] Vendor N64Wasm to `public/retro/n64/v1/` + `player.html`/`player.js` host, `.prettierignore`
+- [x] `n64.ts`, `n64-keys.ts`, `n64-saves.ts` + Jest tests
+- [x] Scene: per-platform canvas class, no gamepad hook for n64 (audio unlock lives in `n64.ts`)
+- [x] Docs, README, Fork features (no new i18n strings were needed)
+- [ ] Verify with a real commercial-style game (see Review: none was available here)
+
+## Review
+
+Rust: `retro`/`content_type`/OPDS/Wikipedia tests pass (core retro 24/24, metadata 60/60); `cargo
+fmt --check` clean. `core` has 5 failing `kobo::entity` tests (`entity.rs:449` unwrap on `None`);
+that code is untouched and predates this work. Jest `retro` 189/189 (30 new: `n64-keys`,
+`n64-saves`). `tsc` via the scratch config: no errors in any N64 file.
+
+Real scan on a scratch server (own DB, port 10811): `.z64`/`.n64`/`.v64` catalogued as books
+with `pages=-1`, `.rom`/`.bin` ignored, `play-file` serves the exact bytes, `controls.json`
+keeps `joystick, a, start, cup, cright` and drops an unknown id, an N64 save state is accepted.
+Live Wikipedia probe: Super Mario 64, GoldenEye 007 and Ocarina of Time find covers through
+`Category:Nintendo 64 game covers`; a nonexistent title finds none.
+
+Headless Chrome, real core (20 checks, all pass): boots in the iframe, the core calls
+`updateMobileControls` every frame and keeps running, the audio ring is drained, keyboard /
+overlay / fake-gamepad inputs produce exactly the 14-flag string and stick vector the core's
+`neil_send_mobile_controls` expects (read from `mymain.cpp`: y up positive, all 14 flags honoured),
+reset, save state (20 KB, `STUMPN64` header, gzip body) and load state round-trip, a save from
+another platform is refused, `destroy` removes the frame.
+
+Found while verifying:
+
+- The core skips the host's input whenever it sees a gamepad of its own
+  (`mobileMode && !gamepadConnected`), so a plugged-in pad would have killed keyboard and
+  overlay input. `player.js` now hides gamepads from the frame and the host polls them.
+- Peter Lemon's public-domain bare-metal demos trap ("memory access out of bounds") in N64Wasm
+  because they set `VI_ORIGIN` to a KSEG1 address. Upstream's own page does the same, so it is the
+  core, not this host. Patched to a physical origin they run, but draw nothing meaningful in this
+  core, so they only prove the frame loop, not rendering.
+
+NOT verified: a real game's picture, sound and feel. No N64 ROM was available (and commercial
+ROMs were not fetched), so rendering, audio output, and L/R/analog response inside a game are
+unproven end to end; the input path is proven up to the core's documented entry point.
+
 # Filter books by composer
 
 ## Problem

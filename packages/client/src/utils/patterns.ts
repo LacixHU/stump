@@ -2,12 +2,13 @@ export const ARCHIVE_EXTENSION = /cbr|cbz|zip|rar/
 export const EBOOK_EXTENSION = /epub/
 export const PDF_EXTENSION = /pdf/
 
-/** Retro computer disk/tape image extensions (C64, Spectrum, Amiga, DOS). */
+/** Retro computer disk/tape image and console ROM extensions (C64, Spectrum, Amiga, DOS, N64, SNES). */
 export const RETRO_EXTENSIONS = [
 	'd64',
 	't64',
 	'prg',
 	'g64',
+	'crt',
 	'tap',
 	'tzx',
 	'z80',
@@ -19,19 +20,25 @@ export const RETRO_EXTENSIONS = [
 	'exe',
 	'com',
 	'dosz',
+	'z64',
+	'n64',
+	'v64',
+	'sfc',
+	'smc',
 ] as const
 
 export type RetroExtension = (typeof RETRO_EXTENSIONS)[number]
 
 export const RETRO_EXTENSION = new RegExp(`^(?:${RETRO_EXTENSIONS.join('|')})$`, 'i')
 
-export type RetroPlatform = 'c64' | 'spectrum' | 'amiga' | 'dos'
+export type RetroPlatform = 'c64' | 'spectrum' | 'amiga' | 'dos' | 'n64' | 'snes'
 
 const UNIQUE_EXT_PLATFORM: Record<string, RetroPlatform> = {
 	d64: 'c64',
 	t64: 'c64',
 	prg: 'c64',
 	g64: 'c64',
+	crt: 'c64',
 	tzx: 'spectrum',
 	z80: 'spectrum',
 	sna: 'spectrum',
@@ -42,6 +49,11 @@ const UNIQUE_EXT_PLATFORM: Record<string, RetroPlatform> = {
 	exe: 'dos',
 	com: 'dos',
 	dosz: 'dos',
+	z64: 'n64',
+	n64: 'n64',
+	v64: 'n64',
+	sfc: 'snes',
+	smc: 'snes',
 }
 
 /**
@@ -97,6 +109,24 @@ function platformFromPathHints(path?: string): RetroPlatform | undefined {
 		) {
 			return 'spectrum'
 		}
+		if (
+			segment === 'snes' ||
+			segment === 'sfc' ||
+			segment.startsWith('snes') ||
+			segment.includes('super nintendo') ||
+			segment.includes('super famicom')
+		) {
+			return 'snes'
+		}
+		// Not a bare `nintendo`: `Super Nintendo` is a different machine
+		if (
+			segment === 'n64' ||
+			segment.startsWith('n64') ||
+			segment.includes('nintendo 64') ||
+			segment.includes('nintendo64')
+		) {
+			return 'n64'
+		}
 		if (segment === 'amiga' || segment.includes('amiga')) {
 			return 'amiga'
 		}
@@ -121,6 +151,8 @@ function platformFromSeriesTags(tags?: string[]): RetroPlatform | undefined {
 		if (lower === 'platform:spectrum') return 'spectrum'
 		if (lower === 'platform:amiga') return 'amiga'
 		if (lower === 'platform:dos') return 'dos'
+		if (lower === 'platform:n64') return 'n64'
+		if (lower === 'platform:snes') return 'snes'
 	}
 	return undefined
 }

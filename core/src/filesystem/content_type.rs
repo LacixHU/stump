@@ -27,7 +27,7 @@ pub enum ContentType {
 	WEBP,
 	GIF,
 	TXT,
-	/// Retro computer disk/tape image (C64, Spectrum, Amiga, DOS, etc.)
+	/// Retro computer disk/tape image or console ROM (C64, Spectrum, Amiga, DOS, N64, etc.)
 	RETRO,
 	#[default]
 	UNKNOWN,
@@ -89,8 +89,9 @@ impl ContentType {
 			"gif" => ContentType::GIF,
 			"txt" => ContentType::TXT,
 			// Retro disk/tape images — extension-first; infer usually fails
-			"d64" | "t64" | "prg" | "g64" | "tap" | "tzx" | "z80" | "sna" | "adf"
-			| "adz" | "img" | "ima" | "exe" | "com" | "dosz" => ContentType::RETRO,
+			"d64" | "t64" | "prg" | "g64" | "crt" | "tap" | "tzx" | "z80" | "sna"
+			| "adf" | "adz" | "img" | "ima" | "exe" | "com" | "dosz" | "z64" | "n64"
+			| "v64" | "sfc" | "smc" => ContentType::RETRO,
 			_ => temporary_content_workarounds(extension),
 		}
 	}
@@ -98,8 +99,8 @@ impl ContentType {
 	/// Extensions treated as retro computer media (disk/tape images).
 	pub fn retro_extensions() -> &'static [&'static str] {
 		&[
-			"d64", "t64", "prg", "g64", "tap", "tzx", "z80", "sna", "adf", "adz", "img",
-			"ima", "exe", "com", "dosz",
+			"d64", "t64", "prg", "g64", "crt", "tap", "tzx", "z80", "sna", "adf", "adz",
+			"img", "ima", "exe", "com", "dosz", "z64", "n64", "v64", "sfc", "smc",
 		]
 	}
 
@@ -401,6 +402,7 @@ impl From<&str> for ContentType {
 			| "application/x-t64"
 			| "application/x-c64-prg"
 			| "application/x-g64"
+			| "application/x-crt"
 			| "application/x-tap"
 			| "application/x-tzx"
 			| "application/x-z80"
@@ -517,12 +519,18 @@ mod tests {
 		assert_eq!(ContentType::from_extension("ncx"), ContentType::XML);
 		assert_eq!(ContentType::from_extension("unknown"), ContentType::UNKNOWN);
 		assert_eq!(ContentType::from_extension("d64"), ContentType::RETRO);
+		assert_eq!(ContentType::from_extension("crt"), ContentType::RETRO);
 		assert_eq!(ContentType::from_extension("adf"), ContentType::RETRO);
 		assert_eq!(ContentType::from_extension("tzx"), ContentType::RETRO);
 		assert_eq!(ContentType::from_extension("tap"), ContentType::RETRO);
 		assert_eq!(ContentType::from_extension("img"), ContentType::RETRO);
 		assert_eq!(ContentType::from_extension("exe"), ContentType::RETRO);
 		assert_eq!(ContentType::from_extension("dosz"), ContentType::RETRO);
+		assert_eq!(ContentType::from_extension("z64"), ContentType::RETRO);
+		assert_eq!(ContentType::from_extension("n64"), ContentType::RETRO);
+		assert_eq!(ContentType::from_extension("v64"), ContentType::RETRO);
+		assert_eq!(ContentType::from_extension("sfc"), ContentType::RETRO);
+		assert_eq!(ContentType::from_extension("smc"), ContentType::RETRO);
 	}
 
 	#[test]
@@ -682,9 +690,14 @@ mod tests {
 	fn test_content_type_is_retro() {
 		assert!(ContentType::RETRO.is_retro());
 		assert!(ContentType::is_retro_extension("d64"));
+		assert!(ContentType::is_retro_extension("CRT"));
 		assert!(ContentType::is_retro_extension("ADF"));
 		assert!(ContentType::is_retro_extension("img"));
 		assert!(ContentType::is_retro_extension("DOSZ"));
+		assert!(ContentType::is_retro_extension("Z64"));
+		assert!(ContentType::is_retro_extension("SFC"));
+		assert!(!ContentType::is_retro_extension("bin"));
+		assert!(!ContentType::is_retro_extension("rom"));
 		assert!(!ContentType::is_retro_extension("cbz"));
 		assert!(!ContentType::PDF.is_retro());
 	}

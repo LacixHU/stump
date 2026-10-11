@@ -13,6 +13,10 @@ export async function loadEmulator(platform: RetroPlatform): Promise<RetroEmulat
 			return (await import('./amiga')).default
 		case 'dos':
 			return (await import('./dos')).default
+		case 'n64':
+			return (await import('./n64')).default
+		case 'snes':
+			return (await import('./snes')).default
 		default: {
 			const _exhaustive: never = platform
 			throw new Error(`Unsupported retro platform: ${_exhaustive}`)

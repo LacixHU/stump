@@ -34,6 +34,11 @@ fn is_generic_cover_folder(name: &str) -> bool {
 			| "zx spectrum"
 			| "amiga 500"
 			| "ms-dos"
+			| "n64" | "nintendo"
+			| "snes" | "super nintendo"
+			| "super famicom"
+			| "sfc" | "nintendo 64"
+			| "nintendo64"
 	)
 }
 
@@ -83,6 +88,8 @@ pub enum RetroPlatform {
 	Spectrum,
 	Amiga,
 	Dos,
+	N64,
+	Snes,
 }
 
 impl RetroPlatform {
@@ -111,6 +118,8 @@ impl RetroPlatform {
 			Self::Spectrum => "spectrum",
 			Self::Amiga => "amiga",
 			Self::Dos => "dos",
+			Self::N64 => "n64",
+			Self::Snes => "snes",
 		}
 	}
 
@@ -135,10 +144,12 @@ impl std::fmt::Display for RetroPlatform {
 pub fn resolve_retro_platform(path: &str, extension: &str) -> RetroPlatform {
 	let ext = extension.to_lowercase();
 	match ext.as_str() {
-		"d64" | "t64" | "prg" | "g64" => RetroPlatform::C64,
+		"d64" | "t64" | "prg" | "g64" | "crt" => RetroPlatform::C64,
 		"tzx" | "z80" | "sna" => RetroPlatform::Spectrum,
 		"adf" | "adz" => RetroPlatform::Amiga,
 		"img" | "ima" | "exe" | "com" | "dosz" => RetroPlatform::Dos,
+		"z64" | "n64" | "v64" => RetroPlatform::N64,
+		"sfc" | "smc" => RetroPlatform::Snes,
 		"tap" => resolve_tap_platform(path),
 		_ => {
 			tracing::warn!(
@@ -195,6 +206,22 @@ pub fn platform_from_path_hints(path: &str) -> Option<RetroPlatform> {
 		{
 			return Some(RetroPlatform::Dos);
 		}
+		if *segment == "snes"
+			|| *segment == "sfc"
+			|| segment.starts_with("snes")
+			|| segment.contains("super nintendo")
+			|| segment.contains("super famicom")
+		{
+			return Some(RetroPlatform::Snes);
+		}
+		// Not a bare `nintendo`: `Super Nintendo` is a different machine
+		if *segment == "n64"
+			|| segment.starts_with("n64")
+			|| segment.contains("nintendo 64")
+			|| segment.contains("nintendo64")
+		{
+			return Some(RetroPlatform::N64);
+		}
 	}
 
 	None
@@ -212,6 +239,8 @@ where
 			"platform:spectrum" => return Some(RetroPlatform::Spectrum),
 			"platform:amiga" => return Some(RetroPlatform::Amiga),
 			"platform:dos" => return Some(RetroPlatform::Dos),
+			"platform:n64" => return Some(RetroPlatform::N64),
+			"platform:snes" => return Some(RetroPlatform::Snes),
 			_ => {},
 		}
 	}
@@ -229,10 +258,12 @@ where
 {
 	let ext = extension.to_lowercase();
 	match ext.as_str() {
-		"d64" | "t64" | "prg" | "g64" => RetroPlatform::C64,
+		"d64" | "t64" | "prg" | "g64" | "crt" => RetroPlatform::C64,
 		"tzx" | "z80" | "sna" => RetroPlatform::Spectrum,
 		"adf" | "adz" => RetroPlatform::Amiga,
 		"img" | "ima" | "exe" | "com" | "dosz" => RetroPlatform::Dos,
+		"z64" | "n64" | "v64" => RetroPlatform::N64,
+		"sfc" | "smc" => RetroPlatform::Snes,
 		"tap" => {
 			if let Some(p) = platform_from_path_hints(path) {
 				return p;
@@ -374,6 +405,15 @@ const RETRO_OVERLAY_SPECIAL_IDS: &[&str] = &[
 	"cursordown",
 	"cursorleft",
 	"cursorright",
+	// The Nintendo 64 pad: Start, and the four yellow C buttons (A, B, L, R and Z are
+	// single letters, already accepted above).
+	"start",
+	"cup",
+	"cdown",
+	"cleft",
+	"cright",
+	// The Super Nintendo pad adds Select; A, B, X, Y, L, R and Start are covered above.
+	"select",
 ];
 
 const MAX_OVERLAY_KEYS: usize = 80;
@@ -678,6 +718,14 @@ mod tests {
 		assert!(!RetroPlatform::Dos.is_covered_by(MetadataProvider::Lemon64));
 		assert!(!RetroPlatform::Dos.is_covered_by(MetadataProvider::WorldOfSpectrum));
 		assert!(!RetroPlatform::Dos.is_covered_by(MetadataProvider::LemonAmiga));
+
+		assert!(!RetroPlatform::N64.is_covered_by(MetadataProvider::Lemon64));
+		assert!(!RetroPlatform::N64.is_covered_by(MetadataProvider::WorldOfSpectrum));
+		assert!(!RetroPlatform::N64.is_covered_by(MetadataProvider::LemonAmiga));
+
+		assert!(!RetroPlatform::Snes.is_covered_by(MetadataProvider::Lemon64));
+		assert!(!RetroPlatform::Snes.is_covered_by(MetadataProvider::WorldOfSpectrum));
+		assert!(!RetroPlatform::Snes.is_covered_by(MetadataProvider::LemonAmiga));
 	}
 
 	#[test]
@@ -687,6 +735,8 @@ mod tests {
 			RetroPlatform::Spectrum,
 			RetroPlatform::Amiga,
 			RetroPlatform::Dos,
+			RetroPlatform::N64,
+			RetroPlatform::Snes,
 		] {
 			assert!(platform.is_covered_by(MetadataProvider::Wikipedia));
 			assert!(!platform.is_covered_by(MetadataProvider::Hardcover));
@@ -706,6 +756,10 @@ mod tests {
 		);
 		assert_eq!(
 			resolve_retro_platform("/games/foo.prg", "prg"),
+			RetroPlatform::C64
+		);
+		assert_eq!(
+			resolve_retro_platform("/games/foo.crt", "crt"),
 			RetroPlatform::C64
 		);
 		assert_eq!(
@@ -744,6 +798,109 @@ mod tests {
 			resolve_retro_platform("/games/foo.dosz", "dosz"),
 			RetroPlatform::Dos
 		);
+		// The three byte orders of an N64 ROM dump
+		for ext in ["z64", "n64", "v64", "Z64"] {
+			assert_eq!(
+				resolve_retro_platform(&format!("/games/foo.{ext}"), ext),
+				RetroPlatform::N64
+			);
+			assert_eq!(
+				resolve_retro_platform_with_series(
+					&format!("/games/foo.{ext}"),
+					ext,
+					["platform:c64"]
+				),
+				RetroPlatform::N64
+			);
+		}
+	}
+
+	#[test]
+	fn n64_path_hints_and_series_tags() {
+		assert_eq!(
+			platform_from_path_hints("/Retro/N64/Mario Kart/mk.z64"),
+			Some(RetroPlatform::N64)
+		);
+		assert_eq!(
+			platform_from_path_hints("/Retro/Nintendo 64/mk.z64"),
+			Some(RetroPlatform::N64)
+		);
+		assert_eq!(
+			platform_from_series_tags(["platform:n64"]),
+			Some(RetroPlatform::N64)
+		);
+		assert_eq!(RetroPlatform::N64.tag(), "platform:n64");
+	}
+
+	#[test]
+	fn snes_extensions_hints_and_tags() {
+		for ext in ["sfc", "smc", "SFC", "Smc"] {
+			assert_eq!(
+				resolve_retro_platform(&format!("/games/foo.{ext}"), ext),
+				RetroPlatform::Snes
+			);
+			assert_eq!(
+				resolve_retro_platform_with_series(
+					&format!("/games/foo.{ext}"),
+					ext,
+					["platform:c64"]
+				),
+				RetroPlatform::Snes
+			);
+		}
+		assert_eq!(
+			platform_from_path_hints("/Retro/SNES/Super Metroid/sm.sfc"),
+			Some(RetroPlatform::Snes)
+		);
+		assert_eq!(
+			platform_from_path_hints("/Retro/Super Nintendo/sm.sfc"),
+			Some(RetroPlatform::Snes)
+		);
+		assert_eq!(
+			platform_from_path_hints("/Retro/Super Famicom/sm.sfc"),
+			Some(RetroPlatform::Snes)
+		);
+		assert_eq!(
+			platform_from_series_tags(["platform:snes"]),
+			Some(RetroPlatform::Snes)
+		);
+		assert_eq!(RetroPlatform::Snes.tag(), "platform:snes");
+		assert_eq!(RetroPlatform::Snes.as_str(), "snes");
+	}
+
+	/// Both consoles are "Nintendo" to a folder name, so neither hint may swallow the other's
+	#[test]
+	fn the_two_nintendo_consoles_do_not_share_a_folder_hint() {
+		assert_eq!(
+			platform_from_path_hints("/Retro/Super Nintendo/x.tap"),
+			Some(RetroPlatform::Snes)
+		);
+		assert_eq!(
+			platform_from_path_hints("/Retro/Nintendo 64/x.tap"),
+			Some(RetroPlatform::N64)
+		);
+		assert_eq!(
+			platform_from_path_hints("/Retro/Nintendo64/x.tap"),
+			Some(RetroPlatform::N64)
+		);
+		// A bare "Nintendo" folder is ambiguous, so it names neither
+		assert_eq!(platform_from_path_hints("/Retro/Nintendo/x.tap"), None);
+	}
+
+	#[test]
+	fn snes_select_survives_sanitising() {
+		for id in ["select", "start", "a", "b", "x", "y", "l", "r"] {
+			assert!(is_overlay_key_id(id), "{id} must be accepted");
+		}
+	}
+
+	#[test]
+	fn n64_overlay_ids_survive_sanitising() {
+		for id in [
+			"start", "cup", "cdown", "cleft", "cright", "a", "b", "z", "l", "r",
+		] {
+			assert!(is_overlay_key_id(id), "{id} must be accepted");
+		}
 	}
 
 	#[test]

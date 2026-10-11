@@ -72,6 +72,12 @@ export const OVERLAY_KEY_IDS = [
 	'cursordown',
 	'cursorleft',
 	'cursorright',
+	'start',
+	'cup',
+	'cdown',
+	'cleft',
+	'cright',
+	'select',
 	'a',
 	'b',
 	'c',
@@ -280,6 +286,12 @@ export const OVERLAY_LABELS: Record<OverlayKeyId, string> = {
 	cursordown: 'Cr ↓',
 	cursorleft: 'Cr ←',
 	cursorright: 'Cr →',
+	start: 'Start',
+	cup: 'C ▲',
+	cdown: 'C ▼',
+	cleft: 'C ◀',
+	cright: 'C ▶',
+	select: 'Select',
 	a: 'A',
 	b: 'B',
 	c: 'C',
@@ -361,6 +373,12 @@ const PLATFORM_LABELS: Partial<Record<RetroPlatform, Partial<Record<OverlayContr
 		cursordown: '↓',
 		cursorleft: '←',
 		cursorright: '→',
+	},
+	n64: {
+		joystick: 'Stick',
+	},
+	snes: {
+		joystick: 'D-pad',
 	},
 }
 

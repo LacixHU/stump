@@ -34,7 +34,7 @@ This is a fork of [stumpapp/stump](https://github.com/stumpapp/stump). Extra fea
 - **Nested libraries / series tabs** — hierarchical series; parent Series tab shows sub-series + direct books; Books tab is books-only; in-series book search
 - **Hierarchy navigation** — go-up controls from book and nested series views
 - **File explorer** — create folders, rename/delete, drag-and-drop upload (Manage library + Upload)
-- **Retro computer libraries** — catalog and play C64, ZX Spectrum, Amiga (A500/A1200), and DOS in the browser (WASM); Instant/Authentic loading; server-side save states (C64/Amiga/DOS); virtual keyboard, on-screen stick, gamepad; touch trackpad mouse (Amiga/DOS); sidecar/Wikipedia covers; Lemon64 / World of Spectrum / Lemon Amiga metadata
+- **Retro computer libraries** — catalog and play C64, ZX Spectrum, Amiga (A500/A1200), DOS, Nintendo 64, and Super Nintendo in the browser (WASM); Instant/Authentic loading; server-side save states (C64/Amiga/DOS/N64/SNES); virtual keyboard, on-screen stick, gamepad; touch trackpad mouse (Amiga/DOS); sidecar/Wikipedia covers; Lemon64 / World of Spectrum / Lemon Amiga metadata
 - **Versioned thumbnails** — cache-safe URLs, more reliable upload/loading, nested series 3-cover stacks
 - **Localization** — broad EN/HU browser UI i18n, including reader controls and filters
 - **Filtering** — richer media/series filters and metadata-aware title sort
@@ -154,6 +154,8 @@ There are a number of other projects that are similar to Stump, it certainly isn
 - The [ZX Spectrum emulator](./packages/browser/public/retro/spectrum/COPYING) ([JSSpeccy 3.2](https://github.com/gasman/jsspeccy3)) is licensed under [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html)
 - The [Amiga emulator](./packages/browser/public/retro/amiga/COPYING) ([vAmigaWeb](https://github.com/vAmigaWeb/vAmigaWeb)) is licensed under [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html)
 - The [DOS emulator](./packages/browser/public/retro/dos/COPYING) ([js-dos 6.22](https://github.com/caiiiycuk/js-dos) / [em-dosbox](https://github.com/dreamlayers/em-dosbox)) is licensed under [GPL-2.0](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
+- The [N64 emulator](./packages/browser/public/retro/n64/v1/COPYING) ([N64Wasm](https://github.com/nbarkhina/N64Wasm) host code, MIT, around the [ParaLLEl N64](https://github.com/libretro/parallel-n64) core) is licensed under [GPL-2.0](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
+- The [SNES emulator](./packages/browser/public/retro/snes/v1/COPYING) ([Snes9x](https://github.com/snes9xgit/snes9x), WebAssembly build from [`@wasm-gaming/snes9x-wasm`](https://github.com/wasm-gaming/snes9x-wasm)) is licensed for **non-commercial use only** — it is not open source. Remove `packages/browser/public/retro/snes/` before selling or commercially redistributing a build of this fork
 - All other code in the repository is licensed under [MIT License](https://www.tldrlegal.com/license/mit-license)
 
 ## Attribution
@@ -164,3 +166,5 @@ There are a number of other projects that are similar to Stump, it certainly isn
 - In-browser ZX Spectrum play uses [JSSpeccy](https://github.com/gasman/jsspeccy3) by Matt Westcott (GPL-3.0). Sinclair/Amstrad Spectrum ROMs are redistributed as permitted for emulators
 - In-browser Amiga play uses [vAmigaWeb](https://github.com/vAmigaWeb/vAmigaWeb) (GPL-3.0). Kickstart ROMs are not bundled; you supply them via `STUMP_FIRMWARE_DIR`
 - In-browser DOS play uses [js-dos](https://js-dos.com) 6.22 / [em-dosbox](https://github.com/dreamlayers/em-dosbox) (GPL-2.0). Put floppy `.img`/`.ima`, `.exe`/`.com`, or a `.dosz` zip bundle in a Retro library.
+- In-browser N64 play uses [N64Wasm](https://github.com/nbarkhina/N64Wasm) (MIT) with the ParaLLEl N64 core (GPL-2.0). Put `.z64`/`.n64`/`.v64` ROMs in a Retro library; it needs WebGL2 and no firmware
+- In-browser SNES play uses [Snes9x](https://github.com/snes9xgit/snes9x) (non-commercial licence, see above): Super FX, SA-1 and the other enhancement chips included, no BIOS. Put `.sfc`/`.smc` ROMs in a Retro library

@@ -34,8 +34,9 @@ impl OpdsLinkType {
 			"epub" => Some(OpdsLinkType::Epub),
 			// TODO: what about rar?
 			"zip" | "cbz" | "rar" | "cbr" => Some(OpdsLinkType::Zip),
-			"d64" | "t64" | "prg" | "g64" | "tap" | "tzx" | "z80" | "sna" | "adf"
-			| "adz" | "img" | "ima" | "exe" | "com" | "dosz" => Some(OpdsLinkType::OctetStream),
+			"d64" | "t64" | "prg" | "g64" | "crt" | "tap" | "tzx" | "z80" | "sna"
+			| "adf" | "adz" | "img" | "ima" | "exe" | "com" | "dosz" | "z64" | "n64"
+			| "v64" | "sfc" | "smc" => Some(OpdsLinkType::OctetStream),
 			_ => None,
 		}
 	}

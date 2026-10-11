@@ -47,12 +47,14 @@ See [Retro computer libraries](docs/content/docs/guides/features/retro-libraries
 
 ### Platforms and formats
 
-| Platform     | Core                                                                | Extensions                                    |
-| ------------ | ------------------------------------------------------------------- | --------------------------------------------- |
-| Commodore 64 | [c64-ready](https://www.npmjs.com/package/c64-ready) (MIT)          | `d64`, `t64`, `prg`, `g64`, `tap` (path hint) |
-| ZX Spectrum  | [JSSpeccy 3.2](https://github.com/gasman/jsspeccy3) (GPL-3.0)       | `tzx`, `z80`, `sna`, `tap` (path hint)        |
-| Amiga        | [vAmigaWeb 4.3.6](https://github.com/vAmigaWeb/vAmigaWeb) (GPL-3.0) | `adf`, `adz`                                  |
-| DOS          | [js-dos 6.22](https://js-dos.com) / em-dosbox (GPL-2.0)             | `img`, `ima`, `exe`, `com`, `dosz`            |
+| Platform       | Core                                                                         | Extensions                                           |
+| -------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Commodore 64   | [c64-ready](https://www.npmjs.com/package/c64-ready) (MIT)                   | `d64`, `t64`, `prg`, `g64`, `crt`, `tap` (path hint) |
+| ZX Spectrum    | [JSSpeccy 3.2](https://github.com/gasman/jsspeccy3) (GPL-3.0)                | `tzx`, `z80`, `sna`, `tap` (path hint)               |
+| Amiga          | [vAmigaWeb 4.3.6](https://github.com/vAmigaWeb/vAmigaWeb) (GPL-3.0)          | `adf`, `adz`                                         |
+| DOS            | [js-dos 6.22](https://js-dos.com) / em-dosbox (GPL-2.0)                      | `img`, `ima`, `exe`, `com`, `dosz`                   |
+| Super Nintendo | [Snes9x](https://github.com/snes9xgit/snes9x) (**non-commercial** licence)   | `sfc`, `smc`                                         |
+| Nintendo 64    | [N64Wasm](https://github.com/nbarkhina/N64Wasm) (MIT, ParaLLEl core GPL-2.0) | `z64`, `n64`, `v64`                                  |
 
 `.tap` is used by both C64 and Spectrum; platform is resolved from path segments, then sibling media, then C64. Do **not** use `.zip` for DOS — that extension is already comic/CBZ; rename a game-folder zip to `.dosz`.
 
@@ -95,16 +97,31 @@ See [Retro computer libraries](docs/content/docs/guides/features/retro-libraries
 - Canvas mouse is the DOS mouse; same touch trackpad gestures as Amiga
 - Save states snapshot DOSBox memory and changed files on `C:`/`A:`
 
+### Nintendo 64
+
+- Runs N64Wasm in an iframe of its own (it is a page-level singleton), so closing the player frees the 512 MB heap, the WebGL2 context and the audio; no firmware, no threads or COOP/COEP headers
+- `.z64`/`.n64`/`.v64` only (`.rom`/`.bin` are too generic to catalogue)
+- Keyboard (arrows = analog stick), gamepad (left stick analog, right stick = C buttons, triggers = Z), and a digital touch overlay with A/B/Z/L/R/Start/C buttons
+- Cartridge saves (EEPROM/SRAM/Flash/Controller Pak) stay in the browser (IndexedDB); save states go to the server like the other platforms
+
+### Super Nintendo
+
+- Runs the prebuilt Snes9x WebAssembly core directly in the page, one instance per session, drawing into the player canvas at the CRT's 4:3 shape; Super FX, SA-1, DSP-1..4, S-DD1, SPC7110, C4, OBC1, S-RTC, SETA and MSU-1 games work, no BIOS, no threads or special headers
+- **Snes9x is licensed for non-commercial use only** (not open source): fine for a personal server, remove `public/retro/snes/` before selling or commercially redistributing
+- `.sfc`/`.smc` only (`.fig`/`.swc`/`.bin` are not catalogued); `Super Nintendo` and `Nintendo 64` folder names are kept apart
+- Keyboard, gamepad (face buttons rotated like a real pad, D-pad or left stick) and a touch overlay with the D-pad, A/B/X/Y, L/R, Start and Select; player one only
+- Cartridge saves stay in the browser (IndexedDB), written every 15 s; save states go to the server like the other platforms
+
 ### Save states
 
 - Stored **on the server**, one private slot per user per game (follows you across devices)
-- C64, Amiga, and DOS can save/load; Spectrum cannot
+- C64, Amiga, DOS, N64, and SNES can save/load; Spectrum cannot
 - Written to `{config_dir}/save_states/{media_id}/{user_id}.savestate` (max **64 MiB**)
 - Saving again asks before replacing the previous snapshot
 
 ### Covers and metadata
 
-- Retro files have no internal pages; covers come from a **sidecar** image (`cover.jpg`, `folder.jpg`, …) or a **Wikipedia** Category:Video game covers lookup (platform subcategories for C64 / Spectrum / Amiga / MS-DOS)
+- Retro files have no internal pages; covers come from a **sidecar** image (`cover.jpg`, `folder.jpg`, …) or a **Wikipedia** Category:Video game covers lookup (platform subcategories for C64 / Spectrum / Amiga / MS-DOS / Nintendo 64 / Super Nintendo)
 - Sidecar always wins; scan (or thumbnail generation) copies/resizes into the thumbnail store
 - Retro libraries without an explicit thumbnail config still get covers on scan
 - Metadata providers: Lemon64 (C64), World of Spectrum, Lemon Amiga, Wikipedia (no API token)
