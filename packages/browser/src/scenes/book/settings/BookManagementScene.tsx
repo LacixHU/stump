@@ -27,6 +27,10 @@ const query = graphql(`
 			series {
 				id
 				resolvedName
+				ancestors {
+					id
+					resolvedName
+				}
 			}
 			tags {
 				id
@@ -69,6 +73,10 @@ export default function BookManagementScene() {
 
 		return [
 			{ label: library.name, to: paths.librarySeries(library.id) },
+			...series.ancestors.map((ancestor) => ({
+				label: ancestor.resolvedName,
+				to: paths.seriesOverview(ancestor.id),
+			})),
 			{
 				label: series.resolvedName,
 				to: paths.seriesOverview(series.id),

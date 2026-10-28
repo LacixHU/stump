@@ -6192,7 +6192,7 @@ export type BookLibrarySeriesLinksQueryVariables = Exact<{
 }>;
 
 
-export type BookLibrarySeriesLinksQuery = { __typename?: 'Query', seriesById?: { __typename?: 'Series', id: string, resolvedName: string, library: { __typename?: 'Library', id: string, name: string } } | null };
+export type BookLibrarySeriesLinksQuery = { __typename?: 'Query', seriesById?: { __typename?: 'Series', id: string, resolvedName: string, library: { __typename?: 'Library', id: string, name: string }, ancestors: Array<{ __typename?: 'Series', id: string, resolvedName: string }> } | null };
 
 export type BookMetadataFragment = { __typename?: 'Media', metadata?: { __typename?: 'MediaMetadata', ageRating?: number | null, characters: Array<string>, colorists: Array<string>, coverArtists: Array<string>, editors: Array<string>, genres: Array<string>, inkers: Array<string>, letterers: Array<string>, links: Array<string>, pencillers: Array<string>, publisher?: string | null, teams: Array<string>, writers: Array<string>, year?: number | null, month?: number | null, day?: number | null, volume?: number | null, number?: any | null } | null } & { ' $fragmentName'?: 'BookMetadataFragment' };
 
@@ -6264,7 +6264,7 @@ export type BookManagementSceneQueryVariables = Exact<{
 
 
 export type BookManagementSceneQuery = { __typename?: 'Query', mediaById?: (
-    { __typename?: 'Media', id: string, resolvedName: string, library: { __typename?: 'Library', id: string, name: string }, series: { __typename?: 'Series', id: string, resolvedName: string }, tags: Array<{ __typename?: 'Tag', id: number, name: string }> }
+    { __typename?: 'Media', id: string, resolvedName: string, library: { __typename?: 'Library', id: string, name: string }, series: { __typename?: 'Series', id: string, resolvedName: string, ancestors: Array<{ __typename?: 'Series', id: string, resolvedName: string }> }, tags: Array<{ __typename?: 'Tag', id: number, name: string }> }
     & { ' $fragmentRefs'?: { 'BookThumbnailSelectorFragment': BookThumbnailSelectorFragment } }
   ) | null };
 
@@ -11667,6 +11667,10 @@ export const BookLibrarySeriesLinksDocument = new TypedDocumentString(`
       id
       name
     }
+    ancestors {
+      id
+      resolvedName
+    }
   }
 }
     `) as unknown as TypedDocumentString<BookLibrarySeriesLinksQuery, BookLibrarySeriesLinksQueryVariables>;
@@ -11922,6 +11926,10 @@ export const BookManagementSceneDocument = new TypedDocumentString(`
     series {
       id
       resolvedName
+      ancestors {
+        id
+        resolvedName
+      }
     }
     tags {
       id

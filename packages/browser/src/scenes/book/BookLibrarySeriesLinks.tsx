@@ -1,6 +1,7 @@
 import { useSDK, useSuspenseGraphQL } from '@stump/client'
 import { Badge, Link, Text } from '@stump/components'
 import { graphql } from '@stump/graphql'
+import { Fragment } from 'react'
 
 import paths from '../../paths'
 
@@ -12,6 +13,10 @@ const seriesQuery = graphql(`
 			library {
 				id
 				name
+			}
+			ancestors {
+				id
+				resolvedName
 			}
 		}
 	}
@@ -40,6 +45,18 @@ export default function BookLibrarySeriesLinks({ seriesId }: Props) {
 					</Badge>
 				</Link>
 			)}
+			{series?.ancestors.map((ancestor) => (
+				<Fragment key={ancestor.id}>
+					<Text size="sm" variant="muted">
+						/
+					</Text>
+					<Link to={paths.seriesOverview(ancestor.id)} underline={false}>
+						<Badge size="sm" rounded="full" className="cursor-pointer">
+							{ancestor.resolvedName}
+						</Badge>
+					</Link>
+				</Fragment>
+			))}
 			{series && (
 				<>
 					<Text size="sm" variant="muted">
