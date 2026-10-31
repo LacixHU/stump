@@ -44,7 +44,26 @@ export type DosSaveV3 = {
 	sdlTicks: number
 	version: 3
 }
-export type DosSave = DosSaveV1 | DosSaveV2 | DosSaveV3
+/**
+ * Which SDL surfaces the game was holding. SDL keeps its table of them in JS, outside the
+ * heap, so a heap restored into a session showing something else points at surfaces that
+ * table has never heard of.
+ */
+export type DosVideoState = {
+	/** The pointer SDL_SetVideoMode handed back, which every frame is drawn through */
+	screen: number
+	/** Every other pointer in the table */
+	surfaces: number[]
+}
+export type DosSaveV4 = {
+	files: DosSaveFile[]
+	heapGzip: Uint8Array
+	heapLen: number
+	sdlTicks: number
+	version: 4
+	video: DosVideoState
+}
+export type DosSave = DosSaveV1 | DosSaveV2 | DosSaveV3 | DosSaveV4
 
 export function encodeDosSave(files: DosSaveFile[]): ArrayBuffer {
 	const encoder = new TextEncoder()
@@ -164,6 +183,30 @@ export function packDosSaveV3(
 	return out.buffer
 }
 
+export function packDosSaveV4(
+	heapLen: number,
+	heapGzip: Uint8Array,
+	files: DosSaveFile[],
+	sdlTicks: number,
+	video: DosVideoState,
+): ArrayBuffer {
+	const overlay = new Uint8Array(encodeDosSave(files))
+	const headerLen = 8 + 1 + 4 + 4 + 4 + 4 + 4 + 4 * video.surfaces.length
+	const out = new Uint8Array(headerLen + heapGzip.byteLength + overlay.byteLength - 9)
+	const view = new DataView(out.buffer)
+	out.set(MAGIC, 0)
+	out[8] = 4
+	view.setUint32(9, heapLen, true)
+	view.setUint32(13, heapGzip.byteLength, true)
+	view.setUint32(17, sdlTicks, true)
+	view.setUint32(21, video.screen, true)
+	view.setUint32(25, video.surfaces.length, true)
+	video.surfaces.forEach((pointer, index) => view.setUint32(29 + 4 * index, pointer, true))
+	out.set(heapGzip, headerLen)
+	out.set(overlay.subarray(9), headerLen + heapGzip.byteLength)
+	return out.buffer
+}
+
 export function unpackDosSave(data: ArrayBuffer): DosSave {
 	const bytes = new Uint8Array(data)
 	assertMagic(bytes)
@@ -195,6 +238,29 @@ export function unpackDosSave(data: ArrayBuffer): DosSave {
 			heapLen,
 			sdlTicks: offset + 4 <= bytes.byteLength ? view.getUint32(offset, true) : undefined,
 			version: 2,
+		}
+	}
+	if (version === 4) {
+		if (bytes.byteLength < 29) {
+			throw new Error('Invalid DOS save state')
+		}
+		const surfaceCount = view.getUint32(25, true)
+		const gzipStart = 29 + 4 * surfaceCount
+		const gzipLen = view.getUint32(13, true)
+		const gzipEnd = gzipStart + gzipLen
+		if (gzipEnd + 4 > bytes.byteLength) {
+			throw new Error('Invalid DOS save state')
+		}
+		const surfaces: number[] = []
+		for (let i = 0; i < surfaceCount; i += 1) surfaces.push(view.getUint32(29 + 4 * i, true))
+		const count = view.getUint32(gzipEnd, true)
+		return {
+			files: readFiles(bytes, view, gzipEnd + 4, count).files,
+			heapGzip: bytes.slice(gzipStart, gzipEnd),
+			heapLen: view.getUint32(9, true),
+			sdlTicks: view.getUint32(17, true),
+			version: 4,
+			video: { screen: view.getUint32(21, true), surfaces },
 		}
 	}
 	if (version !== 3) {

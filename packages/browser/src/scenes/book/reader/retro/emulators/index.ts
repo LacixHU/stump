@@ -28,6 +28,7 @@ export type {
 	EmulatorMountOptions,
 	RetroDiskSpeed,
 	RetroEmulatorHandle,
+	RetroLoadPhase,
 	RetroEmulatorModule,
 	RetroInputMode,
 	RetroOption,

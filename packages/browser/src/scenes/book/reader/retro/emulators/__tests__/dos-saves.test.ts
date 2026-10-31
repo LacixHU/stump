@@ -6,6 +6,7 @@ import {
 	isDosFileChanged,
 	packDosSaveV2,
 	packDosSaveV3,
+	packDosSaveV4,
 	selectChangedPaths,
 	shouldSkipDosPath,
 	unpackDosSave,
@@ -73,6 +74,41 @@ describe('DOS save overlay', () => {
 		expect(Array.from(unpacked.heapGzip)).toEqual([0x1f, 0x8b, 1, 2, 3])
 		expect(unpacked.files[0]!.path).toBe('/DOOM.SAV')
 		expect(Array.from(unpacked.files[0]!.data)).toEqual([9, 8, 7])
+	})
+
+	it('round-trips the SDL screen and surface pointers with a snapshot', () => {
+		const gzip = new Uint8Array([0x1f, 0x8b, 4, 5])
+		const files = [{ path: '/LORE.SAV', data: new Uint8Array([1, 2, 3, 4]) }]
+		const video = { screen: 446614312, surfaces: [446662296, 31216280] }
+		const unpacked = unpackDosSave(packDosSaveV4(128, gzip, files, 777, video))
+		expect(unpacked.version).toBe(4)
+		if (unpacked.version !== 4) return
+		expect(unpacked.heapLen).toBe(128)
+		expect(unpacked.sdlTicks).toBe(777)
+		expect(unpacked.video).toEqual(video)
+		expect(Array.from(unpacked.heapGzip)).toEqual([0x1f, 0x8b, 4, 5])
+		expect(unpacked.files[0]!.path).toBe('/LORE.SAV')
+		expect(Array.from(unpacked.files[0]!.data)).toEqual([1, 2, 3, 4])
+	})
+
+	it('round-trips a v4 snapshot that has no surfaces', () => {
+		const unpacked = unpackDosSave(
+			packDosSaveV4(8, new Uint8Array([1]), [], 5, { screen: 0, surfaces: [] }),
+		)
+		expect(unpacked.version).toBe(4)
+		if (unpacked.version !== 4) return
+		expect(unpacked.video).toEqual({ screen: 0, surfaces: [] })
+		expect(unpacked.files).toEqual([])
+	})
+
+	it('rejects a truncated v4 snapshot', () => {
+		const packed = new Uint8Array(
+			packDosSaveV4(8, new Uint8Array([1, 2, 3]), [], 5, { screen: 9, surfaces: [1, 2] }),
+		)
+		const cut = packed.subarray(0, 30)
+		expect(() =>
+			unpackDosSave(cut.buffer.slice(cut.byteOffset, cut.byteOffset + cut.byteLength)),
+		).toThrow('Invalid DOS save state')
 	})
 
 	it('still reads a v2 snapshot with trailing ticks', () => {

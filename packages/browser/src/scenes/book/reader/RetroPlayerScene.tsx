@@ -5,7 +5,7 @@ import {
 	useSDK,
 	useSuspenseGraphQL,
 } from '@stump/client'
-import { Button, cn, ConfirmationModal } from '@stump/components'
+import { Button, cn, ConfirmationModal, ProgressBar } from '@stump/components'
 import { graphql, TypedDocumentString, UserPermission } from '@stump/graphql'
 import { useLocaleContext } from '@stump/i18n'
 import { useQueryClient } from '@tanstack/react-query'
@@ -30,6 +30,7 @@ import {
 	type RetroDiskSpeed,
 	type RetroEmulatorHandle,
 	type RetroInputMode,
+	type RetroLoadPhase,
 } from './retro/emulators'
 import { type Dispatchable, dispatchKey, type KeyModifiers } from './retro/keys'
 import {
@@ -45,6 +46,7 @@ import {
 	resolveOverlayLayout,
 } from './retro/OnScreenControls'
 import { RetroPlayerSettings } from './retro/RetroPlayerSettings'
+import { readWithProgress } from './retro/readWithProgress'
 import { useGamepadJoystick } from './retro/useGamepadJoystick'
 import { hasVirtualKeyboard, VirtualKeyboard } from './retro/VirtualKeyboard'
 
@@ -155,6 +157,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 	})
 
 	const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle')
+	const [loadProgress, setLoadProgress] = useState<LoadProgress | null>(null)
 	const [errorMessage, setErrorMessage] = useState<string | null>(null)
 	const [missingFirmware, setMissingFirmware] = useState(false)
 	const [activeMediaId, setActiveMediaId] = useState(id)
@@ -269,7 +272,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 							}),
 				)
 			}
-			return res.arrayBuffer()
+			return readWithProgress(res, (percent) => setLoadProgress({ percent, phase: 'download' }))
 		},
 		[sdk, t],
 	)
@@ -328,6 +331,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 				setPlatform(resolved)
 
 				const image = await fetchImage(mediaId)
+				setLoadProgress(null)
 				const mod = await loadEmulator(resolved)
 
 				let firmware: Record<string, ArrayBuffer> | undefined
@@ -356,6 +360,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 					firmware,
 					fileName,
 					diskSpeed: speed,
+					onLoadPhase: (phase) => setLoadProgress({ percent: null, phase }),
 				})
 				handleRef.current = handle
 				hasSaveStateRef.current = false
@@ -370,6 +375,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 				setCapabilities(describeCapabilities(handle))
 				setMachine(handle.machine)
 				setJoystickScheme(handle.joystickScheme)
+				setLoadProgress(null)
 				setStatus('playing')
 				if (handle.saveState && handle.loadState) {
 					void sdk.media
@@ -391,6 +397,7 @@ function RetroPlayerScene({ id }: { id: string }) {
 						: t('reader.retro.startFailed', { defaultValue: 'Failed to start emulator' })
 				setMissingFirmware(e instanceof MissingFirmwareError)
 				setErrorMessage(message)
+				setLoadProgress(null)
 				setStatus('error')
 				toast.error(message)
 			}
@@ -776,6 +783,18 @@ function RetroPlayerScene({ id }: { id: string }) {
 							<VirtualKeyboard platform={platform} onReleased={focusCanvas} sendKey={sendKey} />
 						) : null}
 					</div>
+					{status === 'loading' && loadProgress ? (
+						<div className="inset-0 p-4 pointer-events-none absolute z-10 flex items-center justify-center">
+							<div className="max-w-xs gap-2 flex w-full flex-col items-center text-center">
+								<p className="text-sm text-foreground">{loadProgressLabel(loadProgress, t)}</p>
+								<ProgressBar
+									className="w-full"
+									isIndeterminate={loadProgress.percent === null}
+									value={loadProgress.percent}
+								/>
+							</div>
+						</div>
+					) : null}
 					{status === 'error' && errorMessage ? (
 						<div className="inset-0 p-4 absolute z-10 flex items-center justify-center">
 							<div className="max-w-md text-sm text-center text-destructive">
@@ -832,6 +851,33 @@ function RetroPlayerScene({ id }: { id: string }) {
 			</div>
 		</div>
 	)
+}
+
+type LoadProgress = {
+	phase: 'download' | RetroLoadPhase
+	/** `null` when the step has no measurable length */
+	percent: number | null
+}
+
+function loadProgressLabel(
+	{ percent, phase }: LoadProgress,
+	t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+	switch (phase) {
+		case 'download':
+			return percent === null
+				? t('reader.retro.loadingDownload', { defaultValue: 'Downloading game…' })
+				: t('reader.retro.loadingDownloadPercent', {
+						defaultValue: 'Downloading game… {{percent}}%',
+						percent,
+					})
+		case 'unpack':
+			return t('reader.retro.loadingUnpack', {
+				defaultValue: 'Unpacking game… large games can take a while',
+			})
+		case 'start':
+			return t('reader.retro.loadingStart', { defaultValue: 'Starting emulator…' })
+	}
 }
 
 /**

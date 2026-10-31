@@ -35,7 +35,8 @@ import {
 import {
 	type DosFsStamp,
 	type DosSaveFile,
-	packDosSaveV3,
+	type DosVideoState,
+	packDosSaveV4,
 	selectChangedPaths,
 	shouldSkipDosPath,
 	unpackDosSave,
@@ -75,21 +76,36 @@ type DosSdlAudio = {
 	timer?: number
 }
 
+type DosSdlSurface = {
+	buffer?: number
+	canvas?: HTMLCanvasElement
+	flags?: number
+	height?: number
+	isFlagSet?: (flag: number) => number
+	locked?: number
+	pixelFormat?: number
+	surf?: number
+	width?: number
+}
+
 type DosSdl = {
 	audio?: DosSdlAudio
 	audioContext?: AudioContext
 	mouseX?: number
 	mouseY?: number
 	receiveEvent?: EventListener
+	screen?: number
 	startTime?: number | null
+	surfaces?: Record<string, DosSdlSurface | undefined>
 }
 
 type DosEmscriptenModule = {
 	Asyncify?: { currData: unknown; state: number }
+	_extract_zip?: (ptr: number, length: number) => number
 	FS?: EmscriptenFS
 	HEAPU8?: Uint8Array
 	pauseMainLoop?: () => void
-	preMainLoop?: () => boolean | void
+	heapOperation?: () => void
 	receive?: EventListener
 	SDL?: DosSdl
 	sync_wakeUp?: () => void
@@ -168,6 +184,42 @@ function ensureZipDirs(fs: DosFS, names: string[]) {
 	}
 }
 
+/**
+ * js-dos extracts a bundle by copying the whole zip into the WASM heap, extracting it, and
+ * freeing the copy. Freed heap is not scrubbed and the heap never shrinks, so the compressed
+ * bytes stay behind. A save state snapshots the entire heap and gzip cannot shrink them, so
+ * a large bundle makes a save as big as the bundle itself. Zeroing the copy once it has been
+ * extracted makes those pages compress to almost nothing.
+ *
+ * Returns the function that puts the original export back.
+ */
+function zeroZipAfterExtract(em: DosEmscriptenModule | undefined): () => void {
+	const extract = em?._extract_zip
+	if (!em || !extract) return () => undefined
+	em._extract_zip = (ptr, length) => {
+		try {
+			return extract.call(em, ptr, length)
+		} finally {
+			em.HEAPU8?.fill(0, ptr, ptr + length)
+		}
+	}
+	return () => {
+		em._extract_zip = extract
+	}
+}
+
+/** Resolves once the browser has had a chance to paint, so a state change shows before a blocking call. */
+function nextPaint(): Promise<void> {
+	return new Promise((resolve) => {
+		// A hidden tab never runs animation frames
+		const fallback = window.setTimeout(resolve, 100)
+		requestAnimationFrame(() => {
+			window.clearTimeout(fallback)
+			window.setTimeout(resolve, 0)
+		})
+	})
+}
+
 async function mountImage(fs: DosFS, image: ArrayBuffer, fileName?: string): Promise<string[]> {
 	const bytes = new Uint8Array(image)
 	const name = basenameOf(fileName)
@@ -188,9 +240,11 @@ async function mountImage(fs: DosFS, image: ArrayBuffer, fileName?: string): Pro
 		const names = zipEntryNames(bytes)
 		ensureZipDirs(fs, names)
 		const url = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }))
+		const restoreExtract = zeroZipAfterExtract(fs.em)
 		try {
 			await fs.extract(url, '/')
 		} finally {
+			restoreExtract()
 			URL.revokeObjectURL(url)
 		}
 		const conf = findDosboxConf(names)
@@ -314,28 +368,32 @@ function liveHeap(em: DosEmscriptenModule | undefined): Uint8Array | null {
 	return new Uint8Array(buffer)
 }
 
-const DOS_RUNTIME_IDLE_MS = 250
+/** How long to wait for the emulation loop to reach its snapshot point. */
+const DOS_SAFE_POINT_TIMEOUT_MS = 5000
 
-function atMainLoopBoundary<T>(em: DosEmscriptenModule, fn: () => T): Promise<T> {
+/**
+ * Run `fn` at the one point where the heap can be copied out or written back.
+ *
+ * wdosbox calls `Module.heapOperation` from inside its emulation loop and keeps calling it
+ * until the hook is gone, so the hook runs with the WASM stopped at the same place every time.
+ * Anywhere else the heap is not the whole machine: the loop yields through Asyncify sleeps
+ * that park its call stack on the heap, and a snapshot taken mid-sleep restores into an
+ * instance that is parked somewhere else and aborts with `unreachable`, freezing the game.
+ */
+function atSafePoint<T>(em: DosEmscriptenModule, fn: () => T): Promise<T> {
 	return new Promise((resolve, reject) => {
-		const previous = em.preMainLoop
-		let settled = false
-		const finish = () => {
-			if (settled) return
-			settled = true
+		const timeout = window.setTimeout(() => {
+			delete em.heapOperation
+			reject(new Error('The DOS emulator did not reach a point where it can be saved'))
+		}, DOS_SAFE_POINT_TIMEOUT_MS)
+		em.heapOperation = () => {
+			delete em.heapOperation
 			window.clearTimeout(timeout)
-			em.preMainLoop = previous
 			try {
 				resolve(fn())
 			} catch (error) {
 				reject(error)
 			}
-		}
-		const timeout = window.setTimeout(finish, DOS_RUNTIME_IDLE_MS)
-		em.preMainLoop = () => {
-			if (settled) return previous?.()
-			finish()
-			return false
 		}
 	})
 }
@@ -372,6 +430,55 @@ function thawDosAudio(em: DosEmscriptenModule, queue: (() => void) | undefined) 
 	void em.SDL?.audioContext?.resume?.()
 }
 
+function captureDosVideo(em: DosEmscriptenModule): DosVideoState | null {
+	const sdl = em.SDL
+	if (!sdl?.screen || !sdl.surfaces) return null
+	const screen = sdl.screen
+	return {
+		screen,
+		surfaces: Object.keys(sdl.surfaces)
+			.map(Number)
+			.filter((pointer) => pointer !== screen),
+	}
+}
+
+/**
+ * Make SDL's JS surface table describe a heap that has just been written back.
+ *
+ * The SDL_Surface structs came back with the heap, so the geometry is read from there. What
+ * did not come back is the JS entry that owns the canvas context: without one for the pointer
+ * the game now holds, SDL_LockSurface throws on the first frame and the emulator loop dies.
+ * The live entry already owns the page canvas, so it is reused for the restored pointer.
+ */
+function restoreDosVideo(em: DosEmscriptenModule, heap: Uint8Array, video: DosVideoState) {
+	const sdl = em.SDL
+	const table = sdl?.surfaces
+	const live = sdl?.screen != null ? table?.[sdl.screen] : undefined
+	if (!sdl || !table || !live) return
+	const words = new Int32Array(heap.buffer, heap.byteOffset, heap.byteLength >> 2)
+	const field = (offset: number) => words[(video.screen + offset) >> 2] ?? 0
+	const flags = field(0)
+	const screen: DosSdlSurface = {
+		...live,
+		buffer: field(20),
+		flags,
+		height: field(12),
+		isFlagSet: (flag) => flags & flag,
+		locked: 0,
+		pixelFormat: field(4),
+		surf: video.screen,
+		width: field(8),
+	}
+	for (const pointer of Object.keys(table)) delete table[pointer]
+	for (const pointer of video.surfaces) table[pointer] = {}
+	table[video.screen] = screen
+	sdl.screen = video.screen
+	if (live.canvas && screen.width && screen.height) {
+		live.canvas.width = screen.width
+		live.canvas.height = screen.height
+	}
+}
+
 function sdlTicksNow(em: DosEmscriptenModule): number {
 	const start = em.SDL?.startTime
 	if (start == null) return 0
@@ -402,7 +509,7 @@ async function withFrozenRuntime<T>(
 	fn: () => T,
 	resetAudio = false,
 ): Promise<T> {
-	return atMainLoopBoundary(em, () => {
+	return atSafePoint(em, () => {
 		const queue = freezeDosAudio(em)
 		try {
 			const result = fn()
@@ -482,7 +589,7 @@ function stopDosRuntime(
 }
 
 async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandle> {
-	const { canvas, image, fileName } = options
+	const { canvas, image, fileName, onLoadPhase } = options
 	const imageBytes = image.slice(0)
 	const Dos = await loadDos()
 	let mouseSensitivity = DEFAULT_MOUSE_SENSITIVITY
@@ -612,11 +719,15 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 			stopDosRuntime(runtime.fs.em, null, canvas)
 			return
 		}
+		onLoadPhase?.('unpack')
+		await nextPaint()
 		const args = await mountImage(runtime.fs, imageBytes.slice(0), fileName)
 		if (!alive) {
 			stopDosRuntime(runtime.fs.em, null, canvas)
 			return
 		}
+		onLoadPhase?.('start')
+		await nextPaint()
 		const nextCi = await runtime.main(args)
 		if (!alive) {
 			stopDosRuntime(runtime.fs.em, nextCi, canvas)
@@ -864,13 +975,15 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 					files: files ? collectChangedFiles(files, baseline) : [],
 					heap: heap.slice(),
 					sdlTicks: sdlTicksNow(current),
+					video: captureDosVideo(current),
 				}
 			})
-			return packDosSaveV3(
+			return packDosSaveV4(
 				snapshot.heap.byteLength,
 				await gzipBytes(snapshot.heap),
 				snapshot.files,
 				snapshot.sdlTicks,
+				snapshot.video ?? { screen: 0, surfaces: [] },
 			)
 		},
 		loadState: async (data) => {
@@ -895,6 +1008,9 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 						throw new Error('DOS save state does not match this emulator session')
 					}
 					heap.set(restored)
+					if (unpacked.version === 4 && unpacked.video.screen) {
+						restoreDosVideo(current, heap, unpacked.video)
+					}
 					if (unpacked.sdlTicks != null) restoreSdlTicks(current, unpacked.sdlTicks)
 					if (files) {
 						restoreDosFiles(files, unpacked.files)

@@ -7,6 +7,9 @@ export type RetroDiskSpeed = 'authentic' | 'instant'
 /** One entry in a machine-specific choice the player chrome renders as a radio group. */
 export type RetroOption = { id: string; label: string }
 
+/** A slow step of starting an emulator, reported through `EmulatorMountOptions.onLoadPhase`. */
+export type RetroLoadPhase = 'unpack' | 'start'
+
 export type EmulatorMountOptions = {
 	canvas: HTMLCanvasElement
 	image: ArrayBuffer
@@ -16,6 +19,8 @@ export type EmulatorMountOptions = {
 	firmware?: Record<string, ArrayBuffer>
 	/** Initial disk/tape speed preference; decides whether loading is emulated or skipped */
 	diskSpeed?: RetroDiskSpeed
+	/** Optional: called as the emulator enters a step that blocks for a while (DOS unpacking). */
+	onLoadPhase?: (phase: RetroLoadPhase) => void
 }
 
 export type RetroInputMode = 'mixed' | 'keyboard' | 'joystick'
