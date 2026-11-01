@@ -1,3 +1,79 @@
+# Clickable composers, developers, platforms and publisher
+
+## Problem
+
+On a book's metadata table, Publisher, genres and the credit lists link to the filtered book
+search, but Composers, Developers and Platforms are dead badges. Composers already has a
+server filter (the table was never updated); developers and platforms have none. On the game
+page header, Developers, Platforms and the Publisher badge link nowhere either.
+
+## Plan
+
+- [x] `MediaMetadataFilterInput.developers` / `.platforms` and `MediaMetadataOverview`
+      `developers` / `platforms` (same as composers) + a Rust filter test
+- [x] Schema dump + client codegen
+- [x] Metadata table: composers, developers, platforms join the linked badge-list group
+- [x] Game page header: Developers, Platforms and the Publisher badge link to the search
+- [x] Books filter sheet: Developers and Platforms multiselects
+- [x] Smart lists: Book Meta → Developers / Platforms
+- [x] Verify: Rust tests, Jest, tsc, real API + headless click-through
+
+## Review
+
+Rust graphql filter + overview tests 7/7 (new `test_developers_and_platforms_filter_their_columns`).
+Jest smartList/filters/metadata/book 308/308. `tsc` via the scratch tsconfig: no errors in
+touched files. Schema dump added only the 4 new fields.
+
+Scratch server on a copy of the real library (205 media): the overview gives 56 developers and
+96 platforms, matching a comma split of the columns. API vs SQL: `System 3` 6/6, `Amiga CD32`
+6/6, `Apple IIGS` 15/15, nonsense 0/0. Headless Chrome on The Last Ninja: header Developer,
+Platform and Publisher clicks land on the right `?filters=` with 6, 15 and 8 cards; table
+Platform (`Acorn Archimedes`, 14) and Composer (`Ben Daglish`, 1) clicks too; the table's
+Developers badge href is right but was not clicked. The sheet's new multiselects are unproven
+(its submit does not apply in this harness).
+
+Comma splitting yields fragments (not fixed): `Inc.`, `Java Platform` + `Micro Edition`, and
+composer `<small>(C64` pieces.
+
+### Follow-up: exact, case-insensitive matching
+
+`likeAnyOf` is a `%value%` substring match, so platform `Game Boy` returned 13 games where 3
+list it. New `FieldFilterString` operator `hasAnyOf`, used by every web link and the books
+filter sheet: one entry of the comma-separated list equals the value, ignoring case
+(`LOWER` + `fold_case`), with `%`/`_` escaped. A value that is still several entries (holds a
+comma) matches nothing. Smart lists and the Expo app still send `likeAnyOf` (Expo may talk to
+servers without it). The filter sheet options keep their original spelling so a clicked value
+shows as selected.
+
+Publisher is a list too: a game's publisher names every company (`Atari, Inc., Activision,
+Bethesda Softworks`). New `MediaMetadata.publishers` splits it; the header and the metadata
+table show one linked badge per company (the table row is still one text field when editing),
+and `mediaMetadataOverview.publishers` is split and deduplicated.
+
+Company suffixes: `comma_separated_list_to_vec` keeps `COMPANY_SUFFIXES` (`Inc.`, `Ltd.`,
+`LLC`, `GmbH`, ...) with the name before them, so `Atari, Inc.` and `Logical Design Works,
+Inc.` are one entry each and no `Inc.` badge appears. `hasAnyOf` joins the same suffixes in SQL
+before matching, so `Atari` does not match `Atari, Inc.`.
+
+Verified: SQLite test with real rows (`Game Boy` ≠ `Game Boy Color`, `dos` ≠ `MS-DOS`,
+`PHOENIX KÖNYVKIADÓ` = `Phoenix Könyvkiadó`, `Ocean_Software` ≠ `OceanXSoftware`, `Atari` ≠
+`Atari, Inc.`, `Nintendo Co., Ltd.` whole, `Inc.` 0). Core split test. Scratch server on the
+real library, 17/17 equal to a Python count using the same split: `Game Boy`/`game boy` 3
+(was 13), `DOS` 53 (60), developer `Nintendo` 1 (4), `Logical Design Works, Inc.` 2, `Inc.` 0,
+genre `Fantasy` 6 (7), publisher `Activision`/`activision` 8, `Electronic Arts` 7, `Atari` 1
+(3), `Atari, Inc.` 2, `Inc.` 0. Overview: 75 publishers, only `Atari, Inc.` has a comma.
+Jest 329/329; tsc clean in touched files.
+
+Also fixed (older bug): the `/books` filter sheet never saw the URL filters and its Apply did
+nothing. `BookSearchScene` imported `FilterContext` from `@/components/filters/context` while
+the drawer and form use the `filters` index, and the build shipped two context instances.
+Importing it from `@/components/filters` (as `LibraryBooksScene` does) leaves one. Headless
+Chrome on a fresh build: after a badge click the sheet shows the value selected and the count
+badge shows 1. Picking Activision + Electronic Arts and applying gives 14 games (SQL 14).
+Platform `Game Boy` gives 3. The library page is unchanged (9 = SQL). Not tested: Escape inside
+an open option list closes the whole sheet and drops the picks. `query::media::tests::test_media_query` fails independently of this
+change (expects `ORDER BY media.name`, code sorts by title).
+
 # Super Nintendo (SNES) support
 
 ## Problem

@@ -148,7 +148,7 @@ export default function SeriesMetadataEditor({ seriesId, data }: Props) {
 								itemUrl={() => {
 									if (metadata?.publisher == null) return undefined
 									return paths.bookSearchWithFilter({
-										metadata: { publisher: { likeAnyOf: [metadata.publisher] } },
+										metadata: { publisher: { hasAnyOf: [metadata.publisher] } },
 									})
 								}}
 							/>
@@ -163,7 +163,7 @@ export default function SeriesMetadataEditor({ seriesId, data }: Props) {
 										const item = values[index]
 										if (!item) return undefined
 										return paths.bookSearchWithFilter({
-											metadata: { [field]: { likeAnyOf: [item] } },
+											metadata: { [field]: { hasAnyOf: [item] } },
 										})
 									}}
 								/>

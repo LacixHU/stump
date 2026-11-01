@@ -817,6 +817,12 @@ input FieldFilterFileStatus @oneOf {
 	like: FileStatus
 	likeAnyOf: [FileStatus!]
 	likeNoneOf: [FileStatus!]
+	"""
+	An entry of a comma-separated list (genres, platforms, publishers, ...) equals any of
+	these, ignoring case. Unlike `likeAnyOf`, `Game Boy` does not match `Game Boy Color`.
+	A company suffix stays with its name: `Atari` does not match `Atari, Inc.`
+	"""
+	hasAnyOf: [FileStatus!]
 	contains: FileStatus
 	excludes: FileStatus
 	startsWith: FileStatus
@@ -831,6 +837,12 @@ input FieldFilterString @oneOf {
 	like: String
 	likeAnyOf: [String!]
 	likeNoneOf: [String!]
+	"""
+	An entry of a comma-separated list (genres, platforms, publishers, ...) equals any of
+	these, ignoring case. Unlike `likeAnyOf`, `Game Boy` does not match `Game Boy Color`.
+	A company suffix stays with its name: `Atari` does not match `Atari, Inc.`
+	"""
+	hasAnyOf: [String!]
 	contains: String
 	excludes: String
 	startsWith: String
@@ -1504,6 +1516,8 @@ type MediaMetadata {
 	teams: [String!]!
 	developers: [String!]!
 	platforms: [String!]!
+	"The companies in `publisher`, which for a game often lists several"
+	publishers: [String!]!
 	composers: [String!]!
 	lockedFields: [MetadataField!]!
 }
@@ -1521,6 +1535,8 @@ input MediaMetadataFilterInput {
 	inkers: FieldFilterString = null
 	editors: FieldFilterString = null
 	composers: FieldFilterString = null
+	developers: FieldFilterString = null
+	platforms: FieldFilterString = null
 	ageRating: NumericFilterI32 = null
 	year: NumericFilterI32 = null
 	month: NumericFilterI32 = null
@@ -1636,6 +1652,8 @@ type MediaMetadataOverview {
 	coverArtists: [String!]!
 	editors: [String!]!
 	composers: [String!]!
+	developers: [String!]!
+	platforms: [String!]!
 	publishers: [String!]!
 	characters: [String!]!
 	teams: [String!]!

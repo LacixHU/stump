@@ -195,6 +195,8 @@ const sourceOptions: Record<FilterSource, { value: string }[]> = {
 		{ value: 'editors' },
 		{ value: 'publisher' },
 		{ value: 'composers' },
+		{ value: 'developers' },
+		{ value: 'platforms' },
 		{ value: 'coverArtists' },
 		{ value: 'links' },
 		{ value: 'characters' },

@@ -3,10 +3,13 @@ use filter_gen::IntoFilter;
 use models::shared::enums::{FileStatus, LibraryType, ReadingStatus};
 use sea_orm::{
 	prelude::DateTimeWithTimeZone,
-	sea_query::{ConditionExpression, Expr as QExpr, Func},
+	sea_query::{
+		ConditionExpression, Expr as QExpr, Func, IntoColumnRef, LikeExpr, SimpleExpr,
+	},
 	Condition, Value,
 };
 use serde::{Deserialize, Serialize};
+use stump_core::utils::serde::COMPANY_SUFFIXES;
 
 pub mod library;
 pub mod log;
@@ -41,6 +44,10 @@ where
 	Like(T),
 	LikeAnyOf(Vec<T>),
 	LikeNoneOf(Vec<T>),
+	/// An entry of a comma-separated list (genres, platforms, publishers, ...) equals any of
+	/// these, ignoring case. Unlike `likeAnyOf`, `Game Boy` does not match `Game Boy Color`.
+	/// A company suffix stays with its name: `Atari` does not match `Atari, Inc.`
+	HasAnyOf(Vec<T>),
 	Contains(T),
 	Excludes(T),
 	StartsWith(T),
@@ -58,6 +65,40 @@ fn fold_case(value: &str) -> String {
 		.flat_map(|c| c.to_lowercase())
 		.map(|c| if c.is_ascii() { c } else { '_' })
 		.collect()
+}
+
+/// Escapes `LIKE` wildcards so `value` only matches itself, with `\` as the escape character
+fn escape_like(value: &str) -> String {
+	value
+		.replace('\\', "\\\\")
+		.replace('%', "\\%")
+		.replace('_', "\\_")
+}
+
+/// `LOWER(column)` wrapped in commas, each company suffix joined to its name (`, inc.,` to
+/// ` inc.,`, as `comma_separated_list_to_vec` splits) and every remaining separator collapsed
+/// to a bare comma. `Atari, Inc., Game Boy` becomes `,atari inc.,game boy,`, so an entry
+/// matches `%,entry,%` exactly. [`normalize_list_entry`] does the same to the searched value.
+fn comma_wrapped_list(column: impl IntoColumnRef) -> SimpleExpr {
+	let joined = COMPANY_SUFFIXES
+		.iter()
+		.fold(String::from("',' || LOWER(?) || ','"), |sql, suffix| {
+			format!("REPLACE({sql}, ', {suffix},', ' {suffix},')")
+		});
+	QExpr::cust_with_exprs(
+		format!("REPLACE(REPLACE({joined}, ', ', ','), ' ,', ',')"),
+		[QExpr::col(column).into()],
+	)
+}
+
+/// `value` as [`comma_wrapped_list`] writes it inside the commas, still unescaped
+fn normalize_list_entry(value: &str) -> String {
+	let wrapped = format!(",{},", value.trim().to_ascii_lowercase());
+	let joined = COMPANY_SUFFIXES.iter().fold(wrapped, |acc, suffix| {
+		acc.replace(&format!(", {suffix},"), &format!(" {suffix},"))
+	});
+	let collapsed = joined.replace(", ", ",").replace(" ,", ",");
+	collapsed[1..collapsed.len() - 1].to_string()
 }
 
 pub(crate) fn apply_string_filter<C, T>(
@@ -133,6 +174,21 @@ where
 				)
 			})
 			.not(),
+		StringLikeFilter::HasAnyOf(values) => {
+			values.into_iter().fold(Condition::any(), |acc, value| {
+				let v: String = value.into();
+				let entry = normalize_list_entry(&v);
+				// Still holding a comma, it is several entries and can never equal one
+				if entry.contains(',') {
+					return acc.add(QExpr::cust("1 = 0"));
+				}
+				let pattern = format!("%,{},%", fold_case(&escape_like(&entry)));
+				acc.add(
+					QExpr::expr(comma_wrapped_list(column.as_column_ref()))
+						.like(LikeExpr::new(pattern).escape('\\')),
+				)
+			})
+		},
 	}
 }
 
@@ -248,6 +304,105 @@ mod tests {
 		assert_eq!(fold_case("Robert Prince"), "robert prince");
 		assert_eq!(fold_case("phoenix könyvkiadó"), "phoenix k_nyvkiad_");
 		assert_eq!(fold_case("ÁDÁM"), "_d_m");
+	}
+
+	async fn matching_ids(conn: &DatabaseConnection, condition: Condition) -> Vec<i32> {
+		use sea_orm::{
+			sea_query::{Alias, Query},
+			ConnectionTrait,
+		};
+
+		let query = Query::select()
+			.column(Alias::new("id"))
+			.from(models::entity::media_metadata::Entity)
+			.cond_where(condition)
+			.order_by(Alias::new("id"), sea_orm::Order::Asc)
+			.to_owned();
+		conn.query_all(conn.get_database_backend().build(&query))
+			.await
+			.unwrap()
+			.iter()
+			.map(|row| row.try_get::<i32>("", "id").unwrap())
+			.collect()
+	}
+
+	#[tokio::test]
+	async fn test_has_any_of_matches_whole_list_entries() {
+		use models::entity::media_metadata::Column;
+		use sea_orm::{ConnectionTrait, Database};
+
+		let conn = Database::connect("sqlite::memory:").await.unwrap();
+		conn.execute_unprepared(
+			"CREATE TABLE media_metadata (id INTEGER PRIMARY KEY, platforms TEXT, publisher TEXT);
+			INSERT INTO media_metadata VALUES
+				(1, 'Game Boy', 'Activision'),
+				(2, 'Game Boy Color, DOS', 'Activision, Electronic Arts'),
+				(3, 'MS-DOS,Game Boy Advance', 'ACTIVISION'),
+				(4, 'Commodore 64 ,DOS', 'Ocean_Software'),
+				(5, NULL, 'Phoenix Könyvkiadó'),
+				(6, 'Amiga', 'OceanXSoftware'),
+				(7, NULL, 'Atari, Inc., Activision'),
+				(8, NULL, 'Atari, Nintendo Co., Ltd.');",
+		)
+		.await
+		.unwrap();
+
+		let has = |column: Column, values: &[&str]| {
+			apply_string_filter(
+				column,
+				StringLikeFilter::HasAnyOf(
+					values.iter().map(|v| String::from(*v)).collect(),
+				),
+			)
+		};
+		let platforms = |values: &[&str]| has(Column::Platforms, values);
+		let publisher = |values: &[&str]| has(Column::Publisher, values);
+
+		assert_eq!(matching_ids(&conn, platforms(&["Game Boy"])).await, vec![1]);
+		assert_eq!(matching_ids(&conn, platforms(&["dos"])).await, vec![2, 4]);
+		assert_eq!(
+			matching_ids(&conn, platforms(&["Game Boy Advance", "game boy color"])).await,
+			vec![2, 3]
+		);
+		assert_eq!(
+			matching_ids(&conn, platforms(&["Boy"])).await,
+			Vec::<i32>::new()
+		);
+
+		assert_eq!(
+			matching_ids(&conn, publisher(&["Activision"])).await,
+			vec![1, 2, 3, 7]
+		);
+		assert_eq!(
+			matching_ids(&conn, publisher(&["PHOENIX KÖNYVKIADÓ"])).await,
+			vec![5]
+		);
+		assert_eq!(
+			matching_ids(&conn, publisher(&["Ocean_Software"])).await,
+			vec![4]
+		);
+		assert_eq!(
+			matching_ids(&conn, publisher(&["atari, inc."])).await,
+			vec![7]
+		);
+		assert_eq!(matching_ids(&conn, publisher(&["Atari"])).await, vec![8]);
+		assert_eq!(
+			matching_ids(&conn, publisher(&["Nintendo Co., Ltd."])).await,
+			vec![8]
+		);
+		assert_eq!(
+			matching_ids(&conn, publisher(&["Inc."])).await,
+			Vec::<i32>::new()
+		);
+		assert_eq!(
+			matching_ids(&conn, publisher(&["Activision, Electronic Arts"])).await,
+			Vec::<i32>::new()
+		);
+		assert_eq!(
+			matching_ids(&conn, publisher(&["Activision, Electronic Arts", "Atari"]))
+				.await,
+			vec![8]
+		);
 	}
 
 	#[test]

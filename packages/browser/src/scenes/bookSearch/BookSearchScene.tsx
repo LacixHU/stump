@@ -11,13 +11,14 @@ import { defaultBookColumnSort } from '@/components/book/table'
 import { GridSizeSlider } from '@/components/container'
 import DynamicCardGrid from '@/components/container/DynamicCardGrid'
 import {
+	FilterContext,
 	FilterHeader,
 	URLFilterContainer,
 	URLFilterDrawer,
 	URLOrdering,
 	useFilterScene,
 } from '@/components/filters'
-import { FilterContext, FilterInput } from '@/components/filters/context'
+import { FilterInput } from '@/components/filters/context'
 import {
 	DEFAULT_MEDIA_ORDER_BY,
 	useMediaURLOrderBy,

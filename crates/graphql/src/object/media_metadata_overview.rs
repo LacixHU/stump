@@ -3,19 +3,13 @@ use async_graphql::{Context, Object, Result};
 use models::entity::{media, media_metadata};
 use sea_orm::{prelude::*, DatabaseConnection, QuerySelect, Select};
 use std::collections::BTreeSet;
+use stump_core::utils::serde::comma_separated_list_to_vec;
 
-static VALUE_SEPERATOR: char = ',';
 fn make_unique(iter: impl Iterator<Item = String>) -> Vec<String> {
 	BTreeSet::<String>::from_iter(iter)
 		.into_iter()
 		.filter(|s| !s.is_empty())
 		.collect::<Vec<String>>()
-}
-
-fn list_str_to_vec(list: String) -> Vec<String> {
-	list.split(VALUE_SEPERATOR)
-		.map(|s| s.trim().to_string())
-		.collect()
 }
 
 fn get_base_query(
@@ -43,7 +37,9 @@ macro_rules! get_unique_values_inner {
 	($column:ident, $conn:ident, $series_id:ident) => {{
 		let query = get_base_query(media_metadata::Column::$column, $series_id);
 		let values: Vec<String> = query.into_tuple().all($conn).await?;
-		Ok(make_unique(values.into_iter().flat_map(list_str_to_vec)))
+		Ok(make_unique(
+			values.into_iter().flat_map(comma_separated_list_to_vec),
+		))
 	}};
 }
 
@@ -108,15 +104,23 @@ impl MediaMetadataOverview {
 		get_unique_values_inner!(Composers, conn, series_id)
 	}
 
+	async fn developers(&self, ctx: &Context<'_>) -> Result<Vec<String>> {
+		let conn: &DatabaseConnection = ctx.data::<CoreContext>()?.conn.as_ref();
+		let series_id = self.series_id.clone();
+		get_unique_values_inner!(Developers, conn, series_id)
+	}
+
+	async fn platforms(&self, ctx: &Context<'_>) -> Result<Vec<String>> {
+		let conn: &DatabaseConnection = ctx.data::<CoreContext>()?.conn.as_ref();
+		let series_id = self.series_id.clone();
+		get_unique_values_inner!(Platforms, conn, series_id)
+	}
+
 	async fn publishers(&self, ctx: &Context<'_>) -> Result<Vec<String>> {
 		let conn: &DatabaseConnection = ctx.data::<CoreContext>()?.conn.as_ref();
 		let series_id = self.series_id.clone();
-		let values: Vec<String> =
-			get_base_query(media_metadata::Column::Publisher, series_id)
-				.into_tuple()
-				.all(conn)
-				.await?;
-		Ok(values)
+		// A game's publisher lists every company that published it
+		get_unique_values_inner!(Publisher, conn, series_id)
 	}
 
 	async fn characters(&self, ctx: &Context<'_>) -> Result<Vec<String>> {
@@ -166,7 +170,7 @@ mod tests {
 	async fn test_get_unique_values() {
 		let mock_db = MockDatabase::new(sea_orm::DatabaseBackend::Sqlite)
 			.append_query_results([[maplit::btreemap! {
-				"0" => Into::<Value>::into(["a", "a", "c"].join(&VALUE_SEPERATOR.to_string())),
+				"0" => Into::<Value>::into(["a", "a", "c"].join(",")),
 			}]])
 			.into_connection();
 
@@ -191,7 +195,7 @@ mod tests {
 	async fn test_empty_value_after_split() {
 		let mock_db = MockDatabase::new(sea_orm::DatabaseBackend::Sqlite)
 			.append_query_results([[maplit::btreemap! {
-				"0" => Into::<Value>::into(["a", "", "c"].join(&VALUE_SEPERATOR.to_string())),
+				"0" => Into::<Value>::into(["a", "", "c"].join(",")),
 			}]])
 			.into_connection();
 

@@ -59,6 +59,7 @@ const fragment = graphql(`
 		pencillers
 		platforms
 		publisher
+		publishers
 		series
 		seriesGroup
 		storyArc
@@ -158,11 +159,14 @@ export default function MediaMetadataEditor({ mediaId, data }: Props) {
 								'genres',
 								'characters',
 								'colorists',
+								'composers',
 								'coverArtists',
+								'developers',
 								'editors',
 								'inkers',
 								'letterers',
 								'pencillers',
+								'platforms',
 								'teams',
 								'writers',
 							),
@@ -176,17 +180,13 @@ export default function MediaMetadataEditor({ mediaId, data }: Props) {
 											const item = values[index]
 											if (!item) return undefined
 											return paths.bookSearchWithFilter({
-												metadata: { [field]: { likeAnyOf: [item] } },
+												metadata: { [field]: { hasAnyOf: [item] } },
 											})
 										}}
 									/>
 								)
 							},
 						)
-						// The book search has no filter for these, so their badges link nowhere
-						.with(P.union('developers', 'platforms', 'composers'), (field) => (
-							<BadgeListCell binding={field} values={getProperty(metadata, field) ?? []} />
-						))
 						.with('links', () => {
 							const safeUrls = (getProperty(metadata, 'links') ?? []).map((url) => {
 								try {
@@ -226,18 +226,26 @@ export default function MediaMetadataEditor({ mediaId, data }: Props) {
 								/>
 							),
 						)
-						.with('publisher', () => (
-							<BadgeCell
-								binding="publisher"
-								value={metadata?.publisher}
-								itemUrl={() => {
-									if (metadata?.publisher == null) return undefined
-									return paths.bookSearchWithFilter({
-										metadata: { publisher: { likeAnyOf: [metadata.publisher] } },
-									})
-								}}
-							/>
-						))
+						// Edited as one text value, shown as a badge per company
+						.with('publisher', () => {
+							if (state === MetadataEditorState.Editing) {
+								return <BadgeCell binding="publisher" value={metadata?.publisher} />
+							}
+							const publishers = metadata?.publishers ?? []
+							return (
+								<BadgeListCell
+									binding="publisher"
+									values={publishers}
+									itemUrl={(index) => {
+										const item = publishers[index]
+										if (!item) return undefined
+										return paths.bookSearchWithFilter({
+											metadata: { publisher: { hasAnyOf: [item] } },
+										})
+									}}
+								/>
+							)
+						})
 						.with(
 							P.union(
 								'identifierAmazon',
@@ -275,7 +283,7 @@ export default function MediaMetadataEditor({ mediaId, data }: Props) {
 				size: 0,
 			}),
 		],
-		[metadata, paths, checkPermission],
+		[metadata, paths, checkPermission, state],
 	) as ColumnDef<MediaMetadataEditorRow>[]
 
 	const items = useMemo(

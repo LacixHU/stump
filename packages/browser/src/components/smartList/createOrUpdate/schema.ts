@@ -71,6 +71,8 @@ export const stringField = z.enum([
 	'editors',
 	'publisher',
 	'composers',
+	'developers',
+	'platforms',
 	'colorists',
 	'letterers',
 	'coverArtists',

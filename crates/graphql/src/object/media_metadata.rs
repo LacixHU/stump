@@ -122,6 +122,15 @@ impl MediaMetadata {
 			.unwrap_or_default()
 	}
 
+	/// The companies in `publisher`, which for a game often lists several
+	async fn publishers(&self) -> Vec<String> {
+		self.model
+			.publisher
+			.clone()
+			.map(comma_separated_list_to_vec)
+			.unwrap_or_default()
+	}
+
 	async fn composers(&self) -> Vec<String> {
 		self.model
 			.composers

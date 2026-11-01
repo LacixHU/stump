@@ -28,8 +28,9 @@ export default function BookOverviewSceneHeader({ media, book, completedAt }: Pr
 	const size = media.size ?? 0
 
 	const hasStats = pages > 0 || size > 0
+	const publishers = metadata?.publishers ?? []
 	const hasMetadataBadges =
-		metadata?.publisher || metadata?.language || (metadata?.ageRating && metadata.ageRating > 0)
+		publishers.length > 0 || metadata?.language || (metadata?.ageRating && metadata.ageRating > 0)
 	const hasGenres = metadata?.genres && metadata.genres.length > 0
 	const hasWriters = metadata?.writers && metadata.writers.length > 0
 	const developers = metadata?.developers ?? []
@@ -86,7 +87,19 @@ export default function BookOverviewSceneHeader({ media, book, completedAt }: Pr
 
 			{hasMetadataBadges && (
 				<div className="gap-2 flex flex-wrap items-center">
-					{metadata?.publisher && <Badge rounded="full">{metadata.publisher}</Badge>}
+					{publishers.map((publisher) => (
+						<Link
+							key={publisher}
+							to={paths.bookSearchWithFilter({
+								metadata: { publisher: { hasAnyOf: [publisher] } },
+							})}
+							underline={false}
+						>
+							<Badge rounded="full" className="cursor-pointer">
+								{publisher}
+							</Badge>
+						</Link>
+					))}
 					{metadata?.language && <Badge rounded="full">{metadata.language}</Badge>}
 					{metadata?.ageRating && metadata.ageRating > 0 && (
 						<Badge variant="warning" rounded="full">
@@ -125,7 +138,7 @@ export default function BookOverviewSceneHeader({ media, book, completedAt }: Pr
 							<Link
 								key={genre}
 								to={paths.bookSearchWithFilter({
-									metadata: { genres: { likeAnyOf: [genre] } },
+									metadata: { genres: { hasAnyOf: [genre] } },
 								})}
 								underline={false}
 							>
@@ -148,7 +161,7 @@ export default function BookOverviewSceneHeader({ media, book, completedAt }: Pr
 							<Link
 								key={writer}
 								to={paths.bookSearchWithFilter({
-									metadata: { writers: { likeAnyOf: [writer] } },
+									metadata: { writers: { hasAnyOf: [writer] } },
 								})}
 								underline={false}
 							>
@@ -161,16 +174,32 @@ export default function BookOverviewSceneHeader({ media, book, completedAt }: Pr
 				</div>
 			)}
 
-			{developers.length > 0 && <LabelledBadgeList label="Developers" values={developers} />}
+			{developers.length > 0 && (
+				<LabelledBadgeList
+					label="Developers"
+					values={developers}
+					buildHref={(developer) =>
+						paths.bookSearchWithFilter({ metadata: { developers: { hasAnyOf: [developer] } } })
+					}
+				/>
+			)}
 
-			{platforms.length > 0 && <LabelledBadgeList label="Platforms" values={platforms} />}
+			{platforms.length > 0 && (
+				<LabelledBadgeList
+					label="Platforms"
+					values={platforms}
+					buildHref={(platform) =>
+						paths.bookSearchWithFilter({ metadata: { platforms: { hasAnyOf: [platform] } } })
+					}
+				/>
+			)}
 
 			{composers.length > 0 && (
 				<LabelledBadgeList
 					label="Composers"
 					values={composers}
 					buildHref={(composer) =>
-						paths.bookSearchWithFilter({ metadata: { composers: { likeAnyOf: [composer] } } })
+						paths.bookSearchWithFilter({ metadata: { composers: { hasAnyOf: [composer] } } })
 					}
 				/>
 			)}
@@ -221,12 +250,11 @@ export default function BookOverviewSceneHeader({ media, book, completedAt }: Pr
 type LabelledBadgeListProps = {
 	label: string
 	values: string[]
-	buildHref?: (value: string) => string
+	buildHref: (value: string) => string
 }
 
 /**
- * A labelled list of badges, each linking to `buildHref(value)` when given. Without it the
- * badges link nowhere: the book search has no filter for a game's developers or platforms.
+ * A labelled list of badges, each linking to `buildHref(value)`
  */
 function LabelledBadgeList({ label, values, buildHref }: LabelledBadgeListProps) {
 	return (
@@ -235,19 +263,13 @@ function LabelledBadgeList({ label, values, buildHref }: LabelledBadgeListProps)
 				{label}
 			</Text>
 			<BadgeList>
-				{values.map((value) =>
-					buildHref ? (
-						<Link key={value} to={buildHref(value)} underline={false}>
-							<Badge variant="secondary" rounded="full" className="cursor-pointer">
-								{value}
-							</Badge>
-						</Link>
-					) : (
-						<Badge key={value} variant="secondary" rounded="full">
+				{values.map((value) => (
+					<Link key={value} to={buildHref(value)} underline={false}>
+						<Badge variant="secondary" rounded="full" className="cursor-pointer">
 							{value}
 						</Badge>
-					),
-				)}
+					</Link>
+				))}
 			</BadgeList>
 		</div>
 	)

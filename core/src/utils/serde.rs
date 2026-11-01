@@ -145,6 +145,71 @@ pub fn parse_age_restriction(str_sequence: &str) -> Option<i32> {
 	str_sequence.parse().ok()
 }
 
+/// Company suffixes written after a comma (`Atari, Inc.`), lowercased. In a comma-separated
+/// list they belong to the name before them, not to a list entry of their own.
+pub const COMPANY_SUFFIXES: &[&str] = &[
+	"inc.",
+	"inc",
+	"ltd.",
+	"ltd",
+	"llc",
+	"l.l.c.",
+	"co.",
+	"corp.",
+	"corp",
+	"gmbh",
+	"plc",
+	"s.a.",
+	"b.v.",
+	"k.k.",
+	"pty. ltd.",
+	"pty ltd",
+	"limited",
+];
+
+/// Splits a comma-separated list, keeping a company suffix with the name before it, so
+/// `Atari, Inc., Activision` is `["Atari, Inc.", "Activision"]`
 pub fn comma_separated_list_to_vec(vec: String) -> Vec<String> {
-	vec.split(',').map(|v| v.trim().to_owned()).collect()
+	let mut items: Vec<String> = Vec::new();
+	for item in vec.split(',').map(str::trim) {
+		match items.last_mut() {
+			Some(prev)
+				if !prev.is_empty()
+					&& COMPANY_SUFFIXES.contains(&item.to_ascii_lowercase().as_str()) =>
+			{
+				prev.push_str(", ");
+				prev.push_str(item);
+			},
+			_ => items.push(item.to_owned()),
+		}
+	}
+	items
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn test_comma_separated_list_keeps_company_suffixes() {
+		assert_eq!(
+			comma_separated_list_to_vec(
+				"Atari, Inc., Activision,Nintendo Co., Ltd. , Inc.Corp".to_string()
+			),
+			vec![
+				"Atari, Inc.",
+				"Activision",
+				"Nintendo Co., Ltd.",
+				"Inc.Corp"
+			]
+		);
+		assert_eq!(
+			comma_separated_list_to_vec("Game Boy, Game Boy Color".to_string()),
+			vec!["Game Boy", "Game Boy Color"]
+		);
+		assert_eq!(
+			comma_separated_list_to_vec(", Inc.".to_string()),
+			vec!["", "Inc."]
+		);
+	}
 }

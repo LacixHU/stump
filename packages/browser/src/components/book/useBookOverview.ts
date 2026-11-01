@@ -20,6 +20,7 @@ const query = graphql(`
 				genres
 				language
 				publisher
+				publishers
 				writers
 				developers
 				platforms

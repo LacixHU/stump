@@ -151,3 +151,15 @@ slice a `&str` only at offsets that `find`/`char_indices` returned. Apply a lowe
 string's offsets only after `to_ascii_lowercase`, which keeps byte positions. Every text
 parser gets a test with accented and multi-byte names at several offsets. When a crash
 report comes in, reproduce it with the user's own binary against their real data first.
+
+## A clicked value means "exactly this", not "contains this"
+
+The metadata badges linked to `likeAnyOf`, a `%value%` substring match, so clicking platform
+`Game Boy` also listed `Game Boy Color` and `Game Boy Advance` games (13 instead of 3), and
+`DOS` pulled in `MS-DOS`. The composer link copied the existing pattern without checking what
+it matched; a test with only one distinctive name could not show the problem.
+
+**The rule:** a link or picker built from a known value filters for that value exactly and
+case-insensitively: `hasAnyOf` (one list entry). Keep `likeAnyOf` for text a person types.
+When a filter is wired, test it with a value that is a substring of another value in the data
+(`Game Boy` / `Game Boy Color`) and with a name that contains the separator (`Atari, Inc.`).

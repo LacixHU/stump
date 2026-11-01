@@ -875,30 +875,42 @@ export type ExternalSeriesMetadata = {
 };
 
 export type FieldFilterFileStatus =
-  { anyOf: Array<FileStatus>; contains?: never; endsWith?: never; eq?: never; excludes?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
-  |  { anyOf?: never; contains: FileStatus; endsWith?: never; eq?: never; excludes?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
-  |  { anyOf?: never; contains?: never; endsWith: FileStatus; eq?: never; excludes?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
-  |  { anyOf?: never; contains?: never; endsWith?: never; eq: FileStatus; excludes?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
-  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes: FileStatus; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
-  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; like: FileStatus; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
-  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; like?: never; likeAnyOf: Array<FileStatus>; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
-  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; like?: never; likeAnyOf?: never; likeNoneOf: Array<FileStatus>; neq?: never; noneOf?: never; startsWith?: never; }
-  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq: FileStatus; noneOf?: never; startsWith?: never; }
-  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf: Array<FileStatus>; startsWith?: never; }
-  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith: FileStatus; };
+  { anyOf: Array<FileStatus>; contains?: never; endsWith?: never; eq?: never; excludes?: never; hasAnyOf?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
+  |  { anyOf?: never; contains: FileStatus; endsWith?: never; eq?: never; excludes?: never; hasAnyOf?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
+  |  { anyOf?: never; contains?: never; endsWith: FileStatus; eq?: never; excludes?: never; hasAnyOf?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
+  |  { anyOf?: never; contains?: never; endsWith?: never; eq: FileStatus; excludes?: never; hasAnyOf?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
+  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes: FileStatus; hasAnyOf?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
+  |  /**
+   * An entry of a comma-separated list (genres, platforms, publishers, ...) equals any of
+   * these, ignoring case. Unlike `likeAnyOf`, `Game Boy` does not match `Game Boy Color`.
+   * A company suffix stays with its name: `Atari` does not match `Atari, Inc.`
+   */
+  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; hasAnyOf: Array<FileStatus>; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
+  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; hasAnyOf?: never; like: FileStatus; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
+  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; hasAnyOf?: never; like?: never; likeAnyOf: Array<FileStatus>; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
+  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; hasAnyOf?: never; like?: never; likeAnyOf?: never; likeNoneOf: Array<FileStatus>; neq?: never; noneOf?: never; startsWith?: never; }
+  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; hasAnyOf?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq: FileStatus; noneOf?: never; startsWith?: never; }
+  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; hasAnyOf?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf: Array<FileStatus>; startsWith?: never; }
+  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; hasAnyOf?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith: FileStatus; };
 
 export type FieldFilterString =
-  { anyOf: Array<Scalars['String']['input']>; contains?: never; endsWith?: never; eq?: never; excludes?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
-  |  { anyOf?: never; contains: Scalars['String']['input']; endsWith?: never; eq?: never; excludes?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
-  |  { anyOf?: never; contains?: never; endsWith: Scalars['String']['input']; eq?: never; excludes?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
-  |  { anyOf?: never; contains?: never; endsWith?: never; eq: Scalars['String']['input']; excludes?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
-  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes: Scalars['String']['input']; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
-  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; like: Scalars['String']['input']; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
-  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; like?: never; likeAnyOf: Array<Scalars['String']['input']>; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
-  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; like?: never; likeAnyOf?: never; likeNoneOf: Array<Scalars['String']['input']>; neq?: never; noneOf?: never; startsWith?: never; }
-  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq: Scalars['String']['input']; noneOf?: never; startsWith?: never; }
-  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf: Array<Scalars['String']['input']>; startsWith?: never; }
-  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith: Scalars['String']['input']; };
+  { anyOf: Array<Scalars['String']['input']>; contains?: never; endsWith?: never; eq?: never; excludes?: never; hasAnyOf?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
+  |  { anyOf?: never; contains: Scalars['String']['input']; endsWith?: never; eq?: never; excludes?: never; hasAnyOf?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
+  |  { anyOf?: never; contains?: never; endsWith: Scalars['String']['input']; eq?: never; excludes?: never; hasAnyOf?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
+  |  { anyOf?: never; contains?: never; endsWith?: never; eq: Scalars['String']['input']; excludes?: never; hasAnyOf?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
+  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes: Scalars['String']['input']; hasAnyOf?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
+  |  /**
+   * An entry of a comma-separated list (genres, platforms, publishers, ...) equals any of
+   * these, ignoring case. Unlike `likeAnyOf`, `Game Boy` does not match `Game Boy Color`.
+   * A company suffix stays with its name: `Atari` does not match `Atari, Inc.`
+   */
+  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; hasAnyOf: Array<Scalars['String']['input']>; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
+  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; hasAnyOf?: never; like: Scalars['String']['input']; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
+  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; hasAnyOf?: never; like?: never; likeAnyOf: Array<Scalars['String']['input']>; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith?: never; }
+  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; hasAnyOf?: never; like?: never; likeAnyOf?: never; likeNoneOf: Array<Scalars['String']['input']>; neq?: never; noneOf?: never; startsWith?: never; }
+  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; hasAnyOf?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq: Scalars['String']['input']; noneOf?: never; startsWith?: never; }
+  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; hasAnyOf?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf: Array<Scalars['String']['input']>; startsWith?: never; }
+  |  { anyOf?: never; contains?: never; endsWith?: never; eq?: never; excludes?: never; hasAnyOf?: never; like?: never; likeAnyOf?: never; likeNoneOf?: never; neq?: never; noneOf?: never; startsWith: Scalars['String']['input']; };
 
 /** The different statuses a file reference can have */
 export enum FileStatus {
@@ -1611,6 +1623,8 @@ export type MediaMetadata = {
   pencillers: Array<Scalars['String']['output']>;
   platforms: Array<Scalars['String']['output']>;
   publisher?: Maybe<Scalars['String']['output']>;
+  /** The companies in `publisher`, which for a game often lists several */
+  publishers: Array<Scalars['String']['output']>;
   series?: Maybe<Scalars['String']['output']>;
   seriesGroup?: Maybe<Scalars['String']['output']>;
   storyArc?: Maybe<Scalars['String']['output']>;
@@ -1634,6 +1648,7 @@ export type MediaMetadataFilterInput = {
   composers?: InputMaybe<FieldFilterString>;
   coverArtists?: InputMaybe<FieldFilterString>;
   day?: InputMaybe<NumericFilterI32>;
+  developers?: InputMaybe<FieldFilterString>;
   editors?: InputMaybe<FieldFilterString>;
   genres?: InputMaybe<FieldFilterString>;
   inkers?: InputMaybe<FieldFilterString>;
@@ -1641,6 +1656,7 @@ export type MediaMetadataFilterInput = {
   links?: InputMaybe<FieldFilterString>;
   month?: InputMaybe<NumericFilterI32>;
   pencillers?: InputMaybe<FieldFilterString>;
+  platforms?: InputMaybe<FieldFilterString>;
   publisher?: InputMaybe<FieldFilterString>;
   series?: InputMaybe<FieldFilterString>;
   summary?: InputMaybe<FieldFilterString>;
@@ -1748,11 +1764,13 @@ export type MediaMetadataOverview = {
   colorists: Array<Scalars['String']['output']>;
   composers: Array<Scalars['String']['output']>;
   coverArtists: Array<Scalars['String']['output']>;
+  developers: Array<Scalars['String']['output']>;
   editors: Array<Scalars['String']['output']>;
   genres: Array<Scalars['String']['output']>;
   inkers: Array<Scalars['String']['output']>;
   letterers: Array<Scalars['String']['output']>;
   pencillers: Array<Scalars['String']['output']>;
+  platforms: Array<Scalars['String']['output']>;
   publishers: Array<Scalars['String']['output']>;
   series: Array<Scalars['String']['output']>;
   teams: Array<Scalars['String']['output']>;
@@ -5816,7 +5834,7 @@ export type BookSearchOverlayQuery = { __typename?: 'Query', media: { __typename
 
 export type SimpleBookCardFragment = { __typename?: 'Media', id: string, resolvedName: string, createdAt: any, thumbnail: { __typename?: 'ImageRef', url: string, metadata?: { __typename?: 'ImageMetadata', averageColor?: string | null, thumbhash?: string | null, colors: Array<{ __typename?: 'ImageColor', color: string, percentage: any }> } | null } } & { ' $fragmentName'?: 'SimpleBookCardFragment' };
 
-export type MediaMetadataEditorFragment = { __typename?: 'MediaMetadata', ageRating?: number | null, characters: Array<string>, colorists: Array<string>, composers: Array<string>, coverArtists: Array<string>, day?: number | null, developers: Array<string>, editors: Array<string>, format?: string | null, identifierAmazon?: string | null, identifierCalibre?: string | null, identifierGoogle?: string | null, identifierIsbn?: string | null, identifierMobiAsin?: string | null, identifierUuid?: string | null, genres: Array<string>, inkers: Array<string>, language?: string | null, letterers: Array<string>, links: Array<string>, month?: number | null, notes?: string | null, number?: any | null, pageCount?: number | null, pencillers: Array<string>, platforms: Array<string>, publisher?: string | null, series?: string | null, seriesGroup?: string | null, storyArc?: string | null, storyArcNumber?: any | null, summary?: string | null, teams: Array<string>, title?: string | null, titleSort?: string | null, volume?: number | null, writers: Array<string>, year?: number | null, lockedFields: Array<MetadataField> } & { ' $fragmentName'?: 'MediaMetadataEditorFragment' };
+export type MediaMetadataEditorFragment = { __typename?: 'MediaMetadata', ageRating?: number | null, characters: Array<string>, colorists: Array<string>, composers: Array<string>, coverArtists: Array<string>, day?: number | null, developers: Array<string>, editors: Array<string>, format?: string | null, identifierAmazon?: string | null, identifierCalibre?: string | null, identifierGoogle?: string | null, identifierIsbn?: string | null, identifierMobiAsin?: string | null, identifierUuid?: string | null, genres: Array<string>, inkers: Array<string>, language?: string | null, letterers: Array<string>, links: Array<string>, month?: number | null, notes?: string | null, number?: any | null, pageCount?: number | null, pencillers: Array<string>, platforms: Array<string>, publisher?: string | null, publishers: Array<string>, series?: string | null, seriesGroup?: string | null, storyArc?: string | null, storyArcNumber?: any | null, summary?: string | null, teams: Array<string>, title?: string | null, titleSort?: string | null, volume?: number | null, writers: Array<string>, year?: number | null, lockedFields: Array<MetadataField> } & { ' $fragmentName'?: 'MediaMetadataEditorFragment' };
 
 export type UpdateMediaMetadataMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -5844,7 +5862,7 @@ export type BookOverviewSceneQueryVariables = Exact<{
 
 export type BookOverviewSceneQuery = { __typename?: 'Query', mediaById?: (
     { __typename?: 'Media', id: string, resolvedName: string, extension: string, seriesId?: string | null, pages: number, size: number, metadata?: (
-      { __typename?: 'MediaMetadata', links: Array<string>, summary?: string | null, ageRating?: number | null, genres: Array<string>, language?: string | null, publisher?: string | null, writers: Array<string>, developers: Array<string>, platforms: Array<string>, composers: Array<string>, year?: number | null }
+      { __typename?: 'MediaMetadata', links: Array<string>, summary?: string | null, ageRating?: number | null, genres: Array<string>, language?: string | null, publisher?: string | null, publishers: Array<string>, writers: Array<string>, developers: Array<string>, platforms: Array<string>, composers: Array<string>, year?: number | null }
       & { ' $fragmentRefs'?: { 'MediaMetadataEditorFragment': MediaMetadataEditorFragment } }
     ) | null, tags: Array<{ __typename?: 'Tag', id: number, name: string }>, readHistory: Array<{ __typename?: 'ReadthroughRecord', completedAt: any }> }
     & { ' $fragmentRefs'?: { 'BookCardFragment': BookCardFragment;'BookFileInformationFragment': BookFileInformationFragment } }
@@ -5923,7 +5941,7 @@ export type MediaFilterFormQueryVariables = Exact<{
 }>;
 
 
-export type MediaFilterFormQuery = { __typename?: 'Query', mediaMetadataOverview: { __typename?: 'MediaMetadataOverview', genres: Array<string>, writers: Array<string>, pencillers: Array<string>, colorists: Array<string>, letterers: Array<string>, inkers: Array<string>, publishers: Array<string>, composers: Array<string>, editors: Array<string>, characters: Array<string> } };
+export type MediaFilterFormQuery = { __typename?: 'Query', mediaMetadataOverview: { __typename?: 'MediaMetadataOverview', genres: Array<string>, writers: Array<string>, pencillers: Array<string>, colorists: Array<string>, letterers: Array<string>, inkers: Array<string>, publishers: Array<string>, composers: Array<string>, developers: Array<string>, platforms: Array<string>, editors: Array<string>, characters: Array<string> } };
 
 export type DeleteLibraryMutationVariables = Exact<{
   id: Scalars['ID']['input'];
@@ -7912,6 +7930,7 @@ export const MediaMetadataEditorFragmentDoc = new TypedDocumentString(`
   pencillers
   platforms
   publisher
+  publishers
   series
   seriesGroup
   storyArc
@@ -10503,6 +10522,7 @@ export const UpdateMediaMetadataDocument = new TypedDocumentString(`
   pencillers
   platforms
   publisher
+  publishers
   series
   seriesGroup
   storyArc
@@ -10541,6 +10561,7 @@ export const BookOverviewSceneDocument = new TypedDocumentString(`
       genres
       language
       publisher
+      publishers
       writers
       developers
       platforms
@@ -10620,6 +10641,7 @@ fragment MediaMetadataEditor on MediaMetadata {
   pencillers
   platforms
   publisher
+  publishers
   series
   seriesGroup
   storyArc
@@ -10729,6 +10751,8 @@ export const MediaFilterFormDocument = new TypedDocumentString(`
     inkers
     publishers
     composers
+    developers
+    platforms
     editors
     characters
   }
