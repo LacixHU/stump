@@ -65,6 +65,7 @@ type EmscriptenFS = {
 	readFile: (path: string, opts?: { encoding: string }) => Uint8Array
 	writeFile: (path: string, data: Uint8Array, opts?: { encoding: string }) => void
 	mkdir: (path: string) => void
+	unlink: (path: string) => void
 }
 
 type DosSdlAudio = {
@@ -338,7 +339,22 @@ function ensureParentDir(fs: EmscriptenFS, filePath: string) {
 	}
 }
 
-function restoreDosFiles(fs: EmscriptenFS, files: DosSaveFile[]) {
+/**
+ * Put the filesystem back to what the save was taken with.
+ *
+ * Files the game created after the bundle booted are dropped when the save does not have
+ * them: a level file written after the save would otherwise survive into a game that has
+ * never reached that level. Everything else the save carries is written over the top.
+ */
+function restoreDosFiles(
+	fs: EmscriptenFS,
+	files: DosSaveFile[],
+	baseline: Map<string, DosFsStamp>,
+) {
+	const saved = new Set(files.map((file) => file.path))
+	for (const path of snapshotDosFs(fs).keys()) {
+		if (!baseline.has(path) && !saved.has(path)) fs.unlink(path)
+	}
 	for (const file of files) {
 		ensureParentDir(fs, file.path)
 		fs.writeFile(file.path, file.data, { encoding: 'binary' })
@@ -1013,8 +1029,10 @@ async function create(options: EmulatorMountOptions): Promise<RetroEmulatorHandl
 					}
 					if (unpacked.sdlTicks != null) restoreSdlTicks(current, unpacked.sdlTicks)
 					if (files) {
-						restoreDosFiles(files, unpacked.files)
-						baseline = snapshotDosFs(files)
+						// The baseline stays the freshly extracted bundle. Moving it to include the
+						// restored files would make the next save leave them out, as they would no
+						// longer differ from it.
+						restoreDosFiles(files, unpacked.files, baseline)
 					}
 				},
 				true,
