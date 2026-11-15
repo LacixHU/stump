@@ -1,0 +1,28 @@
+[package]
+name = "piper_tts"
+version.workspace = true
+edition = "2021"
+description = "In-process Piper neural text-to-speech (port of rhasspy/piper)"
+# espeak-ng is compiled from the `espeak-ng` submodule and linked statically (GPL-3.0).
+links = "espeak-ng"
+
+[dependencies]
+# ONNX Runtime is downloaded at build time and linked statically, so no
+# onnxruntime shared library has to ship next to the server binary.
+ort = { version = "=2.0.0-rc.15", default-features = false, features = [
+  "std",
+  "tracing",
+  "download-binaries",
+  "tls-native",
+  "copy-dylibs",
+] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+unicode-normalization = "0.1.25"
+zstd = "0.13"
+
+[build-dependencies]
+cc = "1.4"
+zstd = "0.13"

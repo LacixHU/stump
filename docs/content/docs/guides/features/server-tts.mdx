@@ -3,46 +3,65 @@ title: Server TTS (Piper)
 description: Optional server-side text-to-speech for EPUB read aloud, limited to selected users
 ---
 
-Server TTS uses [Piper](https://github.com/rhasspy/piper) on the Stump host to synthesize speech for the EPUB **Read aloud** feature. Browser/OS voices remain the default for everyone else.
+Server TTS uses [Piper](https://github.com/rhasspy/piper) neural voices on the Stump host to synthesize speech for the EPUB **Read aloud** feature. Browser/OS voices remain the default for everyone else.
+
+The Piper engine is built into the Stump server: no separate `piper` executable, espeak-ng library or data folder is needed. ONNX Runtime and espeak-ng (used to turn text into phonemes) are compiled into the server binary. espeak-ng only reads its data from files, so the server unpacks it (about 20 MB) into `{config_dir}/espeak-ng` the first time speech is requested.
 
 ## Requirements
 
-1. Install the Piper binary on the server host and ensure it is on `PATH`, or set an absolute path via config.
-2. Download one or more Piper voice models (`.onnx` + matching `.onnx.json`) into the voices directory.
-3. Enable the feature and grant the **Server TTS** permission only to users who should use it.
+1. Download one or more Piper voice models (`.onnx` + matching `.onnx.json`) into a `voices` folder next to the server binary.
+2. Grant the **Server TTS** permission only to users who should use it.
+
+A Windows install looks like:
+
+```text
+stump_server.exe
+voices/
+  en_US-lessac-medium.onnx
+  en_US-lessac-medium.onnx.json
+```
 
 ## Configuration
 
-| Setting                | Env                          | Default                   | Description                           |
-| ---------------------- | ---------------------------- | ------------------------- | ------------------------------------- |
-| `enable_server_tts`    | `STUMP_ENABLE_SERVER_TTS`    | `false`                   | Master switch for server TTS          |
-| `piper_path`           | `STUMP_PIPER_PATH`           | `piper` (PATH)            | Path to the Piper executable          |
-| `piper_voices_dir`     | `STUMP_PIPER_VOICES_DIR`     | `{config_dir}/tts/voices` | Directory of `.onnx` voice models     |
-| `piper_default_voice`  | `STUMP_PIPER_DEFAULT_VOICE`  | first voice found         | Voice id (filename without `.onnx`)   |
-| `server_tts_max_chars` | `STUMP_SERVER_TTS_MAX_CHARS` | `2000`                    | Max characters per synthesize request |
+| Setting                | Env                          | Default                            | Description                           |
+| ---------------------- | ---------------------------- | ---------------------------------- | ------------------------------------- |
+| `piper_voices_dir`     | `STUMP_PIPER_VOICES_DIR`     | `voices` next to the server binary | Directory of `.onnx` voice models     |
+| `piper_default_voice`  | `STUMP_PIPER_DEFAULT_VOICE`  | first voice found                  | Voice id (filename without `.onnx`)   |
+| `server_tts_max_chars` | `STUMP_SERVER_TTS_MAX_CHARS` | `2000`                             | Max characters per synthesize request |
 
 Example `Stump.toml`:
 
 ```toml
-enable_server_tts = true
-# piper_path = "/usr/local/bin/piper"
-# piper_voices_dir = "/var/lib/stump/tts/voices"
+# piper_voices_dir = "/var/lib/stump/voices"
 # piper_default_voice = "en_US-lessac-medium"
 ```
 
-Place models like:
+There is no on/off switch: server TTS is available whenever voices are present. The former `piper_path`, `enable_server_tts`, `espeak_ng_path` and `espeak_ng_data_dir` settings are no longer used.
 
-```text
-{config_dir}/tts/voices/en_US-lessac-medium.onnx
-{config_dir}/tts/voices/en_US-lessac-medium.onnx.json
+On Windows, the config directory path must contain only ASCII characters, because espeak-ng opens its data files with narrow-character APIs. Set `STUMP_CONFIG_DIR` if your user profile path has accented characters.
+
+Voices are loaded on first use and kept in memory (up to four at a time), so only the first sentence spoken with a voice pays the model load time. Replacing a voice file on disk reloads it automatically.
+
+## Building
+
+espeak-ng is a git submodule at `crates/piper_tts/espeak-ng`. Check it out before building:
+
+```sh
+git submodule update --init crates/piper_tts/espeak-ng
 ```
+
+The build needs a C compiler (MSVC on Windows, gcc or clang elsewhere) and compiles espeak-ng's phoneme data and dictionaries for all its languages; this takes a few minutes the first time and is cached afterwards.
+
+## License
+
+espeak-ng is licensed under GPL-3.0-or-later. Because it is compiled into the server, binaries built with server TTS are combined works that must be distributed under the terms of the GPL-3.0, including making the corresponding source available.
 
 ## Permissions
 
 Server TTS is available only when:
 
-1. `enable_server_tts` is `true`
-2. At least one valid voice model is present
+1. At least one valid voice model (`.onnx` with its `.onnx.json`) is present
+2. The built-in espeak-ng data can be unpacked (otherwise a warning is logged and the feature reports as unavailable)
 3. The user has the **Server TTS** permission (`ACCESS_SERVER_TTS`), or is the server owner
 
 Assign the permission under **Settings → Users**. Users without it only see browser read aloud.

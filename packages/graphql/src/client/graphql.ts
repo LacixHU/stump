@@ -4679,8 +4679,6 @@ export type StumpConfig = {
   enableOpdsProgression: Scalars['Boolean']['output'];
   /** Indicates if the GraphQL playground should be enabled. */
   enablePlayground: Scalars['Boolean']['output'];
-  /** Whether server-side TTS (Piper) is enabled for users with AccessServerTts. */
-  enableServerTts: Scalars['Boolean']['output'];
   /** Whether or not the server will allow users with the appropriate permissions to upload books and series. */
   enableUpload: Scalars['Boolean']['output'];
   /** The interval at which automatic deleted session cleanup is performed. */
@@ -4735,9 +4733,10 @@ export type StumpConfig = {
   pdfiumPath?: Maybe<Scalars['String']['output']>;
   /** Default Piper voice id (filename stem without `.onnx`). */
   piperDefaultVoice?: Maybe<Scalars['String']['output']>;
-  /** Path to the Piper binary. Defaults to looking up `piper` on PATH when unset. */
-  piperPath?: Maybe<Scalars['String']['output']>;
-  /** Directory containing Piper voice models (`.onnx` + matching `.onnx.json`). */
+  /**
+   * Directory containing Piper voice models (`.onnx` + matching `.onnx.json`).
+   * Defaults to `voices` next to the server executable.
+   */
   piperVoicesDir?: Maybe<Scalars['String']['output']>;
   /** The port from which to serve the application (default: 10801). */
   port: Scalars['Int']['output'];

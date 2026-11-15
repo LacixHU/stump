@@ -28,4 +28,14 @@ fn main() {
 	if let Ok(build_channel) = std::env::var("BUILD_CHANNEL") {
 		println!("cargo:rustc-env=BUILD_CHANNEL={}", build_channel);
 	}
+
+	// Piper TTS links ONNX Runtime, whose Windows build imports DirectML/D3D12 that
+	// are never used (CPU inference only). Delay-load them so the server starts on
+	// hosts without them (e.g. Windows Server Core) and needs no DirectML.dll.
+	if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
+		for dll in ["DirectML.dll", "d3d12.dll", "dxgi.dll"] {
+			println!("cargo:rustc-link-arg=/DELAYLOAD:{dll}");
+		}
+		println!("cargo:rustc-link-lib=delayimp");
+	}
 }

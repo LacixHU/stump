@@ -3450,11 +3450,10 @@ type StumpConfig {
 	enableUpload: Boolean!
 	"The maximum size, in bytes, of files that can be uploaded to be included in libraries."
 	maxFileUploadSize: Int!
-	"Whether server-side TTS (Piper) is enabled for users with AccessServerTts."
-	enableServerTts: Boolean!
-	"Path to the Piper binary. Defaults to looking up `piper` on PATH when unset."
-	piperPath: String
-	"Directory containing Piper voice models (`.onnx` + matching `.onnx.json`)."
+	"""
+	Directory containing Piper voice models (`.onnx` + matching `.onnx.json`).
+	Defaults to `voices` next to the server executable.
+	"""
 	piperVoicesDir: String
 	"Default Piper voice id (filename stem without `.onnx`)."
 	piperDefaultVoice: String

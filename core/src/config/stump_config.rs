@@ -55,8 +55,6 @@ pub mod env_keys {
 	pub const MAX_IMAGE_UPLOAD_SIZE_KEY: &str = "STUMP_MAX_IMAGE_UPLOAD_SIZE";
 	pub const ENABLE_UPLOAD_KEY: &str = "STUMP_ENABLE_UPLOAD";
 	pub const MAX_FILE_UPLOAD_SIZE_KEY: &str = "STUMP_MAX_FILE_UPLOAD_SIZE";
-	pub const ENABLE_SERVER_TTS_KEY: &str = "STUMP_ENABLE_SERVER_TTS";
-	pub const PIPER_PATH_KEY: &str = "STUMP_PIPER_PATH";
 	pub const PIPER_VOICES_DIR_KEY: &str = "STUMP_PIPER_VOICES_DIR";
 	pub const PIPER_DEFAULT_VOICE_KEY: &str = "STUMP_PIPER_DEFAULT_VOICE";
 	pub const FIRMWARE_DIR_KEY: &str = "STUMP_FIRMWARE_DIR";
@@ -92,7 +90,6 @@ pub mod defaults {
 	pub const DEFAULT_MAX_IMAGE_UPLOAD_SIZE: usize = 20 * 1024 * 1024; // 20 MB
 	pub const DEFAULT_ENABLE_UPLOAD: bool = false;
 	pub const DEFAULT_MAX_FILE_UPLOAD_SIZE: usize = 20 * 1024 * 1024; // 20 MB
-	pub const DEFAULT_ENABLE_SERVER_TTS: bool = false;
 	pub const DEFAULT_SERVER_TTS_MAX_CHARS: usize = 2_000;
 	pub const DEFAULT_PDF_RENDER_DPI: u32 = 150; // Good balance of quality and performance
 	pub const DEFAULT_PDF_MAX_DIMENSION: u32 = 1200; // Optimized for faster rendering while maintaining quality
@@ -290,17 +287,8 @@ pub struct StumpConfig {
 	#[env_key(MAX_FILE_UPLOAD_SIZE_KEY)]
 	pub max_file_upload_size: usize,
 
-	/// Whether server-side TTS (Piper) is enabled for users with AccessServerTts.
-	#[default_value(DEFAULT_ENABLE_SERVER_TTS)]
-	#[env_key(ENABLE_SERVER_TTS_KEY)]
-	pub enable_server_tts: bool,
-
-	/// Path to the Piper binary. Defaults to looking up `piper` on PATH when unset.
-	#[default_value(None)]
-	#[env_key(PIPER_PATH_KEY)]
-	pub piper_path: Option<String>,
-
 	/// Directory containing Piper voice models (`.onnx` + matching `.onnx.json`).
+	/// Defaults to `voices` next to the server executable.
 	#[default_value(None)]
 	#[env_key(PIPER_VOICES_DIR_KEY)]
 	pub piper_voices_dir: Option<String>,
@@ -504,12 +492,18 @@ impl StumpConfig {
 		PathBuf::from(&self.config_dir).join("save_states")
 	}
 
-	/// Directory used for Piper voice models. Falls back to `{config_dir}/tts/voices`.
+	/// Directory used for Piper voice models. Falls back to `voices` next to the server
+	/// executable (or `{config_dir}/voices` if the executable path is unknown).
 	pub fn get_piper_voices_dir(&self) -> PathBuf {
 		self.piper_voices_dir
 			.as_ref()
 			.map(PathBuf::from)
-			.unwrap_or_else(|| self.get_config_dir().join("tts").join("voices"))
+			.unwrap_or_else(|| {
+				env::current_exe()
+					.ok()
+					.and_then(|exe| exe.parent().map(|dir| dir.join("voices")))
+					.unwrap_or_else(|| self.get_config_dir().join("voices"))
+			})
 	}
 
 	/// Directory for user-supplied emulator firmware. Falls back to `{config_dir}/firmware`.
@@ -518,14 +512,6 @@ impl StumpConfig {
 			.as_ref()
 			.map(PathBuf::from)
 			.unwrap_or_else(|| self.get_config_dir().join("firmware"))
-	}
-
-	/// Resolved Piper binary path, or `"piper"` when unset (PATH lookup).
-	pub fn get_piper_path(&self) -> PathBuf {
-		self.piper_path
-			.as_ref()
-			.map(PathBuf::from)
-			.unwrap_or_else(|| PathBuf::from("piper"))
 	}
 
 	/// Returns a `PathBuf` to the PDF page cache directory
@@ -650,8 +636,6 @@ mod tests {
 				max_image_upload_size: Some(DEFAULT_MAX_IMAGE_UPLOAD_SIZE),
 				enable_upload: Some(DEFAULT_ENABLE_UPLOAD),
 				max_file_upload_size: Some(DEFAULT_MAX_FILE_UPLOAD_SIZE),
-				enable_server_tts: Some(DEFAULT_ENABLE_SERVER_TTS),
-				piper_path: None,
 				piper_voices_dir: None,
 				piper_default_voice: None,
 				firmware_dir: None,
@@ -731,8 +715,6 @@ mod tests {
 						max_image_upload_size: DEFAULT_MAX_IMAGE_UPLOAD_SIZE,
 						enable_upload: DEFAULT_ENABLE_UPLOAD,
 						max_file_upload_size: DEFAULT_MAX_FILE_UPLOAD_SIZE,
-						enable_server_tts: DEFAULT_ENABLE_SERVER_TTS,
-						piper_path: None,
 						piper_voices_dir: None,
 						piper_default_voice: None,
 						firmware_dir: None,

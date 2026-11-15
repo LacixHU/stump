@@ -7,7 +7,7 @@ This fork adds the following features and improvements on top of `upstream/night
 
 ## Text-to-speech
 
-- Server-side TTS using [Piper](https://github.com/rhasspy/piper)
+- Server-side TTS using [Piper](https://github.com/rhasspy/piper), built into the server (no external `piper` executable, espeak-ng library or data folder: ONNX Runtime and espeak-ng are compiled in; only the voice files sit next to the server)
 - Gated by the **Server TTS** permission (`ACCESS_SERVER_TTS`); other users keep browser/OS voices
 - Client TTS controls with rate and pitch adjustments
 - Sentence-level playback with prefetch of the next sentence for continuous read-aloud
@@ -199,18 +199,14 @@ tls_key_path = "/etc/ssl/private/privkey.pem"
 
 See [server TTS](docs/content/docs/guides/features/server-tts.mdx) for setup. Voices are `.onnx` + matching `.onnx.json` files.
 
-| Key                    | Env                          | Default                   | Description                         |
-| ---------------------- | ---------------------------- | ------------------------- | ----------------------------------- |
-| `enable_server_tts`    | `STUMP_ENABLE_SERVER_TTS`    | `false`                   | Master switch for server TTS        |
-| `piper_path`           | `STUMP_PIPER_PATH`           | `piper` (on `PATH`)       | Path to the Piper executable        |
-| `piper_voices_dir`     | `STUMP_PIPER_VOICES_DIR`     | `{config_dir}/tts/voices` | Directory of Piper voice models     |
-| `piper_default_voice`  | `STUMP_PIPER_DEFAULT_VOICE`  | first voice found         | Voice id (filename without `.onnx`) |
-| `server_tts_max_chars` | `STUMP_SERVER_TTS_MAX_CHARS` | `2000`                    | Max characters per TTS request      |
+| Key                    | Env                          | Default                            | Description                         |
+| ---------------------- | ---------------------------- | ---------------------------------- | ----------------------------------- |
+| `piper_voices_dir`     | `STUMP_PIPER_VOICES_DIR`     | `voices` next to the server binary | Directory of Piper voice models     |
+| `piper_default_voice`  | `STUMP_PIPER_DEFAULT_VOICE`  | first voice found                  | Voice id (filename without `.onnx`) |
+| `server_tts_max_chars` | `STUMP_SERVER_TTS_MAX_CHARS` | `2000`                             | Max characters per TTS request      |
 
 ```toml
-enable_server_tts = true
-# piper_path = "/usr/local/bin/piper"
-# piper_voices_dir = "/var/lib/stump/tts/voices"
+# piper_voices_dir = "/var/lib/stump/voices"
 # piper_default_voice = "en_US-lessac-medium"
 ```
 

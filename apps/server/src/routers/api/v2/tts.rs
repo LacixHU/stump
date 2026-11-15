@@ -1,8 +1,9 @@
 use std::{
-	io::Write,
 	path::{Path, PathBuf},
-	process::{Command, Stdio},
-	sync::Arc,
+	sync::{
+		atomic::{AtomicBool, Ordering},
+		Arc,
+	},
 };
 
 use axum::{
@@ -15,7 +16,9 @@ use axum::{
 };
 use graphql::data::AuthContext;
 use models::shared::enums::UserPermission;
+use piper_tts::{EspeakConfig, PiperError, SynthesisOptions};
 use serde::{Deserialize, Serialize};
+use stump_core::config::StumpConfig;
 use tokio::sync::Semaphore;
 use tracing::{error, warn};
 
@@ -85,7 +88,7 @@ fn list_voices(voices_dir: &Path) -> Vec<TtsVoice> {
 				return None;
 			}
 			let id = path.file_stem()?.to_str()?.to_string();
-			if id.is_empty() {
+			if id.is_empty() || !piper_tts::voice_config_path(&path).is_file() {
 				return None;
 			}
 			Some(TtsVoice {
@@ -118,6 +121,53 @@ fn resolve_model_path(voices_dir: &Path, voice_id: &str) -> APIResult<PathBuf> {
 	Ok(model_path)
 }
 
+fn espeak_config(config: &StumpConfig) -> EspeakConfig {
+	EspeakConfig {
+		// espeak-ng is built in, but reads its data from files unpacked here.
+		data_dir: Some(config.get_config_dir().join("espeak-ng")),
+	}
+}
+
+/// Whether the built-in espeak-ng (needed by every Piper voice) is ready. Logs the
+/// reason once so a failure is visible without spamming each status poll.
+async fn espeak_available(config: EspeakConfig) -> bool {
+	static WARNED: AtomicBool = AtomicBool::new(false);
+
+	let result = tokio::task::spawn_blocking(move || piper_tts::check_espeak(&config))
+		.await
+		.unwrap_or_else(|error| {
+			Err(PiperError::EspeakUnavailable(format!(
+				"check task failed: {error}"
+			)))
+		});
+
+	match result {
+		Ok(()) => true,
+		Err(error) => {
+			if !WARNED.swap(true, Ordering::Relaxed) {
+				warn!(%error, "Server TTS is unavailable");
+			}
+			false
+		},
+	}
+}
+
+fn piper_error_to_api(error: PiperError) -> APIError {
+	match error {
+		PiperError::EspeakUnavailable(_) => {
+			warn!(%error, "Server TTS is unavailable");
+			APIError::ServiceUnavailable(format!(
+				"Server text-to-speech is unavailable: {error}"
+			))
+		},
+		PiperError::VoiceNotFound(_) => APIError::NotFound(error.to_string()),
+		error => {
+			error!(%error, "Piper failed to synthesize speech");
+			APIError::InternalServerError("Piper failed to synthesize speech".to_string())
+		},
+	}
+}
+
 async fn get_tts_status(
 	State(ctx): State<AppState>,
 	Extension(req): Extension<AuthContext>,
@@ -125,15 +175,7 @@ async fn get_tts_status(
 	enforce_tts_access(&req)?;
 
 	let config = ctx.config.as_ref();
-	if !config.enable_server_tts {
-		return Ok(Json(TtsStatusResponse {
-			enabled: false,
-			default_voice: None,
-			voices: vec![],
-			max_chars: config.server_tts_max_chars,
-		}));
-	}
-
+	// Piper is built in, so TTS is on whenever voices and espeak-ng are present.
 	let voices_dir = config.get_piper_voices_dir();
 	let voices = list_voices(&voices_dir);
 	let default_voice = config
@@ -141,8 +183,10 @@ async fn get_tts_status(
 		.clone()
 		.or_else(|| voices.first().map(|voice| voice.id.clone()));
 
+	let enabled = !voices.is_empty() && espeak_available(espeak_config(config)).await;
+
 	Ok(Json(TtsStatusResponse {
-		enabled: !voices.is_empty(),
+		enabled,
 		default_voice,
 		voices,
 		max_chars: config.server_tts_max_chars,
@@ -166,11 +210,6 @@ async fn speak_tts(
 	enforce_tts_access(&req)?;
 
 	let config = ctx.config.as_ref();
-	if !config.enable_server_tts {
-		return Err(APIError::ServiceUnavailable(
-			"Server text-to-speech is disabled".to_string(),
-		));
-	}
 
 	let text = body.text.trim();
 	if text.is_empty() {
@@ -209,24 +248,30 @@ async fn speak_tts(
 		APIError::ServiceUnavailable("TTS queue is unavailable".to_string())
 	})?;
 
-	let piper_path = config.get_piper_path();
 	let spoken_text = if tts_hu::is_hungarian_voice(&voice_id) {
 		tts_hu::apply_pronunciation(text)
 	} else {
 		text.to_string()
 	};
+	let options = SynthesisOptions {
+		// Only override when it changes duration; keeps the voice's own prosody at 1.0x.
+		length_scale: ((length_scale - 1.0).abs() > f32::EPSILON).then_some(length_scale),
+		..Default::default()
+	};
+	let espeak = espeak_config(config);
 
-	let wav =
-		match synthesize_with_piper(&piper_path, &model_path, &spoken_text, length_scale)
-			.await
-		{
-			Ok(bytes) => bytes,
-			Err(err) => {
-				drop(permit);
-				return Err(err);
-			},
-		};
-	drop(permit);
+	let wav = tokio::task::spawn_blocking(move || {
+		// Held by the worker so a disconnected client cannot free the slot while
+		// synthesis is still running.
+		let _permit = permit;
+		piper_tts::synthesize_wav(&espeak, &model_path, &spoken_text, &options)
+	})
+	.await
+	.map_err(|error| {
+		error!(?error, "TTS worker task failed");
+		APIError::InternalServerError("TTS worker task failed".to_string())
+	})?
+	.map_err(piper_error_to_api)?;
 
 	let mut response = wav.into_response();
 	response
@@ -238,109 +283,4 @@ async fn speak_tts(
 	*response.status_mut() = StatusCode::OK;
 
 	Ok(response)
-}
-
-async fn synthesize_with_piper(
-	piper_path: &Path,
-	model_path: &Path,
-	text: &str,
-	length_scale: f32,
-) -> APIResult<Vec<u8>> {
-	let piper_path = piper_path.to_path_buf();
-	let model_path = model_path.to_path_buf();
-	let text = text.to_string();
-
-	tokio::task::spawn_blocking(move || {
-		// Write to a temp WAV file. Piper stdout (`-`) is unreliable on some
-		// Windows builds and can yield non-WAV/raw bytes that browsers play as noise.
-		let temp_dir = std::env::temp_dir();
-		let temp_path = temp_dir.join(format!(
-			"stump-tts-{}-{}.wav",
-			std::process::id(),
-			std::time::SystemTime::now()
-				.duration_since(std::time::UNIX_EPOCH)
-				.map(|d| d.as_nanos())
-				.unwrap_or(0)
-		));
-
-		let mut command = Command::new(&piper_path);
-		command
-			.arg("--model")
-			.arg(&model_path)
-			.arg("--output_file")
-			.arg(&temp_path)
-			.stdin(Stdio::piped())
-			.stdout(Stdio::null())
-			.stderr(Stdio::piped());
-
-		// Only pass length_scale when it changes duration; keeps default prosody at 1.0x.
-		if (length_scale - 1.0).abs() > f32::EPSILON {
-			command.arg("--length_scale").arg(length_scale.to_string());
-		}
-
-		let result = (|| {
-			let mut child = command.spawn().map_err(|error| {
-				error!(?error, ?piper_path, "Failed to spawn Piper");
-				APIError::ServiceUnavailable(format!(
-					"Failed to start Piper ({}): {error}",
-					piper_path.display()
-				))
-			})?;
-
-			if let Some(mut stdin) = child.stdin.take() {
-				stdin.write_all(text.as_bytes()).map_err(|error| {
-					error!(?error, "Failed to write text to Piper stdin");
-					APIError::InternalServerError(
-						"Failed to send text to Piper".to_string(),
-					)
-				})?;
-				drop(stdin);
-			} else {
-				return Err(APIError::InternalServerError(
-					"Failed to open Piper stdin".to_string(),
-				));
-			}
-
-			let output = child.wait_with_output().map_err(|error| {
-				error!(?error, "Failed waiting for Piper");
-				APIError::InternalServerError("Piper process failed".to_string())
-			})?;
-
-			if !output.status.success() {
-				let stderr = String::from_utf8_lossy(&output.stderr);
-				warn!(%stderr, code = ?output.status.code(), "Piper exited with error");
-				return Err(APIError::InternalServerError(
-					"Piper failed to synthesize speech".to_string(),
-				));
-			}
-
-			let bytes = std::fs::read(&temp_path).map_err(|error| {
-				error!(?error, ?temp_path, "Failed to read Piper WAV output");
-				APIError::InternalServerError(
-					"Failed to read Piper audio output".to_string(),
-				)
-			})?;
-
-			if bytes.len() < 12 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
-				warn!(bytes = bytes.len(), "Piper output is not a valid WAV file");
-				return Err(APIError::InternalServerError(
-					"Piper returned invalid audio (expected WAV)".to_string(),
-				));
-			}
-
-			Ok(bytes)
-		})();
-
-		if let Err(error) = std::fs::remove_file(&temp_path) {
-			// File may not exist if Piper failed before writing.
-			tracing::debug!(?error, ?temp_path, "Temp Piper WAV cleanup skipped");
-		}
-
-		result
-	})
-	.await
-	.map_err(|error| {
-		error!(?error, "TTS worker task failed");
-		APIError::InternalServerError("TTS worker task failed".to_string())
-	})?
 }
