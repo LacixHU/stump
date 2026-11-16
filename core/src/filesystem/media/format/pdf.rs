@@ -546,7 +546,7 @@ impl PdfProcessor {
 	/// `pdf_cache_max_size_bytes`. Files are deleted in chunks of
 	/// `pdf_cache_eviction_chunk_bytes` starting from the oldest until the
 	/// total cache size is under the limit.
-	async fn enforce_pdf_cache_size_limit(config: &StumpConfig) {
+	pub(crate) async fn enforce_pdf_cache_size_limit(config: &StumpConfig) {
 		let max_size = config.pdf_cache_max_size_bytes;
 		if max_size == 0 {
 			return;

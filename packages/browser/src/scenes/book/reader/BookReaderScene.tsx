@@ -82,7 +82,7 @@ export default function BookReaderSceneContainer() {
 	)
 }
 
-const mutation = graphql(`
+export const UPDATE_READ_PROGRESS_MUTATION = graphql(`
 	mutation UpdateReadProgress($id: ID!, $input: MediaProgressInput!) {
 		updateMediaProgress(id: $id, input: $input) {
 			__typename
@@ -106,7 +106,7 @@ function BookReaderScene({ book }: Props) {
 	const lastSyncedElapsedRef = useRef(book?.readProgress?.elapsedSeconds ?? 0)
 	const pendingSyncedElapsedRef = useRef(book?.readProgress?.elapsedSeconds ?? 0)
 
-	const { mutate } = useGraphQLMutation(mutation, {
+	const { mutate } = useGraphQLMutation(UPDATE_READ_PROGRESS_MUTATION, {
 		onError: (err) => {
 			console.error(err)
 		},
@@ -165,16 +165,22 @@ function BookReaderScene({ book }: Props) {
 			)
 		} else if (book.extension.match(PDF_EXTENSION) && !isStreaming) {
 			navigate(paths.bookReader(book.id, { isPdf: true, isStreaming: false }))
-		} else if (book.extension.match(ARCHIVE_EXTENSION) || book.extension.match(PDF_EXTENSION)) {
+		} else if (book.extension.match(PDF_EXTENSION)) {
+			// PDFs are read page by page as server-converted SVGs (no PDFium needed), with the
+			// same reader interface as comics plus read aloud
+			navigate(paths.bookReader(book.id, { isIncognito, isPdfHtml: true, page: initialPage }), {
+				replace: true,
+			})
+		} else if (book.extension.match(ARCHIVE_EXTENSION)) {
 			if (!initialPage && readingMode === ReadingMode.Paged && !animatedReader) {
 				navigate(paths.bookReader(book.id, { page: 1 }))
 			} else if (!!initialPage && initialPage > book.pages) {
 				navigate(paths.bookReader(book.id, { page: book.pages }))
 			}
 		}
-	}, [book, initialPage, readingMode, navigate, isStreaming, animatedReader])
+	}, [book, initialPage, readingMode, navigate, isStreaming, isIncognito, animatedReader])
 
-	if (book.extension.match(ARCHIVE_EXTENSION) || book.extension.match(PDF_EXTENSION)) {
+	if (book.extension.match(ARCHIVE_EXTENSION)) {
 		return (
 			<ImageBasedReader
 				media={book}

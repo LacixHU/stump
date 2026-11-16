@@ -1,5 +1,4 @@
 /* eslint-disable react-compiler/react-compiler */
-import { useSDK } from '@stump/client'
 import { cn, ProgressBar, Text, usePreviousIsDifferent } from '@stump/components'
 import { ReadingDirection, ReadingMode } from '@stump/graphql'
 import { formatHumanDuration } from '@stump/i18n'
@@ -16,9 +15,16 @@ import { useImageBaseReaderContext } from '../context'
 const SIZE_MODIFIER = 1.5
 
 export default function ReaderFooter() {
-	const { sdk } = useSDK()
-	const { book, currentPage, setCurrentPage, imageSizes, setPageSize, pageSets, timer } =
-		useImageBaseReaderContext()
+	const {
+		book,
+		currentPage,
+		setCurrentPage,
+		imageSizes,
+		setPageSize,
+		pageSets,
+		timer,
+		getThumbnailUrl,
+	} = useImageBaseReaderContext()
 	const {
 		settings: { showToolBar, preload },
 		bookPreferences: { readingMode, readingDirection, trackElapsedTime },
@@ -104,7 +110,7 @@ export default function ReaderFooter() {
 					>
 						{indexes.map((index) => (
 							<EntityImage
-								src={sdk.media.bookPageURL(book.id, index + 1)}
+								src={getThumbnailUrl(index + 1)}
 								className="h-full w-full object-cover"
 								key={index}
 								onLoad={({ height, width }) =>
@@ -125,7 +131,7 @@ export default function ReaderFooter() {
 				</div>
 			)
 		},
-		[imageSizes, sdk, book.id, setCurrentPage, setPageSize, currentPageSetIdx, thumbnailRatio],
+		[imageSizes, getThumbnailUrl, setCurrentPage, setPageSize, currentPageSetIdx, thumbnailRatio],
 	)
 
 	return (

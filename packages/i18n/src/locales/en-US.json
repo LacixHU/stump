@@ -2902,6 +2902,9 @@
 		"bookOverview": "Book Overview",
 		"jumpToPage": "Jump to another page",
 		"pdfFailed": "PDF failed to load.",
+		"pdfHtml": {
+			"failedToOpen": "This PDF could not be opened"
+		},
 		"clickHere": "Click here",
 		"locationManager": "Location manager",
 		"contents": "Contents",

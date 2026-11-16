@@ -218,7 +218,11 @@ export function RetroPlayerSettings({
 					<Settings className="h-4 w-4" />
 				</Button>
 			</Dropdown.Trigger>
-			<Dropdown.Content align="end" className="w-56">
+			{/* scrolls when taller than the space left in the window */}
+			<Dropdown.Content
+				align="end"
+				className="w-56 max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto"
+			>
 				{sections.map((section, index) => (
 					<Fragment key={section.key}>
 						{index > 0 ? <Dropdown.Separator /> : null}

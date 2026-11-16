@@ -1,7 +1,7 @@
 use axum::{
 	body::Bytes,
-	extract::{DefaultBodyLimit, Path, State},
-	http::HeaderMap,
+	extract::{DefaultBodyLimit, Path, Query as QueryParams, State},
+	http::{header, HeaderMap},
 	middleware,
 	response::IntoResponse,
 	routing::get,
@@ -13,11 +13,20 @@ use models::{
 	shared::image_processor_options::SupportedImageFormat,
 };
 use sea_orm::{prelude::*, sea_query::Query, QuerySelect};
+use serde::Deserialize;
 use stump_core::{
 	config::StumpConfig,
 	filesystem::{
 		get_saved_thumbnail, get_thumbnail,
-		media::{get_page_async, RETRO_SAVE_STATE_MAX_BYTES},
+		media::{
+			get_page_async,
+			pdf_viewer::{
+				get_pdf_html_info, get_pdf_html_page as get_pdf_html_page_document,
+				get_pdf_html_thumbnail, get_pdf_page_text, get_pdf_svg_page, PdfHtmlInfo,
+				PdfPageText,
+			},
+			RETRO_SAVE_STATE_MAX_BYTES,
+		},
 		ContentType, FileError,
 	},
 	Ctx,
@@ -54,6 +63,11 @@ pub(crate) fn mount(app_state: AppState) -> Router<AppState> {
 			Router::new()
 				.route("/thumbnail", get(get_media_thumbnail_handler))
 				.route("/page/{page}", get(get_media_page))
+				.route("/pdf/info", get(get_pdf_info))
+				.route("/pdf/page/{page}", get(get_pdf_html_page))
+				.route("/pdf/thumbnail/{page}", get(get_pdf_page_thumbnail))
+				.route("/pdf/svg/{page}", get(get_pdf_page_svg))
+				.route("/pdf/text/{page}", get(get_pdf_page_text_layer))
 				.route("/file", get(get_media_file))
 				.route("/play-file", get(get_media_play_file)),
 		)
@@ -253,4 +267,142 @@ async fn get_media_page(
 		};
 
 	Ok(ImageResponse::from(content))
+}
+
+/// The page documents run their own script, so they are locked into an opaque origin
+/// (`sandbox`) even when opened directly, and may load nothing from anywhere.
+const PDF_PAGE_CSP: &str = "sandbox allow-scripts; default-src 'none'; img-src data:; \
+	style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
+/// Page SVGs are only meant for `<img>`, where they cannot run scripts anyway; this
+/// keeps them inert when opened directly too.
+const PDF_SVG_CSP: &str = "sandbox; default-src 'none'; img-src data:; 	style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
+const PDF_VIEWER_CACHE_CONTROL: &str = "private,max-age=3600";
+
+async fn find_pdf_for_user(
+	ctx: &AppState,
+	req: &AuthContext,
+	id: String,
+) -> APIResult<media::Model> {
+	let book = media::Entity::find_for_user(&req.user())
+		.filter(media::Column::Id.eq(id))
+		.one(ctx.conn.as_ref())
+		.await?
+		.ok_or(APIError::NotFound("Book not found".to_string()))?;
+	if !book.extension.eq_ignore_ascii_case("pdf") {
+		return Err(APIError::BadRequest("Book is not a PDF".to_string()));
+	}
+	Ok(book)
+}
+
+fn pdf_viewer_error(error: FileError) -> APIError {
+	match error {
+		FileError::PdfProcessingError(message) if message.contains("out of range") => {
+			APIError::NotFound(message)
+		},
+		error => APIError::InternalServerError(error.to_string()),
+	}
+}
+
+/// Page count and page sizes of a PDF, for the HTML PDF reader.
+async fn get_pdf_info(
+	Path(id): Path<String>,
+	State(ctx): State<AppState>,
+	Extension(req): Extension<AuthContext>,
+) -> APIResult<Json<PdfHtmlInfo>> {
+	let book = find_pdf_for_user(&ctx, &req, id).await?;
+	let info = get_pdf_html_info(&book.path)
+		.await
+		.map_err(pdf_viewer_error)?;
+	Ok(Json(info))
+}
+
+/// One page of a PDF as a standalone HTML document (vector SVG + text layer), meant
+/// for an iframe.
+async fn get_pdf_html_page(
+	Path((id, page)): Path<(String, u32)>,
+	State(ctx): State<AppState>,
+	Extension(req): Extension<AuthContext>,
+) -> APIResult<impl IntoResponse> {
+	let book = find_pdf_for_user(&ctx, &req, id).await?;
+	let html = get_pdf_html_page_document(
+		&book.path,
+		page.try_into()?,
+		Some(book.name.clone()),
+		ctx.config.as_ref(),
+	)
+	.await
+	.map_err(pdf_viewer_error)?;
+
+	Ok((
+		[
+			(header::CONTENT_TYPE, "text/html; charset=utf-8"),
+			(header::CONTENT_SECURITY_POLICY, PDF_PAGE_CSP),
+			(header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+			(header::CACHE_CONTROL, PDF_VIEWER_CACHE_CONTROL),
+		],
+		html,
+	))
+}
+
+/// One page of a PDF as a vector SVG image (white background, sized in points).
+async fn get_pdf_page_svg(
+	Path((id, page)): Path<(String, u32)>,
+	State(ctx): State<AppState>,
+	Extension(req): Extension<AuthContext>,
+) -> APIResult<impl IntoResponse> {
+	let book = find_pdf_for_user(&ctx, &req, id).await?;
+	let svg = get_pdf_svg_page(&book.path, page.try_into()?, ctx.config.as_ref())
+		.await
+		.map_err(pdf_viewer_error)?;
+
+	Ok((
+		[
+			(header::CONTENT_TYPE, "image/svg+xml"),
+			(header::CONTENT_SECURITY_POLICY, PDF_SVG_CSP),
+			(header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+			(header::CACHE_CONTROL, PDF_VIEWER_CACHE_CONTROL),
+		],
+		svg,
+	))
+}
+
+/// The text of one PDF page with positions, for read aloud.
+async fn get_pdf_page_text_layer(
+	Path((id, page)): Path<(String, u32)>,
+	State(ctx): State<AppState>,
+	Extension(req): Extension<AuthContext>,
+) -> APIResult<Json<PdfPageText>> {
+	let book = find_pdf_for_user(&ctx, &req, id).await?;
+	let text = get_pdf_page_text(&book.path, page.try_into()?)
+		.await
+		.map_err(pdf_viewer_error)?;
+	Ok(Json(text))
+}
+
+#[derive(Deserialize)]
+struct PdfThumbnailQuery {
+	/// Longer edge of the preview, in pixels.
+	size: Option<u32>,
+}
+
+/// A WebP preview of one PDF page.
+async fn get_pdf_page_thumbnail(
+	Path((id, page)): Path<(String, u32)>,
+	QueryParams(PdfThumbnailQuery { size }): QueryParams<PdfThumbnailQuery>,
+	State(ctx): State<AppState>,
+	Extension(req): Extension<AuthContext>,
+) -> APIResult<impl IntoResponse> {
+	let book = find_pdf_for_user(&ctx, &req, id).await?;
+	let webp =
+		get_pdf_html_thumbnail(&book.path, page.try_into()?, size, ctx.config.as_ref())
+			.await
+			.map_err(pdf_viewer_error)?;
+
+	Ok((
+		[
+			(header::CONTENT_TYPE, "image/webp"),
+			(header::CACHE_CONTROL, PDF_VIEWER_CACHE_CONTROL),
+		],
+		webp,
+	))
 }

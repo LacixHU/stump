@@ -14,7 +14,7 @@ import TimerMenu from './TimerMenu'
 
 export default function ReaderHeader() {
 	const { t } = useLocaleContext()
-	const { book } = useImageBaseReaderContext()
+	const { book, extension } = useImageBaseReaderContext()
 	const {
 		settings: { showToolBar },
 	} = useBookPreferences({ book })
@@ -54,6 +54,8 @@ export default function ReaderHeader() {
 							<FullScreenIcon className="h-4 w-4" />
 						</ControlButton>
 					)}
+
+					{extension?.headerControls}
 
 					<TimerMenu />
 

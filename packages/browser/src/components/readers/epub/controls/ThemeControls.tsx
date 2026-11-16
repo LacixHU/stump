@@ -21,20 +21,26 @@ export default function ThemeControls() {
 				</ControlButton>
 			</Dialog.Trigger>
 
-			<Dialog.Content size="md" className="gap-4 z-101 flex flex-col bg-dialog">
+			{/* taller than the window: the options scroll, the header stays put */}
+			<Dialog.Content
+				size="md"
+				className="gap-4 z-101 flex max-h-[calc(100dvh-2rem)] flex-col bg-dialog"
+			>
 				<Dialog.Header className="flex items-center justify-between">
 					<Heading size="md">{t('reader.appearance')}</Heading>
 					<Dialog.Close />
 				</Dialog.Header>
 
-				<FontFamily />
-				<FontSizeControl />
-				<LineHeightControl />
-				<ReadingDirection />
-				<ReadingMode />
+				<div className="-mx-6 px-6 gap-4 min-h-0 flex flex-1 flex-col overflow-y-auto">
+					<FontFamily />
+					<FontSizeControl />
+					<LineHeightControl />
+					<ReadingDirection />
+					<ReadingMode />
 
-				<Heading size="md">{t('reader.readAloud')}</Heading>
-				<ReadAloudSettings />
+					<Heading size="md">{t('reader.readAloud')}</Heading>
+					<ReadAloudSettings />
+				</div>
 			</Dialog.Content>
 		</Dialog>
 	)

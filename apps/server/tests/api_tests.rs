@@ -3,6 +3,7 @@ mod graphql;
 mod kobo;
 mod koreader;
 mod opds;
+mod pdf_viewer;
 mod reading_progress;
 mod save_state;
 

@@ -5,7 +5,7 @@ import { useLocation } from 'react-router'
 
 import { useRouterContext } from './context/RouterContext'
 
-type BookReaderParams = {
+export type BookReaderParams = {
 	page?: number
 	isEpub?: boolean
 	isPdf?: boolean
@@ -14,6 +14,8 @@ type BookReaderParams = {
 	isAnimated?: boolean
 	isStreaming?: boolean
 	isIncognito?: boolean
+	/** Open a PDF in the HTML (page-per-iframe) PDF reader */
+	isPdfHtml?: boolean
 }
 
 type SettingsPage =
@@ -63,6 +65,7 @@ const pathsInternal = {
 			page,
 			isStreaming,
 			isIncognito,
+			isPdfHtml,
 		}: BookReaderParams = {},
 	) => {
 		const baseUrl = pathsInternal.bookOverview(id)
@@ -79,6 +82,13 @@ const pathsInternal = {
 		if (isEpub || !!epubcfi) {
 			searchParams.append('stream', 'false')
 			return `${baseUrl}/epub-reader?${searchParams.toString()}`
+		}
+
+		if (isPdfHtml) {
+			if (page) {
+				searchParams.append('page', page.toString())
+			}
+			return `${baseUrl}/pdf-html-reader?${searchParams.toString()}`
 		}
 
 		if (isPdf && !isStreaming) {

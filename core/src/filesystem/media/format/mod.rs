@@ -1,5 +1,6 @@
 pub mod epub;
 pub mod pdf;
+pub mod pdf_viewer;
 pub mod rar;
 pub mod retro;
 pub mod zip;

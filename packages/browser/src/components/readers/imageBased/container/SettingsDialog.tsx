@@ -8,7 +8,7 @@ import ControlButton from './ControlButton'
 import ReaderSettings from './ReaderSettings'
 
 export default function SettingsDialog() {
-	const { book, currentPage } = useImageBaseReaderContext()
+	const { book, currentPage, extension } = useImageBaseReaderContext()
 	const { t } = useLocaleContext()
 
 	const [modality, setModality] = useState<'book' | 'global'>('book')
@@ -23,7 +23,8 @@ export default function SettingsDialog() {
 
 			<Dialog.Content
 				size="md"
-				className="gap-4 z-101 flex flex-col bg-dialog text-dialog-foreground"
+				// taller than the window: the settings scroll, the tabs and close button stay put
+				className="gap-4 z-101 flex max-h-[calc(100dvh-2rem)] flex-col bg-dialog text-dialog-foreground"
 			>
 				<Dialog.Header className="flex items-center justify-end">
 					<Dialog.Close />
@@ -40,10 +41,14 @@ export default function SettingsDialog() {
 					</Tabs.List>
 				</Tabs>
 
-				<ReaderSettings
-					forBook={modality === 'book' ? book.id : undefined}
-					currentPage={modality === 'book' ? currentPage : undefined}
-				/>
+				<div className="-mx-6 px-6 gap-4 min-h-0 flex flex-1 flex-col overflow-y-auto">
+					<ReaderSettings
+						forBook={modality === 'book' ? book.id : undefined}
+						currentPage={modality === 'book' ? currentPage : undefined}
+					/>
+
+					{extension?.settings}
+				</div>
 			</Dialog.Content>
 		</Dialog>
 	)

@@ -2,17 +2,17 @@ import { DEFAULT_BOOK_PREFERENCES, useSDK } from '@stump/client'
 import { ReadingDirection, ReadingMode } from '@stump/graphql'
 import { generatePageSets } from '@stump/sdk'
 import { useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useWindowSize } from 'rooks'
 
 import { usePreloadPage } from '@/hooks/usePreloadPage'
-import { usePaths } from '@/paths'
+import { BookReaderParams, usePaths } from '@/paths'
 import { useBookPreferences } from '@/scenes/book/reader/useBookPreferences'
 import { useBookTimer } from '@/stores/reader'
 
 import ReaderContainer from './container'
-import { ImageBaseReaderContext, ImageReaderBookRef } from './context'
+import { ImageBaseReaderContext, ImageReaderBookRef, ImageReaderExtension } from './context'
 import { ContinuousScrollReader } from './continuous'
 import { AnimatedPagedReader, PagedReader } from './paged'
 import { useImageSizes } from './useImageSizes'
@@ -31,9 +31,32 @@ type Props = {
 	 */
 	initialPage?: number
 	onProgress?: (page: number, elapsedSeconds: number) => void
+	/**
+	 * Where pages come from, instead of the book's page images (1-indexed)
+	 */
+	pageUrl?: (page: number) => string
+	/**
+	 * Where page previews come from, instead of the book's page images (1-indexed)
+	 */
+	thumbnailUrl?: (page: number) => string
+	/**
+	 * Reader route parameters kept when the page changes, for readers that are mounted
+	 * on a route of their own
+	 */
+	readerParams?: Pick<BookReaderParams, 'isPdfHtml'>
+	extension?: ImageReaderExtension
 }
 
-export default function ImageBasedReader({ media, isIncognito, initialPage, onProgress }: Props) {
+export default function ImageBasedReader({
+	media,
+	isIncognito,
+	initialPage,
+	onProgress,
+	pageUrl,
+	thumbnailUrl,
+	readerParams,
+	extension,
+}: Props) {
 	const { sdk } = useSDK()
 	const paths = usePaths()
 
@@ -112,7 +135,7 @@ export default function ImageBasedReader({ media, isIncognito, initialPage, onPr
 				setCurrentPage(newPage)
 			} else {
 				setCurrentPage(newPage)
-				navigate(paths.bookReader(media.id, { isIncognito, page: newPage }))
+				navigate(paths.bookReader(media.id, { ...readerParams, isIncognito, page: newPage }))
 			}
 
 			if (!isIncognito) {
@@ -120,16 +143,23 @@ export default function ImageBasedReader({ media, isIncognito, initialPage, onPr
 				onProgress?.(newPage, elapsedSeconds)
 			}
 		},
-		[media.id, isIncognito, navigate, readingMode, paths, timer, onProgress],
+		[media.id, isIncognito, navigate, readingMode, paths, timer, onProgress, readerParams],
 	)
 
 	/**
 	 * A callback to get the URL of a page. This is *not* 0-indexed, so the first page is 1.
 	 */
 	const getPageUrl = useCallback(
-		(pageNumber: number) => sdk.media.bookPageURL(media.id, pageNumber),
-		[media.id, sdk.media],
+		(pageNumber: number) => pageUrl?.(pageNumber) ?? sdk.media.bookPageURL(media.id, pageNumber),
+		[media.id, sdk.media, pageUrl],
 	)
+
+	const getThumbnailUrl = useCallback(
+		(pageNumber: number) => thumbnailUrl?.(pageNumber) ?? getPageUrl(pageNumber),
+		[getPageUrl, thumbnailUrl],
+	)
+
+	const ExtensionProvider = extension?.Provider ?? Fragment
 
 	const lastPage = useMemo(() => media.pages, [media.pages])
 	/**
@@ -208,13 +238,17 @@ export default function ImageBasedReader({ media, isIncognito, initialPage, onPr
 				imageSizes,
 				setCurrentPage: handleChangePage,
 				getPageUrl,
+				getThumbnailUrl,
 				setPageSize,
 				pageSets,
 				timer,
 				toggleToolbar: () => setSettings({ showToolBar: !showToolBar }),
+				extension,
 			}}
 		>
-			<ReaderContainer>{renderReader()}</ReaderContainer>
+			<ExtensionProvider>
+				<ReaderContainer>{renderReader()}</ReaderContainer>
+			</ExtensionProvider>
 		</ImageBaseReaderContext.Provider>
 	)
 }

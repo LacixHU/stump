@@ -2896,6 +2896,9 @@
 		"bookOverview": "Könyváttekintés",
 		"jumpToPage": "Ugrás másik oldalra",
 		"pdfFailed": "A PDF betöltése sikertelen.",
+		"pdfHtml": {
+			"failedToOpen": "Ezt a PDF-et nem sikerült megnyitni"
+		},
 		"clickHere": "Kattints ide",
 		"locationManager": "Helykezelő",
 		"contents": "Tartalom",

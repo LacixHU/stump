@@ -167,6 +167,10 @@ See [Retro computer libraries](docs/content/docs/guides/features/retro-libraries
 ## PDF reader
 
 - Centered loading spinner while the file downloads
+- **Default PDF reader** (opens with Read, replacing the PDFium page images): the comic reader's interface (paged / continuous modes, double spreads, pinch and wheel zoom, swipe and side-tap navigation, page strip, reading timer and progress) on pages the server converts to vector SVG, so text stays sharp at any zoom
+- **Read aloud** in that reader, with the ebook reader's settings (browser or server Piper engine, voice, rate, pitch, pause / resume, shared with the EPUB reader): reads the page sentence by sentence from the PDF's text layer, highlights the sentence being spoken, joins words hyphenated across lines and turns the pages by itself
+- Conversion is pure Rust ([hayro](https://github.com/LaurenzV/hayro), `crates/pdf_html`), so it works without PDFium; converted pages and previews share the PDF page cache and its size limit. The server also serves each page as a standalone HTML document (SVG + selectable text layer) for sandboxed iframes
+- Large embedded images are downscaled and re-encoded as WebP, so scanned pages stay small
 
 ## Server
 
@@ -248,3 +252,4 @@ Amiga Kickstart basenames (no subfolders):
 - Error-boundary “Go Home” navigation fix
 - Reader image error fallback
 - Close buttons on comics and EPUB settings dialogs
+- Reader settings (comics, PDF, EPUB, retro player) scroll when they are taller than the window

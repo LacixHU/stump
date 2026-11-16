@@ -1,7 +1,7 @@
 import { BookImageScaling } from '@stump/client'
 import { cn } from '@stump/components'
 import { ReadingDirection, ReadingImageScaleFit } from '@stump/graphql'
-import React, { forwardRef, useCallback, useMemo } from 'react'
+import React, { forwardRef, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { EntityImage } from '@/components/entity'
 import { useBookPreferences } from '@/scenes/book/reader/useBookPreferences'
@@ -16,7 +16,8 @@ type Props = {
 }
 
 const PageSet = forwardRef<HTMLDivElement, Props>(({ currentPage, getPageUrl }, ref) => {
-	const { setPageSize, book, pageSets } = useImageBaseReaderContext()
+	const { setPageSize, book, pageSets, extension } = useImageBaseReaderContext()
+	const renderOverlay = extension?.renderPageOverlay
 	const {
 		bookPreferences: { imageScaling, brightness, readingDirection },
 	} = useBookPreferences({ book })
@@ -67,6 +68,7 @@ const PageSet = forwardRef<HTMLDivElement, Props>(({ currentPage, getPageUrl }, 
 							...styles[imageScaling.scaleToFit].image,
 							...(isAutoDoubleSpread ? { maxWidth: '50%' } : {}),
 						}}
+						overlay={renderOverlay?.(idx + 1)}
 					/>
 				))}
 				{nextSet.map((idx) => (
@@ -98,18 +100,44 @@ type PageProps = Omit<Props, 'displayedPages' | 'currentPage'> & {
 	upsertDimensions: (page: number, dimensions: ImagePageDimensionRef) => void
 	imageScaling: BookImageScaling
 	style?: React.CSSProperties
+	/** Drawn over the image, see `ImageReaderExtension.renderPageOverlay` */
+	overlay?: React.ReactNode
 }
 
 // TODO(readers): consider exporting/relocating and sharing with the continuous reader(s)
-const _Page = ({
+const PageComponent = ({
 	page,
 	getPageUrl,
 	upsertDimensions,
 	imageScaling: { scaleToFit },
 	style,
+	overlay,
 }: PageProps) => {
+	const imageRef = useRef<HTMLImageElement>(null)
 	return (
+		<>
+			<PageImage
+				ref={imageRef}
+				page={page}
+				getPageUrl={getPageUrl}
+				upsertDimensions={upsertDimensions}
+				scaleToFit={scaleToFit}
+				style={style}
+			/>
+			{overlay != null && <PageOverlay imageRef={imageRef}>{overlay}</PageOverlay>}
+		</>
+	)
+}
+const Page = React.memo(PageComponent)
+
+type PageImageProps = Pick<PageProps, 'page' | 'getPageUrl' | 'upsertDimensions' | 'style'> & {
+	scaleToFit: BookImageScaling['scaleToFit']
+}
+
+const PageImage = forwardRef<HTMLImageElement, PageImageProps>(
+	({ page, getPageUrl, upsertDimensions, scaleToFit, style }, ref) => (
 		<EntityImage
+			ref={ref}
 			key={`page-${page}-scaled-${scaleToFit}`}
 			className="pointer-events-none z-30 object-contain"
 			style={style}
@@ -126,9 +154,65 @@ const _Page = ({
 				err.target.src = TRANSPARENT_IMAGE
 			}}
 		/>
+	),
+)
+PageImage.displayName = 'PageImage'
+
+type PageOverlayProps = {
+	imageRef: React.RefObject<HTMLImageElement | null>
+	children: React.ReactNode
+}
+
+/**
+ * Covers exactly the box of the page image (its sibling), following it through layout
+ * changes, so the content can be positioned in percentages of the page. It moves with
+ * the image when the reader is zoomed or panned, since both are transformed together.
+ */
+function PageOverlay({ imageRef, children }: PageOverlayProps) {
+	const [box, setBox] = useState<{ left: number; top: number; width: number; height: number }>()
+
+	useLayoutEffect(() => {
+		const image = imageRef.current
+		const container = image?.parentElement
+		if (!image || !container) return
+
+		const measure = () =>
+			setBox((previous) => {
+				const next = {
+					left: image.offsetLeft,
+					top: image.offsetTop,
+					width: image.offsetWidth,
+					height: image.offsetHeight,
+				}
+				const unchanged =
+					previous &&
+					previous.left === next.left &&
+					previous.top === next.top &&
+					previous.width === next.width &&
+					previous.height === next.height
+				return unchanged ? previous : next
+			})
+
+		measure()
+		// the image moves when its neighbours in a double spread load or resize
+		const observer = new ResizeObserver(measure)
+		observer.observe(container)
+		container.querySelectorAll('img').forEach((element) => observer.observe(element))
+		image.addEventListener('load', measure)
+		return () => {
+			observer.disconnect()
+			image.removeEventListener('load', measure)
+		}
+	}, [imageRef])
+
+	if (!box || !box.width || !box.height) return null
+
+	return (
+		<div className="pointer-events-none absolute z-40 overflow-hidden" style={box}>
+			{children}
+		</div>
 	)
 }
-const Page = React.memo(_Page)
 
 /**
  * Styles for the image and page set holder

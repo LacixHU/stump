@@ -1,0 +1,15 @@
+[package]
+name = "pdf_html"
+version.workspace = true
+edition = "2021"
+description = "PDF pages to standalone HTML (vector SVG + selectable text layer) and thumbnails, built on hayro"
+
+[dependencies]
+# Pure-Rust PDF interpreter (Apache-2.0 / MIT): `hayro` rasterizes pages (thumbnails),
+# `hayro-svg` converts them to SVG. Both re-export the same `hayro-interpret`.
+hayro = "0.9.0"
+hayro-svg = "0.9.0"
+base64.workspace = true
+image = { version = "0.25", default-features = false, features = ["png"] }
+thiserror.workspace = true
+webp = "0.3.0"

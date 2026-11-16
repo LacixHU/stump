@@ -116,4 +116,74 @@ export class MediaAPI extends APIBase {
 	bookPageURL(mediaID: string, page: number, params?: ScaledDimensionResizeInput): string {
 		return this.withServiceURL(mediaURL(`${mediaID}/page/${page}`, params))
 	}
+
+	/**
+	 * Page count and page sizes (in PDF points) of a PDF, for the HTML PDF reader
+	 */
+	async getPdfInfo(id: string): Promise<PdfInfo> {
+		const { data } = await this.axios.get<PdfInfo>(mediaURL(`/${id}/pdf/info`))
+		return data
+	}
+
+	/**
+	 * The URL of one PDF page converted to a standalone HTML document, meant to be shown
+	 * in a sandboxed iframe. `fit` and `zoom` set its initial view.
+	 */
+	pdfPageURL(id: string, page: number, view?: { fit?: PdfPageFit; zoom?: number }): string {
+		return this.withServiceURL(mediaURL(`/${id}/pdf/page/${page}`, view))
+	}
+
+	/**
+	 * The URL of one PDF page as a vector SVG image (white background, sized in PDF
+	 * points). Safe to show with a plain `<img>`.
+	 */
+	pdfPageSvgURL(id: string, page: number): string {
+		return this.withServiceURL(mediaURL(`/${id}/pdf/svg/${page}`))
+	}
+
+	/**
+	 * The text of one PDF page, as runs with their position on the page
+	 */
+	async getPdfPageText(id: string, page: number): Promise<PdfPageText> {
+		const { data } = await this.axios.get<PdfPageText>(mediaURL(`/${id}/pdf/text/${page}`))
+		return data
+	}
+
+	/**
+	 * The URL of a WebP preview of one PDF page, `size` being its longer edge in pixels
+	 */
+	pdfThumbnailURL(id: string, page: number, size?: number): string {
+		return this.withServiceURL(
+			mediaURL(`/${id}/pdf/thumbnail/${page}`, size ? { size } : undefined),
+		)
+	}
+}
+
+export type PdfPageFit = 'page' | 'width' | 'none'
+
+export type PdfInfo = {
+	pageCount: number
+	title?: string | null
+	pages: Array<{ width: number; height: number }>
+}
+
+/**
+ * A run of text on one baseline. Positions are in PDF points from the top-left corner of
+ * the page, `x`/`y` being the baseline origin and `angle` the clockwise rotation in radians.
+ */
+export type PdfTextSpan = {
+	text: string
+	x: number
+	y: number
+	size: number
+	angle: number
+	width: number
+	/** Where each UTF-16 code unit of `text` starts, along the baseline from `x`/`y` */
+	offsets?: number[]
+}
+
+export type PdfPageText = {
+	width: number
+	height: number
+	spans: PdfTextSpan[]
 }
