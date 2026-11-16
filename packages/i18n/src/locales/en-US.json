@@ -2978,7 +2978,7 @@
 		"rate": "Rate",
 		"pitch": "Pitch",
 		"browserEngine": "Browser",
-		"serverEngine": "Server (Piper)",
+		"serverEngine": "Server",
 		"defaultVoice": "Default voice",
 		"fontSize": "Font size",
 		"lineHeight": "Line height",
@@ -3105,7 +3105,7 @@
 		},
 		"ACCESS_SERVER_TTS": {
 			"label": "Server TTS",
-			"description": "Allows the user to use server-side Piper text-to-speech for read aloud"
+			"description": "Allows the user to use server-side text-to-speech (Piper, Supertonic) for read aloud"
 		},
 		"ACCESS_SMART_LIST": {
 			"label": "Smart Lists",

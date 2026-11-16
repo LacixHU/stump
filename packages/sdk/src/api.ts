@@ -533,7 +533,7 @@ export class Api {
 	}
 
 	/**
-	 * Get an instance for the TtsAPI (server-side Piper TTS)
+	 * Get an instance for the TtsAPI (server-side Piper and Supertonic TTS)
 	 */
 	get tts(): TtsAPI {
 		return new TtsAPI(this)

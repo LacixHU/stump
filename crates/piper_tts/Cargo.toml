@@ -7,19 +7,13 @@ description = "In-process Piper neural text-to-speech (port of rhasspy/piper)"
 links = "espeak-ng"
 
 [dependencies]
-# ONNX Runtime is downloaded at build time and linked statically, so no
-# onnxruntime shared library has to ship next to the server binary.
-ort = { version = "=2.0.0-rc.15", default-features = false, features = [
-  "std",
-  "tracing",
-  "download-binaries",
-  "tls-native",
-  "copy-dylibs",
-] }
+# Same version and features as tts_runtime, which owns the ONNX Runtime setup.
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+tts_runtime = { path = "../tts_runtime" }
 unicode-normalization = "0.1.25"
 zstd = "0.13"
 

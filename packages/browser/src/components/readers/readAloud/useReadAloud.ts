@@ -54,7 +54,7 @@ type Options = {
 
 /**
  * Speaks a queue of sentences one after the other, with the browser's speech synthesis
- * or the server's Piper voices, and the same preferences as the EPUB reader.
+ * or the server's voices (Piper, Supertonic), and the same preferences as the EPUB reader.
  */
 export function useReadAloud({ onQueueEnd }: Options = {}) {
 	const { t } = useLocaleContext()

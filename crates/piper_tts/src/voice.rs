@@ -3,12 +3,10 @@
 use std::{
 	collections::{BTreeMap, HashMap},
 	path::{Path, PathBuf},
-	sync::{Mutex, OnceLock},
 	time::Instant,
 };
 
 use ort::{
-	environment::Environment,
 	session::{builder::GraphOptimizationLevel, Session},
 	value::Tensor,
 };
@@ -189,26 +187,6 @@ pub fn voice_config_path(model_path: &Path) -> PathBuf {
 	PathBuf::from(path)
 }
 
-fn environment() -> PiperResult<&'static Environment> {
-	static ENVIRONMENT: OnceLock<Environment> = OnceLock::new();
-	static INIT_LOCK: Mutex<()> = Mutex::new(());
-
-	if let Some(environment) = ENVIRONMENT.get() {
-		return Ok(environment);
-	}
-	let _guard = INIT_LOCK
-		.lock()
-		.unwrap_or_else(|poisoned| poisoned.into_inner());
-	if let Some(environment) = ENVIRONMENT.get() {
-		return Ok(environment);
-	}
-	let environment = ort::init()
-		.with_name("piper")
-		.with_telemetry(false)
-		.build()?;
-	Ok(ENVIRONMENT.get_or_init(|| environment))
-}
-
 impl Voice {
 	pub fn load(model_path: &Path) -> PiperResult<Self> {
 		if !model_path.is_file() {
@@ -233,7 +211,7 @@ impl Voice {
 		let started = Instant::now();
 		// Same session options as Piper: graph optimization roughly doubles load
 		// time without a measurable inference gain for these models.
-		let session = Session::builder(environment()?)?
+		let session = Session::builder(tts_runtime::environment()?)?
 			.with_optimization_level(GraphOptimizationLevel::Disable)?
 			.with_memory_pattern(false)?
 			.commit_from_file(model_path)?;

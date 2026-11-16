@@ -1,0 +1,16 @@
+[package]
+name = "tts_runtime"
+version.workspace = true
+edition = "2021"
+description = "ONNX Runtime environment and WAV encoding shared by the server TTS engines"
+
+[dependencies]
+# ONNX Runtime is downloaded at build time and linked statically, so no
+# onnxruntime shared library has to ship next to the server binary.
+ort = { version = "=2.0.0-rc.15", default-features = false, features = [
+  "std",
+  "tracing",
+  "download-binaries",
+  "tls-native",
+  "copy-dylibs",
+] }

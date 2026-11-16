@@ -3451,11 +3451,15 @@ type StumpConfig {
 	"The maximum size, in bytes, of files that can be uploaded to be included in libraries."
 	maxFileUploadSize: Int!
 	"""
-	Directory containing Piper voice models (`.onnx` + matching `.onnx.json`).
-	Defaults to `voices` next to the server executable.
+	Directory containing server TTS voices: Piper models (`.onnx` + matching
+	`.onnx.json`) and Supertonic model folders. Defaults to `voices` next to the server
+	executable.
 	"""
 	piperVoicesDir: String
-	"Default Piper voice id (filename stem without `.onnx`)."
+	"""
+	Default server TTS voice id: a Piper filename stem without `.onnx`, or a Supertonic
+	id such as `supertonic-3:hu:F1`.
+	"""
 	piperDefaultVoice: String
 	"""
 	Directory containing user-supplied emulator firmware/BIOS (e.g. Amiga Kickstart).
@@ -3464,6 +3468,13 @@ type StumpConfig {
 	firmwareDir: String
 	"Maximum characters accepted per server TTS request."
 	serverTtsMaxChars: Int!
+	"""
+	Languages offered for Supertonic voices: comma-separated codes such as `en,hu`, or
+	`all`. Defaults to English plus the languages of the installed Piper voices.
+	"""
+	supertonicLanguages: String
+	"Denoising steps for Supertonic voices. More steps sound cleaner but take longer."
+	supertonicSteps: Int!
 	"The DPI (dots per inch) to use when rendering PDF pages as images."
 	pdfRenderDpi: Int!
 	"The maximum width or height dimension for rendered PDF pages."

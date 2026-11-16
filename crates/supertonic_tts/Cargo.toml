@@ -1,0 +1,16 @@
+[package]
+name = "supertonic_tts"
+version.workspace = true
+edition = "2021"
+description = "In-process Supertonic 3 neural text-to-speech (port of supertone-inc/supertonic)"
+
+[dependencies]
+# Same version as tts_runtime, which owns the ONNX Runtime setup.
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std"] }
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tts_runtime = { path = "../tts_runtime" }
+unicode-normalization = "0.1.25"

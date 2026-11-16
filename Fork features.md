@@ -8,11 +8,12 @@ This fork adds the following features and improvements on top of `upstream/night
 ## Text-to-speech
 
 - Server-side TTS using [Piper](https://github.com/rhasspy/piper), built into the server (no external `piper` executable, espeak-ng library or data folder: ONNX Runtime and espeak-ng are compiled in; only the voice files sit next to the server)
+- Second built-in engine, [Supertonic 3](https://huggingface.co/supertone-oss-archive/supertonic-3): more natural voices in 31 languages (including Hungarian) from one model folder in `voices/`, no espeak-ng; languages listed are set with `STUMP_SUPERTONIC_LANGUAGES`, quality/speed with `STUMP_SUPERTONIC_STEPS`
 - Gated by the **Server TTS** permission (`ACCESS_SERVER_TTS`); other users keep browser/OS voices
 - Client TTS controls with rate and pitch adjustments
 - Sentence-level playback with prefetch of the next sentence for continuous read-aloud
 - Short gap between sentences for smoother continuity
-- Hungarian voice pronunciation aid: common English names and foreign words are rewritten to Hungarian phonetics before Piper speaks (not a translator)
+- Hungarian voice pronunciation aid: common English names and foreign words are rewritten to Hungarian phonetics before Piper or Supertonic speaks (not a translator)
 
 ## Access control
 

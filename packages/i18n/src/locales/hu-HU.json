@@ -2972,7 +2972,7 @@
 		"rate": "Sebesség",
 		"pitch": "Hangmagasság",
 		"browserEngine": "Böngésző",
-		"serverEngine": "Szerver (Piper)",
+		"serverEngine": "Szerver",
 		"defaultVoice": "Alapértelmezett hang",
 		"fontSize": "Betűméret",
 		"lineHeight": "Sormagasság",
@@ -3087,7 +3087,7 @@
 		},
 		"ACCESS_SERVER_TTS": {
 			"label": "Szerver TTS",
-			"description": "Lehetővé teszi a felhasználó számára a szerveroldali Piper szövegfelolvasás használatát"
+			"description": "Lehetővé teszi a felhasználó számára a szerveroldali (Piper, Supertonic) szövegfelolvasás használatát"
 		},
 		"ACCESS_SMART_LIST": {
 			"label": "Okos listák",

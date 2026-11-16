@@ -4731,11 +4731,15 @@ export type StumpConfig = {
   pdfRenderFormat: Scalars['String']['output'];
   /** Path to the PDFium binary for PDF support. */
   pdfiumPath?: Maybe<Scalars['String']['output']>;
-  /** Default Piper voice id (filename stem without `.onnx`). */
+  /**
+   * Default server TTS voice id: a Piper filename stem without `.onnx`, or a Supertonic
+   * id such as `supertonic-3:hu:F1`.
+   */
   piperDefaultVoice?: Maybe<Scalars['String']['output']>;
   /**
-   * Directory containing Piper voice models (`.onnx` + matching `.onnx.json`).
-   * Defaults to `voices` next to the server executable.
+   * Directory containing server TTS voices: Piper models (`.onnx` + matching
+   * `.onnx.json`) and Supertonic model folders. Defaults to `voices` next to the server
+   * executable.
    */
   piperVoicesDir?: Maybe<Scalars['String']['output']>;
   /** The port from which to serve the application (default: 10801). */
@@ -4749,6 +4753,13 @@ export type StumpConfig = {
   serverTtsMaxChars: Scalars['Int']['output'];
   /** The time in seconds that a login session will be valid for. */
   sessionTtl: Scalars['Int']['output'];
+  /**
+   * Languages offered for Supertonic voices: comma-separated codes such as `en,hu`, or
+   * `all`. Defaults to English plus the languages of the installed Piper voices.
+   */
+  supertonicLanguages?: Maybe<Scalars['String']['output']>;
+  /** Denoising steps for Supertonic voices. More steps sound cleaner but take longer. */
+  supertonicSteps: Scalars['Int']['output'];
   /** Path to the TLS certificate PEM chain (e.g. fullchain.pem). */
   tlsCertPath?: Maybe<Scalars['String']['output']>;
   /** Whether HTTPS should be enabled for the server listener. */

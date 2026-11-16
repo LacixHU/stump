@@ -24,7 +24,7 @@ export type SpeakTtsInput = {
 }
 
 /**
- * Server-side text-to-speech (Piper) API controller.
+ * Server-side text-to-speech (Piper and Supertonic) API controller.
  */
 export class TtsAPI extends APIBase {
 	async status(): Promise<TtsStatus> {

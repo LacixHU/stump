@@ -59,6 +59,8 @@ pub mod env_keys {
 	pub const PIPER_DEFAULT_VOICE_KEY: &str = "STUMP_PIPER_DEFAULT_VOICE";
 	pub const FIRMWARE_DIR_KEY: &str = "STUMP_FIRMWARE_DIR";
 	pub const SERVER_TTS_MAX_CHARS_KEY: &str = "STUMP_SERVER_TTS_MAX_CHARS";
+	pub const SUPERTONIC_LANGUAGES_KEY: &str = "STUMP_SUPERTONIC_LANGUAGES";
+	pub const SUPERTONIC_STEPS_KEY: &str = "STUMP_SUPERTONIC_STEPS";
 	pub const PDF_RENDER_DPI_KEY: &str = "STUMP_PDF_RENDER_DPI";
 	pub const PDF_MAX_DIMENSION_KEY: &str = "STUMP_PDF_MAX_DIMENSION";
 	pub const PDF_RENDER_FORMAT_KEY: &str = "STUMP_PDF_RENDER_FORMAT";
@@ -91,6 +93,7 @@ pub mod defaults {
 	pub const DEFAULT_ENABLE_UPLOAD: bool = false;
 	pub const DEFAULT_MAX_FILE_UPLOAD_SIZE: usize = 20 * 1024 * 1024; // 20 MB
 	pub const DEFAULT_SERVER_TTS_MAX_CHARS: usize = 2_000;
+	pub const DEFAULT_SUPERTONIC_STEPS: usize = 8;
 	pub const DEFAULT_PDF_RENDER_DPI: u32 = 150; // Good balance of quality and performance
 	pub const DEFAULT_PDF_MAX_DIMENSION: u32 = 1200; // Optimized for faster rendering while maintaining quality
 	pub const DEFAULT_PDF_RENDER_FORMAT: &str = "webp"; // Default to WebP for better compression
@@ -287,13 +290,15 @@ pub struct StumpConfig {
 	#[env_key(MAX_FILE_UPLOAD_SIZE_KEY)]
 	pub max_file_upload_size: usize,
 
-	/// Directory containing Piper voice models (`.onnx` + matching `.onnx.json`).
-	/// Defaults to `voices` next to the server executable.
+	/// Directory containing server TTS voices: Piper models (`.onnx` + matching
+	/// `.onnx.json`) and Supertonic model folders. Defaults to `voices` next to the server
+	/// executable.
 	#[default_value(None)]
 	#[env_key(PIPER_VOICES_DIR_KEY)]
 	pub piper_voices_dir: Option<String>,
 
-	/// Default Piper voice id (filename stem without `.onnx`).
+	/// Default server TTS voice id: a Piper filename stem without `.onnx`, or a Supertonic
+	/// id such as `supertonic-3:hu:F1`.
 	#[default_value(None)]
 	#[env_key(PIPER_DEFAULT_VOICE_KEY)]
 	pub piper_default_voice: Option<String>,
@@ -308,6 +313,17 @@ pub struct StumpConfig {
 	#[default_value(DEFAULT_SERVER_TTS_MAX_CHARS)]
 	#[env_key(SERVER_TTS_MAX_CHARS_KEY)]
 	pub server_tts_max_chars: usize,
+
+	/// Languages offered for Supertonic voices: comma-separated codes such as `en,hu`, or
+	/// `all`. Defaults to English plus the languages of the installed Piper voices.
+	#[default_value(None)]
+	#[env_key(SUPERTONIC_LANGUAGES_KEY)]
+	pub supertonic_languages: Option<String>,
+
+	/// Denoising steps for Supertonic voices. More steps sound cleaner but take longer.
+	#[default_value(DEFAULT_SUPERTONIC_STEPS)]
+	#[env_key(SUPERTONIC_STEPS_KEY)]
+	pub supertonic_steps: usize,
 
 	/// The DPI (dots per inch) to use when rendering PDF pages as images.
 	#[default_value(DEFAULT_PDF_RENDER_DPI)]
@@ -492,7 +508,7 @@ impl StumpConfig {
 		PathBuf::from(&self.config_dir).join("save_states")
 	}
 
-	/// Directory used for Piper voice models. Falls back to `voices` next to the server
+	/// Directory used for server TTS voices (Piper and Supertonic). Falls back to `voices` next to the server
 	/// executable (or `{config_dir}/voices` if the executable path is unknown).
 	pub fn get_piper_voices_dir(&self) -> PathBuf {
 		self.piper_voices_dir
@@ -640,6 +656,8 @@ mod tests {
 				piper_default_voice: None,
 				firmware_dir: None,
 				server_tts_max_chars: Some(DEFAULT_SERVER_TTS_MAX_CHARS),
+				supertonic_languages: None,
+				supertonic_steps: Some(DEFAULT_SUPERTONIC_STEPS),
 				pdf_render_dpi: Some(DEFAULT_PDF_RENDER_DPI),
 				pdf_max_dimension: Some(DEFAULT_PDF_MAX_DIMENSION),
 				pdf_render_format: Some(DEFAULT_PDF_RENDER_FORMAT.to_string()),
@@ -719,6 +737,8 @@ mod tests {
 						piper_default_voice: None,
 						firmware_dir: None,
 						server_tts_max_chars: DEFAULT_SERVER_TTS_MAX_CHARS,
+						supertonic_languages: None,
+						supertonic_steps: DEFAULT_SUPERTONIC_STEPS,
 						pdf_render_dpi: DEFAULT_PDF_RENDER_DPI,
 						pdf_max_dimension: DEFAULT_PDF_MAX_DIMENSION,
 						pdf_render_format: DEFAULT_PDF_RENDER_FORMAT.to_string(),

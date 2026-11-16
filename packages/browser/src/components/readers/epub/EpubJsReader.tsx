@@ -928,7 +928,7 @@ export default function EpubJsReader({ id, isIncognito }: EpubJsReaderProps) {
 					void requestServerSentenceAudio(requestId, sentenceIndex + 1, nextSentence)
 				}
 
-				// Keep playbackRate at 1 — speed is already applied server-side via Piper length_scale.
+				// Keep playbackRate at 1 — speed is already applied server-side (Piper length_scale, Supertonic speed).
 				// Stacking both causes chipmunk/distorted audio.
 				readAloudObjectUrlRef.current = objectUrl
 				const audio = new Audio(objectUrl)
