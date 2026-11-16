@@ -138,7 +138,8 @@ export class MediaAPI extends APIBase {
 	 * points). Safe to show with a plain `<img>`.
 	 */
 	pdfPageSvgURL(id: string, page: number): string {
-		return this.withServiceURL(mediaURL(`/${id}/pdf/svg/${page}`))
+		// `v` changes when the server output does, so browsers do not keep stale pages
+		return this.withServiceURL(mediaURL(`/${id}/pdf/svg/${page}`, { v: PDF_SVG_VERSION }))
 	}
 
 	/**
@@ -158,6 +159,9 @@ export class MediaAPI extends APIBase {
 		)
 	}
 }
+
+/** Bump together with the page SVGs the server makes (`OUTPUT_VERSION` in `pdf_viewer.rs`) */
+const PDF_SVG_VERSION = 3
 
 export type PdfPageFit = 'page' | 'width' | 'none'
 

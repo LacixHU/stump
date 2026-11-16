@@ -129,6 +129,28 @@ impl PdfHtmlDocument {
 		Ok(images::recompress_embedded_images(svg, images))
 	}
 
+	/// The page as an SVG meant for `<img>`: like [`Self::page_svg`], but with an intrinsic
+	/// size of [`IMAGE_SCALE`] pixels per point (and at least [`IMAGE_MIN_LONG_EDGE`]
+	/// pixels on the longer edge). Readers that never enlarge images past their natural
+	/// size (like a comic reader fitting pages to the screen) then show the page as large
+	/// as the screen allows, and being vector it stays sharp at any size.
+	/// `index` is zero-based.
+	pub fn page_image_svg(
+		&self,
+		index: usize,
+		images: &ImageOptions,
+	) -> PdfHtmlResult<String> {
+		let size = self.page_size(index)?;
+		let svg = self.page_svg(index, images)?;
+		let longest = size.width.max(size.height).max(1.0);
+		let scale = IMAGE_SCALE.max(IMAGE_MIN_LONG_EDGE / longest);
+		Ok(set_root_size(
+			svg,
+			(size.width * scale).round(),
+			(size.height * scale).round(),
+		))
+	}
+
 	/// The text on the page, merged into baseline runs. `index` is zero-based.
 	pub fn page_text(&self, index: usize) -> PdfHtmlResult<Vec<TextSpan>> {
 		let page = self.page(index)?;
@@ -229,6 +251,33 @@ impl PdfHtmlDocument {
 	}
 }
 
+/// Intrinsic pixels per PDF point of [`PdfHtmlDocument::page_image_svg`].
+pub const IMAGE_SCALE: f32 = 3.0;
+/// Smallest intrinsic longer edge, in pixels, of [`PdfHtmlDocument::page_image_svg`].
+pub const IMAGE_MIN_LONG_EDGE: f32 = 2000.0;
+
+/// Replaces the `width` and `height` of the root `<svg>` element; its `viewBox` keeps
+/// the drawing in points, so the content scales with it.
+fn set_root_size(svg: String, width: f32, height: f32) -> String {
+	let Some(start) = svg.find("<svg") else {
+		return svg;
+	};
+	let Some(end) = svg[start..].find('>').map(|end| start + end) else {
+		return svg;
+	};
+	let mut tag = svg[start..end].to_string();
+	for (name, value) in [("width", width), ("height", height)] {
+		let needle = format!(" {name}=\"");
+		if let Some(at) = tag.find(&needle) {
+			let value_start = at + needle.len();
+			if let Some(len) = tag[value_start..].find('"') {
+				tag.replace_range(value_start..value_start + len, &value.to_string());
+			}
+		}
+	}
+	format!("{}{}{}", &svg[..start], tag, &svg[end..])
+}
+
 /// Pages are rendered over an opaque background, so this is almost always a no-op,
 /// but transparent pixels must not come out darkened.
 fn unpremultiply(rgba: &mut [u8]) {
@@ -271,6 +320,15 @@ fn assert_send_sync() {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn resizes_only_the_root_svg() {
+		let svg = r#"<svg viewBox="0 0 10 20" width="10" height="20"><rect width="5" height="6"/></svg>"#;
+		assert_eq!(
+			set_root_size(svg.to_string(), 30.0, 60.0),
+			r#"<svg viewBox="0 0 10 20" width="30" height="60"><rect width="5" height="6"/></svg>"#
+		);
+	}
 
 	#[test]
 	fn decodes_pdf_text_strings() {

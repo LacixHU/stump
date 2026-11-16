@@ -25,7 +25,7 @@ use crate::{
 };
 
 /// Bump when the generated HTML or thumbnails change, so stale cache entries are ignored.
-const OUTPUT_VERSION: u32 = 2;
+const OUTPUT_VERSION: u32 = 3;
 /// Parsed documents kept in memory, so turning pages does not re-read the file.
 const OPEN_DOCUMENTS: usize = 4;
 pub const PDF_HTML_THUMBNAIL_DEFAULT_SIZE: u32 = 240;
@@ -265,7 +265,7 @@ pub async fn get_pdf_svg_page(
 	let svg = blocking(move || {
 		let doc = open_document(&stamp)?;
 		let index = page_index(&doc, page)?;
-		doc.page_svg(index, &Default::default())
+		doc.page_image_svg(index, &Default::default())
 			.map_err(into_file_error)
 	})
 	.await?;
@@ -368,6 +368,13 @@ mod tests {
 		let svg = get_pdf_svg_page(&path, 1, &config).await.unwrap();
 		assert!(svg.starts_with("<svg"));
 		assert!(!svg.contains("<script"));
+		// sized for <img> in pixels, not points, so readers show it large
+		let page = &info.pages[0];
+		let expected_width = (page.width
+			* pdf_html::IMAGE_SCALE
+				.max(pdf_html::IMAGE_MIN_LONG_EDGE / page.width.max(page.height)))
+		.round();
+		assert!(svg.contains(&format!(r#" width="{expected_width}""#)));
 
 		let text = get_pdf_page_text(&path, 1).await.unwrap();
 		assert!(text.width > 0.0 && text.height > 0.0);
