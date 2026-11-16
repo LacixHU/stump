@@ -199,10 +199,14 @@ impl Model {
 				continue;
 			}
 			let samples = self.infer(style, ids, params)?;
+			let samples = trim_silence(&samples, self.sample_rate());
+			if samples.is_empty() {
+				continue;
+			}
 			if !audio.is_empty() {
 				audio.resize(audio.len() + silence, 0.0);
 			}
-			audio.extend(samples);
+			audio.extend_from_slice(samples);
 		}
 		Ok(to_pcm(&audio))
 	}
@@ -277,6 +281,33 @@ impl Model {
 	}
 }
 
+/// Samples quieter than this fraction of the chunk's peak count as silence.
+const SILENCE_THRESHOLD: f32 = 0.01;
+/// Silence kept before and after the speech. Supertonic pads each chunk with about
+/// 0.6 s before and 0.75 s after it, which made pauses between read-aloud sentences
+/// twice as long as with Piper (about 0.1 s and 0.35 s).
+const LEAD_SILENCE_SECONDS: f32 = 0.1;
+const TRAIL_SILENCE_SECONDS: f32 = 0.3;
+
+/// Trims leading and trailing silence down to the padding above.
+fn trim_silence(samples: &[f32], sample_rate: u32) -> &[f32] {
+	let peak = samples.iter().fold(0.0_f32, |peak, s| peak.max(s.abs()));
+	if peak <= 0.0 {
+		return &[];
+	}
+	let threshold = peak * SILENCE_THRESHOLD;
+	let is_sound = |s: &f32| s.abs() > threshold;
+	let (Some(first), Some(last)) = (
+		samples.iter().position(is_sound),
+		samples.iter().rposition(is_sound),
+	) else {
+		return &[];
+	};
+	let lead = (LEAD_SILENCE_SECONDS * sample_rate as f32) as usize;
+	let trail = (TRAIL_SILENCE_SECONDS * sample_rate as f32) as usize;
+	&samples[first.saturating_sub(lead)..(last + 1 + trail).min(samples.len())]
+}
+
 /// Peak level the output is normalized to. Supertonic speaks at about -9 dBFS while
 /// Piper normalizes to full scale, so without this its voices sound much quieter.
 const TARGET_PEAK: f32 = 0.9;
@@ -325,6 +356,19 @@ mod tests {
 		// Overshoot is attenuated, not clipped.
 		assert_eq!(to_pcm(&[2.0, -1.0]), vec![29490, -14745]);
 		assert_eq!(to_pcm(&[0.0]), vec![0]);
+	}
+
+	#[test]
+	fn trims_silence_to_padding() {
+		// 10 Hz: lead padding 1 sample, trail padding 3 samples.
+		let samples = [0.0, 0.0, 0.0, 0.001, 0.5, -0.2, 0.0, 0.0, 0.0, 0.0, 0.0];
+		assert_eq!(
+			trim_silence(&samples, 10),
+			&[0.001, 0.5, -0.2, 0.0, 0.0, 0.0]
+		);
+		// Padding never runs past either end.
+		assert_eq!(trim_silence(&[0.5, 0.0], 10), &[0.5, 0.0]);
+		assert!(trim_silence(&[0.0, 0.0], 10).is_empty());
 	}
 
 	#[test]
